@@ -1,0 +1,1 @@
+this.gotoAndPlay("anim3");

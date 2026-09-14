@@ -1,0 +1,48 @@
+[
+  {
+    "job": "raster",
+    "argv": [
+      "D:\\My Project\\Mutiny X\\Tools\\java-17\\jdk-17.0.20.1+1-jre\\bin\\java.exe",
+      "-Djava.awt.headless=true",
+      "-Dfile.encoding=UTF-8",
+      "-Xmx2g",
+      "-jar",
+      "D:\\My Project\\Mutiny X\\Tools\\ffdec-26.3.0\\ffdec.jar",
+      "-onerror",
+      "abort",
+      "-zoom",
+      "1",
+      "-ignorebackground",
+      "-format",
+      "image:png,shape:png,sprite:png,button:png,morphshape:png_frames",
+      "-export",
+      "image,shape,sprite,button,morphshape",
+      "D:\\My Project\\Mutiny X\\Mutiny X\\Docs\\ReverseEngineering\\Art\\raster",
+      "D:\\My Project\\Mutiny X\\Mutiny Source\\mutiny-flash-game\\mutiny.swf"
+    ],
+    "exit_code": 0
+  },
+  {
+    "job": "vector",
+    "argv": [
+      "D:\\My Project\\Mutiny X\\Tools\\java-17\\jdk-17.0.20.1+1-jre\\bin\\java.exe",
+      "-Djava.awt.headless=true",
+      "-Dfile.encoding=UTF-8",
+      "-Xmx2g",
+      "-jar",
+      "D:\\My Project\\Mutiny X\\Tools\\ffdec-26.3.0\\ffdec.jar",
+      "-onerror",
+      "abort",
+      "-zoom",
+      "1",
+      "-ignorebackground",
+      "-format",
+      "shape:svg,sprite:svg,button:svg,morphshape:svg",
+      "-export",
+      "shape,sprite,button,morphshape",
+      "D:\\My Project\\Mutiny X\\Mutiny X\\Docs\\ReverseEngineering\\Art\\vector",
+      "D:\\My Project\\Mutiny X\\Mutiny Source\\mutiny-flash-game\\mutiny.swf"
+    ],
+    "exit_code": 0
+  }
+]
