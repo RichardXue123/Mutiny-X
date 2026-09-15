@@ -1,0 +1,177 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace Mutiny.Presentation
+{
+    [DisallowMultipleComponent]
+    public sealed class MutinyAudioManager : MonoBehaviour
+    {
+        private static MutinyAudioManager s_Instance;
+
+        public static MutinyAudioManager Instance
+        {
+            get
+            {
+                if (s_Instance == null)
+                {
+                    s_Instance = FindAnyObjectByType<MutinyAudioManager>();
+                    if (s_Instance == null)
+                    {
+                        var go = new GameObject("MutinyAudioManager");
+                        s_Instance = go.AddComponent<MutinyAudioManager>();
+                    }
+                }
+                return s_Instance;
+            }
+        }
+
+        [Header("Audio Sources")]
+        public AudioSource SfxSource;
+        public AudioSource MusicSource;
+
+        [Header("Settings")]
+        public bool SfxEnabled = true;
+        public bool MusicEnabled = true;
+        public float SfxVolume = 1f;
+        public float MusicVolume = 0.8f;
+
+        private Dictionary<string, AudioClip> m_SfxClips = new Dictionary<string, AudioClip>(StringComparer.OrdinalIgnoreCase);
+        private Dictionary<string, AudioClip> m_MusicClips = new Dictionary<string, AudioClip>(StringComparer.OrdinalIgnoreCase);
+
+        private void Awake()
+        {
+            if (s_Instance != null && s_Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
+            s_Instance = this;
+            DontDestroyOnLoad(gameObject);
+
+            // Load saved settings
+            SfxEnabled = Mutiny.Persistence.MutinySaveSystem.SfxEnabled;
+            MusicEnabled = Mutiny.Persistence.MutinySaveSystem.MusicEnabled;
+            SfxVolume = Mutiny.Persistence.MutinySaveSystem.SfxVolume;
+            MusicVolume = Mutiny.Persistence.MutinySaveSystem.MusicVolume;
+
+            if (SfxSource == null)
+            {
+                SfxSource = gameObject.AddComponent<AudioSource>();
+                SfxSource.playOnAwake = false;
+            }
+
+            if (MusicSource == null)
+            {
+                MusicSource = gameObject.AddComponent<AudioSource>();
+                MusicSource.loop = true;
+                MusicSource.playOnAwake = false;
+            }
+
+            LoadAllAudioClips();
+        }
+
+        private void LoadAllAudioClips()
+        {
+            m_SfxClips.Clear();
+            AudioClip[] sfxClips = Resources.LoadAll<AudioClip>("Audio/SFX");
+            for (int i = 0; i < sfxClips.Length; i++)
+            {
+                AudioClip clip = sfxClips[i];
+                if (clip != null)
+                    m_SfxClips[clip.name] = clip;
+            }
+
+            m_MusicClips.Clear();
+            AudioClip[] musicClips = Resources.LoadAll<AudioClip>("Audio/Music");
+            for (int i = 0; i < musicClips.Length; i++)
+            {
+                AudioClip clip = musicClips[i];
+                if (clip != null)
+                    m_MusicClips[clip.name] = clip;
+            }
+        }
+
+        public void PlaySFX(string soundName, float volumeScale = 1f)
+        {
+            if (!SfxEnabled || SfxSource == null || string.IsNullOrEmpty(soundName))
+                return;
+
+            if (m_SfxClips.TryGetValue(soundName, out AudioClip clip))
+            {
+                SfxSource.PlayOneShot(clip, SfxVolume * volumeScale);
+            }
+        }
+
+        public void PlayMusic(string musicName, bool loop = true)
+        {
+            if (!MusicEnabled || MusicSource == null || string.IsNullOrEmpty(musicName))
+                return;
+
+            if (m_MusicClips.TryGetValue(musicName, out AudioClip clip))
+            {
+                if (MusicSource.clip == clip && MusicSource.isPlaying)
+                    return;
+
+                MusicSource.clip = clip;
+                MusicSource.loop = loop;
+                MusicSource.volume = MusicVolume;
+                MusicSource.Play();
+            }
+        }
+
+        public void StopMusic()
+        {
+            if (MusicSource != null)
+            {
+                MusicSource.Stop();
+            }
+        }
+
+        public void PlayCharacterVoice(string characterType)
+        {
+            if (string.IsNullOrEmpty(characterType)) return;
+            string voiceName = characterType
+                .Replace("Captain", "", StringComparison.OrdinalIgnoreCase)
+                .Replace("Chief", "", StringComparison.OrdinalIgnoreCase);
+            PlaySFX(voiceName);
+        }
+
+        public void ToggleSFX()
+        {
+            SfxEnabled = !SfxEnabled;
+            Mutiny.Persistence.MutinySaveSystem.SfxEnabled = SfxEnabled;
+        }
+
+        public void ToggleMusic()
+        {
+            MusicEnabled = !MusicEnabled;
+            Mutiny.Persistence.MutinySaveSystem.MusicEnabled = MusicEnabled;
+            if (!MusicEnabled && MusicSource != null)
+            {
+                MusicSource.Pause();
+            }
+            else if (MusicEnabled && MusicSource != null)
+            {
+                MusicSource.UnPause();
+            }
+        }
+
+        public void SetSfxVolume(float vol)
+        {
+            SfxVolume = Mathf.Clamp01(vol);
+            Mutiny.Persistence.MutinySaveSystem.SfxVolume = SfxVolume;
+        }
+
+        public void SetMusicVolume(float vol)
+        {
+            MusicVolume = Mathf.Clamp01(vol);
+            Mutiny.Persistence.MutinySaveSystem.MusicVolume = MusicVolume;
+            if (MusicSource != null)
+            {
+                MusicSource.volume = MusicVolume;
+            }
+        }
+    }
+}

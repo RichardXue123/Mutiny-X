@@ -9,7 +9,22 @@ namespace Mutiny.Levels.Editor
     {
         private void OnPreprocessTexture()
         {
-            if (!assetPath.StartsWith("Assets/Mutiny/Art/Tiles/", StringComparison.OrdinalIgnoreCase))
+            if (assetPath.StartsWith("Assets/Mutiny/Resources/Art/Characters/Preview/", StringComparison.OrdinalIgnoreCase))
+            {
+                var charImporter = (TextureImporter)assetImporter;
+                charImporter.textureType = TextureImporterType.Sprite;
+                charImporter.spriteImportMode = SpriteImportMode.Single;
+                charImporter.spritePixelsPerUnit = 32f;
+                charImporter.filterMode = FilterMode.Point;
+                charImporter.textureCompression = TextureImporterCompression.Uncompressed;
+                var charSettings = new TextureImporterSettings();
+                charImporter.ReadTextureSettings(charSettings);
+                charSettings.spriteAlignment = (int)SpriteAlignment.Center;
+                charImporter.SetTextureSettings(charSettings);
+                return;
+            }
+
+            if (!assetPath.StartsWith("Assets/Mutiny/Resources/Art/Tiles/", StringComparison.OrdinalIgnoreCase))
                 return;
 
             var importer = (TextureImporter)assetImporter;
@@ -73,7 +88,7 @@ namespace Mutiny.Levels.Editor
 
                         if (def.FrameCount <= 1)
                         {
-                            string assetPath = $"Assets/Mutiny/Art/Tiles/Single/{def.TileName}.png";
+                            string assetPath = $"Assets/Mutiny/Resources/Art/Tiles/Single/{def.TileName}.png";
                             if (ConfigureTexture(assetPath, def.Pivot))
                                 configuredTextures++;
                             else
@@ -83,7 +98,7 @@ namespace Mutiny.Levels.Editor
                         {
                             for (int frame = 1; frame <= def.FrameCount; frame++)
                             {
-                                string assetPath = $"Assets/Mutiny/Art/Tiles/Animated/{def.TileName}/{def.TileName}_{frame:D2}.png";
+                                string assetPath = $"Assets/Mutiny/Resources/Art/Tiles/Animated/{def.TileName}/{def.TileName}_{frame:D2}.png";
                                 if (ConfigureTexture(assetPath, def.Pivot))
                                     configuredTextures++;
                                 else
@@ -137,8 +152,8 @@ namespace Mutiny.Levels.Editor
                         continue;
 
                     string checkPath = def.FrameCount <= 1
-                        ? $"Assets/Mutiny/Art/Tiles/Single/{def.TileName}.png"
-                        : $"Assets/Mutiny/Art/Tiles/Animated/{def.TileName}/{def.TileName}_01.png";
+                        ? $"Assets/Mutiny/Resources/Art/Tiles/Single/{def.TileName}.png"
+                        : $"Assets/Mutiny/Resources/Art/Tiles/Animated/{def.TileName}/{def.TileName}_01.png";
 
                     var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(checkPath);
                     if (sprite == null)

@@ -67,11 +67,9 @@ namespace Mutiny.Levels
             if (s_IsInitialized)
                 return;
 
-            string path = Path.Combine(Application.dataPath, "Mutiny", "Data", "Tiles", "tile-mapping.csv");
-            if (File.Exists(path))
-            {
-                LoadFromCsv(File.ReadAllText(path));
-            }
+            TextAsset mapping = Resources.Load<TextAsset>("Data/Tiles/tile-mapping");
+            if (mapping != null)
+                LoadFromCsv(mapping.text);
         }
 
         public static void LoadFromCsv(string csvContent)
