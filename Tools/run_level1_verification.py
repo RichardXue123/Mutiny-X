@@ -12,9 +12,11 @@ def run_verification():
         'UnityEngine.TextRenderingModule.dll',
         'UnityEngine.UIElementsModule.dll',
         'UnityEngine.IMGUIModule.dll',
-        'UnityEngine.InputLegacyModule.dll',
         'UnityEngine.InputModule.dll'
     ]
+
+    input_system_dll = os.path.abspath('Library/ScriptAssemblies/Unity.InputSystem.dll')
+    extra_refs = f'    <Reference Include="Unity.InputSystem"><HintPath>{input_system_dll}</HintPath></Reference>' if os.path.exists(input_system_dll) else ''
 
     cs_files = [os.path.abspath(f) for f in glob.glob('Assets/Mutiny/Scripts/**/*.cs', recursive=True) if 'Editor' not in f]
 
@@ -56,6 +58,8 @@ class Program
     cs_files.append(main_cs)
     item_groups = '\n'.join([f'    <Compile Include="{f}" />' for f in cs_files])
     refs = '\n'.join([f'    <Reference Include="{os.path.splitext(d)[0]}"><HintPath>{os.path.join(unity_dll_dir, d)}</HintPath></Reference>' for d in dlls])
+    if extra_refs:
+        refs += '\n' + extra_refs
 
     proj_content = f'''<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>

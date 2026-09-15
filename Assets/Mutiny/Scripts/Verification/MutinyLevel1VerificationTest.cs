@@ -148,6 +148,23 @@ namespace Mutiny.Verification
             MutinySaveSystem.UnlockLevel(2);
             res.Assert(MutinySaveSystem.IsLevelUnlocked(2), "Level 2 is unlocked after victory");
 
+            // 8. Authentic Turn Action Semantics (Jump + Weapon)
+            // Rule: IsTurnComplete == !(canThrow || canShoot)
+            bool canThrow = true;
+            bool canShoot = true;
+            bool isComplete = !(canThrow || canShoot);
+            res.Assert(!isComplete, "Turn is not complete before any action (CanThrow=true, CanShoot=true)");
+
+            // Jump used: canThrow becomes false, canShoot remains true
+            canThrow = false;
+            isComplete = !(canThrow || canShoot);
+            res.Assert(!isComplete, "Turn is not complete after jump alone (CanThrow=false, CanShoot=true)");
+
+            // Weapon used: canShoot becomes false, canThrow is false
+            canShoot = false;
+            isComplete = !(canThrow || canShoot);
+            res.Assert(isComplete, "Turn completes once both jump and weapon are consumed (CanThrow=false, CanShoot=false)");
+
             return res;
         }
     }

@@ -220,9 +220,12 @@ namespace Mutiny.Presentation
 
         public void ReturnToCharacterSelection()
         {
+            MutinyCharacter selected = GetHumanSelectedCharacter();
+            if (selected != null && !selected.CanThrow)
+                return;
+
             HideTrajectory();
             ActiveWeapon = null;
-            MutinyCharacter selected = GetHumanSelectedCharacter();
             if (selected != null)
                 selected.IsSelected = false;
             InteractionState = MutinyPlayerInteractionState.CharacterSelection;
@@ -247,6 +250,9 @@ namespace Mutiny.Presentation
         {
             MutinyCharacter clicked = FindCharacterNearPosition(mouseWorld, team, CharacterSelectionRadiusPixels);
             if (clicked == null)
+                return;
+
+            if (team.SelectedCharacter != null && !team.SelectedCharacter.CanThrow)
                 return;
 
             team.SelectCharacter(clicked);
@@ -276,6 +282,9 @@ namespace Mutiny.Presentation
                 {
                     anchor.DropAt(MutinyPhysics.UnityToPixel(mouseWorld).x);
                     character.ConsumeWeapon(ActiveWeapon);
+                    character.CanShoot = false;
+                    character.CanThrow = false;
+                    TurnManager.NotifyActionStarted();
                     ActiveWeapon = null;
                     InteractionState = MutinyPlayerInteractionState.WeaponArmed;
                     return true;
@@ -292,6 +301,9 @@ namespace Mutiny.Presentation
                         : 448f;
                     tidalWave.StartWave(-550f, waterPixelY);
                     character.ConsumeWeapon(ActiveWeapon);
+                    character.CanShoot = false;
+                    character.CanThrow = false;
+                    TurnManager.NotifyActionStarted();
                     ActiveWeapon = null;
                     InteractionState = MutinyPlayerInteractionState.WeaponArmed;
                     return true;
@@ -329,6 +341,9 @@ namespace Mutiny.Presentation
             if (!string.IsNullOrEmpty(ActiveWeapon) && character.HasWeapon(ActiveWeapon) && character.CanShoot)
             {
                 MutinyWeaponFactory.SpawnAndLaunch(ActiveWeapon, character, startPixels, dragPixels);
+                character.CanShoot = false;
+                character.CanThrow = false;
+                TurnManager.NotifyActionStarted();
             }
             else if (string.IsNullOrEmpty(ActiveWeapon) && character.CanThrow)
             {

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Mutiny.Levels;
 using Mutiny.Persistence;
@@ -25,6 +25,9 @@ namespace Mutiny.Presentation
         private GUIStyle m_OriginalPanelTextStyle;
         private Texture2D m_RedWeaponPanel;
         private Texture2D m_BlueWeaponPanel;
+        private Texture2D m_ThrowDisabledTexture;
+        private Texture2D m_RedCancelButton;
+        private Texture2D m_BlueCancelButton;
         private readonly Dictionary<string, Texture2D> m_WeaponIcons = new Dictionary<string, Texture2D>();
         private bool m_StylesInitialized = false;
 
@@ -117,6 +120,15 @@ namespace Mutiny.Presentation
             m_BlueWeaponPanel = Resources.Load<Texture2D>("UI/weapon_select_blue");
             if (m_RedWeaponPanel != null) m_RedWeaponPanel.filterMode = FilterMode.Point;
             if (m_BlueWeaponPanel != null) m_BlueWeaponPanel.filterMode = FilterMode.Point;
+
+            m_ThrowDisabledTexture = Resources.Load<Texture2D>("UI/button_throw_disabled");
+            if (m_ThrowDisabledTexture != null) m_ThrowDisabledTexture.filterMode = FilterMode.Point;
+
+            m_RedCancelButton = Resources.Load<Texture2D>("UI/button_cancel_red");
+            if (m_RedCancelButton != null) m_RedCancelButton.filterMode = FilterMode.Point;
+
+            m_BlueCancelButton = Resources.Load<Texture2D>("UI/button_cancel_blue");
+            if (m_BlueCancelButton != null) m_BlueCancelButton.filterMode = FilterMode.Point;
             for (int i = 0; i < OriginalWeaponOrder.Length; i++)
             {
                 string weaponType = OriginalWeaponOrder[i];
@@ -256,19 +268,49 @@ namespace Mutiny.Presentation
             else
                 GUI.Box(panelRect, GUIContent.none, m_PanelStyle);
 
-            GUI.enabled = selectedChar.CanThrow;
-            if (GUI.Button(ScaledRect(left, top, scale, 10f, 24f, 86f, 57f),
-                    new GUIContent(string.Empty, "throw character"), m_OriginalSlotStyle))
-                PlayerInput.SelectCharacterThrow();
-            GUI.enabled = true;
+            Rect throwRect = ScaledRect(left, top, scale, 10f, 24f, 86f, 57f);
+            if (selectedChar.CanThrow)
+            {
+                if (GUI.Button(throwRect, new GUIContent(string.Empty, "throw character"), m_OriginalSlotStyle))
+                    PlayerInput.SelectCharacterThrow();
+            }
+            else
+            {
+                if (m_ThrowDisabledTexture != null)
+                {
+                    GUI.DrawTexture(throwRect, m_ThrowDisabledTexture, ScaleMode.StretchToFill, true);
+                }
+                else
+                {
+                    var origColor = GUI.color;
+                    GUI.color = new Color(0.25f, 0.25f, 0.25f, 0.7f);
+                    GUI.DrawTexture(throwRect, Texture2D.whiteTexture, ScaleMode.StretchToFill);
+                    GUI.color = origColor;
+                }
+
+                GUI.enabled = false;
+                GUI.Button(throwRect, new GUIContent(string.Empty, "throw character used"), m_OriginalSlotStyle);
+                GUI.enabled = true;
+            }
 
             if (GUI.Button(ScaledRect(left, top, scale, 10f, 89f, 86f, 57f),
                     new GUIContent(string.Empty, "end turn"), m_OriginalSlotStyle))
                 PlayerInput.EndTurn();
 
-            if (GUI.Button(ScaledRect(left, top, scale, 252f, 0f, 18f, 18f),
-                    new GUIContent(string.Empty, "cancel character"), m_OriginalSlotStyle))
-                PlayerInput.ReturnToCharacterSelection();
+            if (selectedChar.CanThrow)
+            {
+                Texture2D cancelTex = TurnManager.CurrentTeam.TeamNumber == 2
+                    ? m_BlueCancelButton
+                    : m_RedCancelButton;
+                Rect cancelRect = ScaledRect(left, top, scale, 250f, 0f, 20f, 20f);
+                if (cancelTex != null)
+                {
+                    GUI.DrawTexture(cancelRect, cancelTex, ScaleMode.StretchToFill, true);
+                }
+
+                if (GUI.Button(cancelRect, new GUIContent(string.Empty, "cancel character"), m_OriginalSlotStyle))
+                    PlayerInput.ReturnToCharacterSelection();
+            }
 
             for (int i = 0; i < OriginalWeaponOrder.Length; i++)
             {
@@ -325,11 +367,13 @@ namespace Mutiny.Presentation
             if (string.IsNullOrEmpty(action))
                 return $"{character.CharacterType}\nHP {character.Health:F0}/{character.MaxHealth:F0}";
             if (action == "throw character")
-                return "THROW CHARACTER\nClick your character and drag with the mouse to aim and set the power.";
+                return "THROW CHARACTER\nClick your character and drag with the mouse to aim and set the power.\nYou get to use this once per turn before you use a weapon.";
+            if (action == "throw character used")
+                return "THROW CHARACTER (USED)\nJump already used this turn. Select a weapon to attack, or click End Go.";
             if (action == "end turn")
-                return "END GO\nFinish your turn without using a weapon.";
+                return "END GO\nClick here if you want to finish your turn without using a weapon.";
             if (action == "cancel character")
-                return "CANCEL\nReturn to character selection.";
+                return "CLOSE\nClick here to cancel and select another player.";
             return $"{action.ToUpperInvariant()}\nSelect this weapon, then use the mouse on the stage.";
         }
 

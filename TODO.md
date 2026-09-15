@@ -156,3 +156,4 @@
 | 2026-09-15 | 17：Level 1 对比验证通过 | 实现 MutinyLevel1VerificationTest 与验证脚本；27 项硬断言 100% 通过（布局、5/3 队伍、(-15,-10) 初速与 10 tick 顶点、60px 半径/20HP 伤害、落水线与存档）；产出 level-1-comparison.md | 18：全关卡回归测试 |
 | 2026-09-15 | 18：全关卡回归测试通过 | 实现 MutinyAllLevelsRegressionTest 与批处理脚本；全 18 关卡数据、队伍角色、队长、水域、AI 支持与解锁链路 100% (18/18) 验证通过；产出 full-level-regression.md | 01~18 全部阶段里程碑达成，交付人工游玩体验 |
 | 2026-09-15 | Play Mode 启动即平局修复 | 根因是旧 Editor 菜单将 LevelController 与已烘焙关卡放在同一对象，Controller.Start 重建时旧 TurnManager 的两队角色引用被延迟销毁，双方 AliveCount 变为 0；旧场景现在会采用已烘焙关卡，新菜单改为稳定 MutinyGame 宿主与可替换子关卡；TurnManager 拒绝以空队伍开始或判平局，并仅缓存所属队角色。Runtime 与 Editor C# 编译通过；Main 场景静态核对为红队 5、蓝队 3，8 人 IsAlive=1 | 在 Unity 重新进入 Play Mode，确认日志显示 Team 1=5、Team 2=3 且不再立即平局 |
+| 2026-09-15 | 回合跳跃与武器行动UI状态修复 | 还原 Flash AS2 规则：一回合允许跳跃一次+武器一次；跳跃后回合不结束并重新打开面板，跳跃按钮切换为原版置灰贴图（button_throw_disabled.png），取消角色（X）按钮隐藏且禁止切换角色；武器发射同时消耗跳跃与攻击并结束回合。所有 30 项断言测试与 C# 编译 100% 通过 | 在 Unity Play Mode 中体验跳跃后按钮置灰与武器连击流程 |

@@ -232,6 +232,12 @@ namespace Mutiny.Simulation
             if (!string.IsNullOrEmpty(move.WeaponType) && ch.HasWeapon(move.WeaponType))
             {
                 MutinyWeaponFactory.SpawnAndFire(move.WeaponType, ch, move.LaunchVelocity);
+                ch.CanThrow = false;
+                ch.CanShoot = false;
+                if (m_TurnManager != null)
+                {
+                    m_TurnManager.NotifyActionStarted();
+                }
             }
             else
             {

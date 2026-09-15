@@ -88,6 +88,7 @@ namespace Mutiny.Simulation
             if (Owner != null)
             {
                 Owner.CanShoot = false;
+                Owner.CanThrow = false;
             }
 
             OnFired?.Invoke();
