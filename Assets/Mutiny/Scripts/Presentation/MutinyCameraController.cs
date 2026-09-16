@@ -182,6 +182,9 @@ namespace Mutiny.Presentation
 
         private MutinyTreasureChest FindFallingChest()
         {
+            if (!MutinyTreasureChestManager.SystemEnabled)
+                return null;
+
             MutinyTreasureChest[] chests = FindObjectsByType<MutinyTreasureChest>();
             for (int i = 0; i < chests.Length; i++)
             {

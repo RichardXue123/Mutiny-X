@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Mutiny.Diagnostics;
 using UnityEngine;
 
 namespace Mutiny.Simulation
@@ -9,9 +10,12 @@ namespace Mutiny.Simulation
     public sealed class MutinyCharacterAnimator : MonoBehaviour
     {
         private const int IdleFirstFrame = 1;
-        private const int IdleLastFrame = 14;
+        // Frame 13 executes gotoAndPlay("static") in the SWF and frame 14 is the
+        // transparent separator before the hit label. Neither frame is rendered.
+        private const int IdleLastFrame = 12;
         private const int HitFirstFrame = 15;
-        private const int HitLastFrame = 35;
+        // Frame 35 executes gotoAndPlay("static") before it can be presented.
+        private const int HitLastFrame = 34;
 
         private static readonly Dictionary<string, Sprite[]> s_FrameCache =
             new Dictionary<string, Sprite[]>(StringComparer.Ordinal);
@@ -24,17 +28,51 @@ namespace Mutiny.Simulation
         private bool m_PlayingHitRecovery;
         private float m_TickAccumulator;
 
+        internal int CurrentFrame => m_Frame;
+        internal bool IsInitialized => m_Frames != null && m_Frames.Length > 0;
+
         private void Awake()
         {
             m_Renderer = GetComponent<SpriteRenderer>();
             m_Character = GetComponent<MutinyCharacter>();
         }
 
+        private void Start()
+        {
+            // Runtime-built characters are initialized explicitly by the builder.
+            // Baked scene characters already have this component, so initialize them
+            // from their serialized CharacterType when their first lifecycle starts.
+            EnsureInitialized();
+        }
+
+        internal bool EnsureInitialized()
+        {
+            if (IsInitialized)
+                return true;
+
+            if (m_Character == null)
+                m_Character = GetComponent<MutinyCharacter>();
+            if (m_Character == null || string.IsNullOrEmpty(m_Character.CharacterType))
+            {
+                MutinyDebugLog.Warning("Animation",
+                    $"character timeline initialization skipped name={name} reason=missing-character-type", this);
+                return false;
+            }
+
+            Initialize(m_Character.CharacterType);
+            return IsInitialized;
+        }
+
         public void Initialize(string characterType)
         {
             m_Frames = LoadFrames(characterType);
             m_Frame = IdleFirstFrame;
+            m_HitRequested = false;
+            m_PlayingHitRecovery = false;
+            m_TickAccumulator = 0f;
             ApplyFrame();
+            MutinyDebugLog.Info("Animation",
+                $"character timeline initialized name={name} type={characterType} static=1-12 hit=15-34", this);
         }
 
         public void PlayHit()
@@ -58,7 +96,7 @@ namespace Mutiny.Simulation
             }
         }
 
-        private void AdvanceOriginalTick()
+        internal void AdvanceOriginalTick()
         {
             if (m_HitRequested)
             {
@@ -131,5 +169,123 @@ namespace Mutiny.Simulation
             return int.TryParse(name, out int frame) ? frame : int.MaxValue;
         }
     }
-}
 
+    [DisallowMultipleComponent]
+    [RequireComponent(typeof(SpriteRenderer))]
+    public sealed class MutinyDeadCharacterEffect : MonoBehaviour
+    {
+        public const int OriginalFrameCount = 24;
+        private static readonly Vector2 OriginalPivot = new Vector2(12f / 26f, 4f / 22f);
+        private static Sprite[] s_Frames;
+
+        private SpriteRenderer m_Renderer;
+        private int m_FrameIndex;
+        private float m_TickAccumulator;
+
+        public int CurrentFrame => m_FrameIndex + 1;
+        public int FrameCount => s_Frames == null ? 0 : s_Frames.Length;
+        public bool IsComplete => FrameCount > 0 && m_FrameIndex >= FrameCount - 1;
+
+        private void Awake()
+        {
+            m_Renderer = GetComponent<SpriteRenderer>();
+        }
+
+        public static MutinyDeadCharacterEffect Spawn(MutinyCharacter character)
+        {
+            if (character == null)
+                return null;
+
+            PhysicsBodyState state = character.PhysicsBody != null
+                ? character.PhysicsBody.State
+                : default;
+            float bottomExtent = character.PhysicsBody != null
+                ? character.PhysicsBody.State.BottomExtent
+                : 8f;
+
+            GameObject corpse = new GameObject($"DeadCharacter_{character.name}");
+            if (character.transform.parent != null)
+                corpse.transform.SetParent(character.transform.parent, true);
+            corpse.transform.position = MutinyPhysics.PixelToUnity(state.X, state.Y + bottomExtent);
+            corpse.transform.rotation = Quaternion.identity;
+
+            MutinyDeadCharacterEffect effect = corpse.AddComponent<MutinyDeadCharacterEffect>();
+            int sortingOrder = character.GetComponent<SpriteRenderer>()?.sortingOrder ?? 20;
+            effect.Initialize(sortingOrder);
+            return effect;
+        }
+
+        public void Initialize(int sortingOrder)
+        {
+            EnsureFramesLoaded();
+            m_FrameIndex = 0;
+            m_TickAccumulator = 0f;
+            if (FrameCount != OriginalFrameCount)
+            {
+                Debug.LogError(
+                    $"[Mutiny:Death] Expected {OriginalFrameCount} deadCharacter frames but loaded {FrameCount}.", this);
+            }
+            if (m_Renderer != null)
+            {
+                m_Renderer.sortingOrder = sortingOrder;
+                ApplyFrame();
+            }
+        }
+
+        private void Update()
+        {
+            if (IsComplete)
+                return;
+
+            m_TickAccumulator += Time.deltaTime;
+            while (m_TickAccumulator >= MutinyPhysics.TimeStep && !IsComplete)
+            {
+                m_TickAccumulator -= MutinyPhysics.TimeStep;
+                AdvanceOriginalTick();
+            }
+        }
+
+        public void AdvanceOriginalTick()
+        {
+            if (s_Frames == null || s_Frames.Length == 0 || IsComplete)
+                return;
+
+            m_FrameIndex++;
+            ApplyFrame();
+        }
+
+        private void ApplyFrame()
+        {
+            if (m_Renderer != null && s_Frames != null &&
+                m_FrameIndex >= 0 && m_FrameIndex < s_Frames.Length)
+            {
+                m_Renderer.sprite = s_Frames[m_FrameIndex];
+            }
+        }
+
+        private static void EnsureFramesLoaded()
+        {
+            if (s_Frames != null)
+                return;
+
+            Texture2D[] textures = Resources.LoadAll<Texture2D>("Art/Characters/DeadCharacter");
+            Array.Sort(textures, (a, b) => ParseFrame(a.name).CompareTo(ParseFrame(b.name)));
+            s_Frames = new Sprite[textures.Length];
+            for (int i = 0; i < textures.Length; i++)
+            {
+                Texture2D texture = textures[i];
+                s_Frames[i] = Sprite.Create(
+                    texture,
+                    new Rect(0f, 0f, texture.width, texture.height),
+                    OriginalPivot,
+                    MutinyPhysics.PixelsPerUnit);
+                s_Frames[i].name = $"deadCharacter_{i + 1:D2}";
+            }
+        }
+
+        private static int ParseFrame(string name)
+        {
+            return int.TryParse(name, out int frame) ? frame : int.MaxValue;
+        }
+    }
+}

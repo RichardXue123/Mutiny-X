@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Mutiny.Diagnostics;
 using Mutiny.Levels;
 using Mutiny.Presentation;
 using UnityEngine;
@@ -20,6 +21,7 @@ namespace Mutiny.Simulation
 
         public float PixelX { get; private set; }
         public float PixelY { get; private set; }
+        public float FloorPixelY => m_FloorY;
         public bool IsFalling { get; private set; } = true;
         public bool IsFinished { get; private set; }
         public int TimeTaken { get; private set; }
@@ -37,6 +39,18 @@ namespace Mutiny.Simulation
             PixelY = -300f;
             m_FloorY = floorY;
             m_Contents.AddRange(contents);
+
+            if (!MutinyTreasureChestManager.SystemEnabled)
+            {
+                IsFalling = false;
+                IsFinished = true;
+                if (m_Renderer != null)
+                    m_Renderer.enabled = false;
+                MutinyDebugLog.Warning("Chest",
+                    $"chest initialization suppressed while airdrops are disabled name={name}", this);
+                return;
+            }
+
             SetVisualFrame(10);
             SyncTransform();
             MutinyAudioManager.Instance?.PlaySFX("chest_appear");
@@ -44,6 +58,9 @@ namespace Mutiny.Simulation
 
         public void AdvanceOriginalTick()
         {
+            if (!MutinyTreasureChestManager.SystemEnabled)
+                return;
+
             if (IsFinished)
             {
                 m_Visibility -= 0.1f;
@@ -61,6 +78,7 @@ namespace Mutiny.Simulation
                     PixelY = m_FloorY - 15f;
                     IsFalling = false;
                     SetVisualFrame(20);
+                    MutinyDebugLog.Info("Chest", $"landed name={name} x={PixelX:0} y={PixelY:0}", this);
                 }
                 SyncTransform();
             }
@@ -75,6 +93,8 @@ namespace Mutiny.Simulation
                         string releasedWeapon = m_Contents[0];
                         m_Contents.RemoveAt(0);
                         m_CharacterTouched.AddWeapon(releasedWeapon);
+                        MutinyDebugLog.Info("Chest",
+                            $"collected weapon={releasedWeapon} character={m_CharacterTouched.name} remaining={m_Contents.Count}", this);
                         SetVisualFrame(44);
                         MutinyAudioManager.Instance?.PlaySFX("icon_collect");
                     }
@@ -148,4 +168,3 @@ namespace Mutiny.Simulation
         }
     }
 }
-

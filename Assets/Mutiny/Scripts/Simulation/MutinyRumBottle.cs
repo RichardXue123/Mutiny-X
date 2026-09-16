@@ -23,14 +23,17 @@ namespace Mutiny.Simulation
             }
         }
 
-        private void Update()
+        protected override void Update()
         {
+            if (IsFinished)
+                return;
+
+            base.Update();
             if (IsFinished)
                 return;
 
             if (IsFired && PhysicsBody != null)
             {
-                transform.Rotate(0f, 0f, -PhysicsBody.State.VelocityX * 3f);
                 if (PhysicsBody.IsInWater)
                 {
                     Explode();
@@ -68,4 +71,3 @@ namespace Mutiny.Simulation
         }
     }
 }
-

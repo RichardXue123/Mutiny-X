@@ -269,4 +269,46 @@ namespace Mutiny.Simulation
             return points;
         }
     }
+
+    public static class MutinyRotationRules
+    {
+        public static float CharacterMotionDelta(float velocityX)
+        {
+            return -velocityX * 3f;
+        }
+
+        public static float CharacterWaterDelta(float velocityX, float velocityY)
+        {
+            return -(velocityX + velocityY) * 4f;
+        }
+
+        public static float SettleCharacterFloorAngle(float unityAngle)
+        {
+            float angle = Mathf.DeltaAngle(0f, unityAngle) * 0.5f;
+            if (angle > -1f && angle < 1f)
+                angle = 0f;
+            return angle;
+        }
+
+        public static float WeaponRotationMultiplier(string weaponType)
+        {
+            switch (weaponType)
+            {
+                case "banana":
+                case "dynamite":
+                case "rumBottle":
+                case "voodooDoll":
+                    return 2f;
+                case "boulder":
+                    return 2.5f;
+                default:
+                    return 0f;
+            }
+        }
+
+        public static float WeaponMotionDelta(string weaponType, float velocityX)
+        {
+            return -velocityX * WeaponRotationMultiplier(weaponType);
+        }
+    }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Mutiny.Diagnostics;
 using Mutiny.Levels;
 using UnityEngine;
 
@@ -8,6 +9,9 @@ namespace Mutiny.Simulation
     [DisallowMultipleComponent]
     public sealed class MutinyTreasureChestManager : MonoBehaviour
     {
+        // Temporary user-authorized debug switch. Keep the original implementation
+        // below intact so P6 parity work can resume from one explicit switch.
+        public static bool SystemEnabled => false;
         public const int MaximumChestCount = 3;
 
         private readonly List<string> m_PotentialWeapons = new List<string>();
@@ -16,6 +20,7 @@ namespace Mutiny.Simulation
         private MutinyLevelData m_LevelData;
         private MutinyLevelRoot m_LevelRoot;
         private float m_TickAccumulator;
+        private bool m_DisabledStateApplied;
 
         public IReadOnlyList<MutinyTreasureChest> Chests => m_Chests;
 
@@ -23,12 +28,23 @@ namespace Mutiny.Simulation
         {
             m_LevelData = levelData;
             m_LevelRoot = levelRoot;
+            if (!SystemEnabled)
+            {
+                DisableExistingChests();
+                return;
+            }
             BuildPotentialWeaponList();
             BuildValidDropColumns();
         }
 
         private void Update()
         {
+            if (!SystemEnabled)
+            {
+                DisableExistingChests();
+                return;
+            }
+
             m_TickAccumulator += Time.deltaTime;
             while (m_TickAccumulator >= MutinyPhysics.TimeStep)
             {
@@ -45,7 +61,7 @@ namespace Mutiny.Simulation
 
         public void TryDropNew()
         {
-            if (m_LevelData == null || m_LevelRoot == null ||
+            if (!SystemEnabled || m_LevelData == null || m_LevelRoot == null ||
                 m_Chests.Count >= MaximumChestCount ||
                 m_ValidDropColumns.Count == 0 || m_PotentialWeapons.Count == 0)
                 return;
@@ -70,6 +86,25 @@ namespace Mutiny.Simulation
             MutinyTreasureChest chest = chestObject.AddComponent<MutinyTreasureChest>();
             chest.Initialize(this, x, floorY, contents);
             m_Chests.Add(chest);
+            MutinyDebugLog.Info("Chest",
+                $"dropped name={chestObject.name} column={column} floorY={floorY:0} contents={string.Join(",", contents)}", chest);
+        }
+
+        private void DisableExistingChests()
+        {
+            if (m_DisabledStateApplied)
+                return;
+
+            m_DisabledStateApplied = true;
+            MutinyTreasureChest[] existing = FindObjectsByType<MutinyTreasureChest>();
+            for (int i = 0; i < existing.Length; i++)
+            {
+                if (existing[i] != null)
+                    Destroy(existing[i].gameObject);
+            }
+            m_Chests.Clear();
+            MutinyDebugLog.Info("Chest",
+                $"airdrop system disabled for debugging; removedExisting={existing.Length}", this);
         }
 
         public void Unregister(MutinyTreasureChest chest)
@@ -165,4 +200,3 @@ namespace Mutiny.Simulation
         }
     }
 }
-

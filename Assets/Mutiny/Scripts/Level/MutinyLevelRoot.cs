@@ -22,5 +22,37 @@ namespace Mutiny.Levels
         public MutinyTeam Team2;
         public List<MutinyCharacter> AllCharacters = new List<MutinyCharacter>();
         public List<MutinyCharacter> Characters => AllCharacters;
+
+        private void Start()
+        {
+            EnsureRuntimeWater();
+        }
+
+        public void EnsureRuntimeWater()
+        {
+            float waterPixelY = -WaterLevelY * MutinyPhysics.PixelsPerUnit;
+            for (int i = 0; i < AllCharacters.Count; i++)
+            {
+                MutinyCharacter character = AllCharacters[i];
+                if (character != null && character.PhysicsBody != null)
+                    character.PhysicsBody.WaterPixelY = waterPixelY;
+            }
+
+            if (WaterHolder == null)
+            {
+                Transform water = transform.Find("Water");
+                if (water != null)
+                    WaterHolder = water;
+            }
+
+            if (WaterHolder == null)
+                return;
+
+            MutinyWaterSurface surface = WaterHolder.GetComponent<MutinyWaterSurface>();
+            if (surface == null)
+                surface = WaterHolder.gameObject.AddComponent<MutinyWaterSurface>();
+            if (surface.LoadedFrameCount == 0)
+                surface.Initialize(Width * MutinyLevelBuilder.CellSize, WaterLevelY, 1);
+        }
     }
 }

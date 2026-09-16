@@ -168,6 +168,9 @@ namespace Mutiny.Levels
             collider.isTrigger = true;
             collider.size = new Vector2(levelData.Width * CellSize + 20f, 10f);
 
+            MutinyWaterSurface surface = parent.gameObject.AddComponent<MutinyWaterSurface>();
+            surface.Initialize(levelData.Width * CellSize, waterY, 1);
+
             return waterY;
         }
 
@@ -270,6 +273,130 @@ namespace Mutiny.Levels
         public static Sprite ResolveCharacterPreview(string characterType)
         {
             return Resources.Load<Sprite>($"Art/Characters/Preview/{characterType}");
+        }
+    }
+
+    [DisallowMultipleComponent]
+    public sealed class MutinyWaterSurface : MonoBehaviour
+    {
+        private const int FramesPerColour = 10;
+        private readonly List<SpriteRenderer> m_Renderers = new List<SpriteRenderer>();
+        private Sprite[] m_Frames = Array.Empty<Sprite>();
+        private float m_Accumulator;
+        private int m_FrameIndex;
+
+        public int LoadedFrameCount => m_Frames.Length;
+
+        public void Initialize(float levelWidth, float waterUnityY, int skyColour)
+        {
+            m_Frames = LoadFrameRange("Art/Effects/Water", (Mathf.Clamp(skyColour, 1, 3) - 1) * FramesPerColour + 1,
+                FramesPerColour, new Vector2(0f, 1f - 30f / 384f));
+            if (m_Frames.Length == 0)
+            {
+                Debug.LogError("[Mutiny:Water] Original water frames are missing from Resources.", this);
+                return;
+            }
+
+            float spriteWidth = m_Frames[0].rect.width / MutinyPhysics.PixelsPerUnit;
+            float startX = -spriteWidth;
+            int rendererCount = Mathf.CeilToInt((levelWidth + spriteWidth * 2f) / spriteWidth);
+            for (int i = 0; i < rendererCount; i++)
+            {
+                GameObject segment = new GameObject($"WaterSurface_{i:D2}");
+                segment.transform.SetParent(transform, false);
+                segment.transform.localPosition = new Vector3(startX + i * spriteWidth, waterUnityY, 0f);
+                SpriteRenderer renderer = segment.AddComponent<SpriteRenderer>();
+                renderer.sprite = m_Frames[0];
+                renderer.sortingOrder = MutinyLevelBuilder.WaterSortingOrder;
+                m_Renderers.Add(renderer);
+            }
+
+            Mutiny.Diagnostics.MutinyDebugLog.Info("Water",
+                $"surface initialized waterY={-waterUnityY * MutinyPhysics.PixelsPerUnit:F0}px frames={m_Frames.Length} segments={rendererCount}", this);
+        }
+
+        private void Update()
+        {
+            if (m_Frames.Length <= 1)
+                return;
+
+            m_Accumulator += Time.deltaTime;
+            while (m_Accumulator >= MutinyPhysics.TimeStep)
+            {
+                m_Accumulator -= MutinyPhysics.TimeStep;
+                m_FrameIndex = (m_FrameIndex + 1) % m_Frames.Length;
+                for (int i = 0; i < m_Renderers.Count; i++)
+                    m_Renderers[i].sprite = m_Frames[m_FrameIndex];
+            }
+        }
+
+        public static void SpawnSplash(float pixelX, float waterPixelY, int skyColour = 1)
+        {
+            GameObject splash = new GameObject("WaterSplash");
+            splash.transform.position = MutinyPhysics.PixelToUnity(pixelX, waterPixelY);
+            splash.AddComponent<MutinySplashEffect>().Initialize(skyColour);
+        }
+
+        internal static Sprite[] LoadFrameRange(string resourcePath, int firstFrame, int frameCount, Vector2 pivot)
+        {
+            var sprites = new List<Sprite>(frameCount);
+            for (int i = 0; i < frameCount; i++)
+            {
+                Texture2D texture = Resources.Load<Texture2D>($"{resourcePath}/{firstFrame + i}");
+                if (texture == null)
+                    continue;
+
+                texture.filterMode = FilterMode.Point;
+                texture.wrapMode = TextureWrapMode.Clamp;
+                sprites.Add(Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), pivot,
+                    MutinyPhysics.PixelsPerUnit));
+            }
+            return sprites.ToArray();
+        }
+    }
+
+    [DisallowMultipleComponent]
+    public sealed class MutinySplashEffect : MonoBehaviour
+    {
+        private const int FramesPerColour = 24;
+        private SpriteRenderer m_Renderer;
+        private Sprite[] m_Frames = Array.Empty<Sprite>();
+        private float m_Accumulator;
+        private int m_FrameIndex;
+
+        public void Initialize(int skyColour)
+        {
+            m_Frames = MutinyWaterSurface.LoadFrameRange("Art/Effects/Splash",
+                (Mathf.Clamp(skyColour, 1, 3) - 1) * FramesPerColour + 1, FramesPerColour, new Vector2(0.5f, 0f));
+            if (m_Frames.Length == 0)
+            {
+                Debug.LogError("[Mutiny:Water] Original splash frames are missing from Resources.", this);
+                Destroy(gameObject);
+                return;
+            }
+
+            m_Renderer = gameObject.AddComponent<SpriteRenderer>();
+            m_Renderer.sortingOrder = MutinyLevelBuilder.WaterSortingOrder + 1;
+            m_Renderer.sprite = m_Frames[0];
+        }
+
+        private void Update()
+        {
+            if (m_Frames.Length == 0)
+                return;
+
+            m_Accumulator += Time.deltaTime;
+            while (m_Accumulator >= MutinyPhysics.TimeStep)
+            {
+                m_Accumulator -= MutinyPhysics.TimeStep;
+                m_FrameIndex++;
+                if (m_FrameIndex >= m_Frames.Length)
+                {
+                    Destroy(gameObject);
+                    return;
+                }
+                m_Renderer.sprite = m_Frames[m_FrameIndex];
+            }
         }
     }
 }

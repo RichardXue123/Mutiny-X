@@ -36,8 +36,51 @@ namespace Mutiny.Simulation
 
             if (IsFired && !IsFinished)
             {
-                Explode();
+                if (side == CollisionSide.Water)
+                {
+                    DudInWater();
+                }
+                else
+                {
+                    Explode();
+                }
             }
+        }
+
+        protected override void Update()
+        {
+            if (IsFinished)
+                return;
+
+            base.Update();
+            if (IsFinished)
+                return;
+
+            if (IsFired && PhysicsBody != null && PhysicsBody.IsInWater)
+            {
+                DudInWater();
+            }
+        }
+
+        public void DudInWater()
+        {
+            if (IsFinished)
+                return;
+
+            Finish();
+
+            if (SpriteRenderer != null)
+            {
+                SpriteRenderer.enabled = false;
+            }
+
+            ShotsRemaining--;
+            if (ShotsRemaining > 0 && Owner != null && Owner.IsAlive)
+            {
+                Owner.CanShoot = true;
+            }
+
+            Destroy(gameObject, 0.1f);
         }
 
         public void Explode()

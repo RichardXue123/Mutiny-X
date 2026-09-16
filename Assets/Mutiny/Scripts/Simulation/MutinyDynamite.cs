@@ -60,23 +60,44 @@ namespace Mutiny.Simulation
             PhysicsBody.State.Bounce = 0.2f;
         }
 
-        private void Update()
+        protected override void OnWaterSubmerged()
+        {
+            base.OnWaterSubmerged();
+            IsLit = false;
+            if (UnlitFrame != null && SpriteRenderer != null)
+            {
+                SpriteRenderer.sprite = UnlitFrame;
+            }
+        }
+
+        protected override void Update()
         {
             if (IsFinished)
                 return;
 
-            // Flash AS2: if(this.fired) this.rotation += this.velocityX * 2;
+            base.Update();
+
             if (IsFired && PhysicsBody != null)
             {
-                transform.Rotate(0f, 0f, -PhysicsBody.State.VelocityX * 2f);
-
                 // Water extinguishes fuse (Flash: if(y > water.y) mc.gotoAndStop("unlit"))
-                if (PhysicsBody.IsInWater && IsLit)
+                if (PhysicsBody.IsInWater)
                 {
-                    IsLit = false;
-                    if (UnlitFrame != null && SpriteRenderer != null)
+                    if (IsLit)
                     {
-                        SpriteRenderer.sprite = UnlitFrame;
+                        IsLit = false;
+                        if (UnlitFrame != null && SpriteRenderer != null)
+                        {
+                            SpriteRenderer.sprite = UnlitFrame;
+                        }
+                    }
+
+                    // Once submerged in water, dynamite is a dud and expires after brief sinking
+                    float waterY = PhysicsBody.WaterPixelY;
+                    if (m_WaterTimer >= 0.35f || (!float.IsInfinity(waterY) && PhysicsBody.State.Y > waterY + 16f))
+                    {
+                        Finish();
+                        Destroy(gameObject, 0.4f);
+                        return;
                     }
                 }
 

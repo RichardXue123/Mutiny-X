@@ -181,6 +181,8 @@ namespace Mutiny.Simulation
 
                     // Flash: subtractHealth(maxDamage * ratio)
                     ch.TakeDamage(MaxDamage * ratio);
+                    if (Caster != null)
+                        Caster.Evilness += ratio;
                 }
             }
         }

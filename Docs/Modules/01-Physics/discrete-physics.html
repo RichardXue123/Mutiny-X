@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mutiny X - 离散物理与碰撞模块实现说明</title>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #38bdf8;
+            --accent-green: #4ade80;
+            --accent-amber: #fbbf24;
+            --accent-rose: #fb7185;
+            --border-color: #334155;
+            --code-bg: #0b1120;
+            --font-mono: "JetBrains Mono", "Fira Code", Consolas, Menlo, monospace;
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.65;
+            padding: 2.5rem 1.5rem;
+        }
+
+        .container {
+            max-width: 1080px;
+            margin: 0 auto;
+        }
+
+        header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .badge {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            background-color: rgba(56, 189, 248, 0.15);
+            color: var(--accent-blue);
+            margin-bottom: 0.75rem;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        h1 {
+            font-size: 2.25rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.025em;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+        }
+
+        .card {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+        }
+
+        h2 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--accent-blue);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin: 1.25rem 0 0.5rem 0;
+        }
+
+        p {
+            color: var(--text-secondary);
+            margin-bottom: 0.9rem;
+        }
+
+        p strong {
+            color: var(--text-primary);
+        }
+
+        ul, ol {
+            color: var(--text-secondary);
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        li {
+            margin-bottom: 0.35rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.92rem;
+        }
+
+        th, td {
+            padding: 0.65rem 0.85rem;
+            text-align: left;
+            border: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: rgba(255, 255, 255, 0.03);
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        td {
+            color: var(--text-secondary);
+        }
+
+        code {
+            font-family: var(--font-mono);
+            font-size: 0.88em;
+            background-color: var(--code-bg);
+            color: #38bdf8;
+            padding: 0.15rem 0.35rem;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        pre {
+            background-color: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+
+        pre code {
+            background-color: transparent;
+            border: none;
+            padding: 0;
+            color: #e2e8f0;
+            font-size: 0.86rem;
+            line-height: 1.6;
+        }
+
+        .kw { color: #f472b6; } /* keyword */
+        .tp { color: #38bdf8; } /* type */
+        .fn { color: #818cf8; } /* function */
+        .str { color: #a3e635; } /* string */
+        .num { color: #fb923c; } /* number */
+        .cm { color: #64748b; font-style: italic; } /* comment */
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .highlight-box {
+            background-color: rgba(56, 189, 248, 0.06);
+            border-left: 4px solid var(--accent-blue);
+            padding: 0.85rem 1rem;
+            border-radius: 0 6px 6px 0;
+            margin: 1rem 0;
+            color: #cbd5e1;
+            font-size: 0.95rem;
+        }
+
+        .warn-box {
+            background-color: rgba(251, 191, 36, 0.08);
+            border-left: 4px solid var(--accent-amber);
+            padding: 0.85rem 1rem;
+            border-radius: 0 6px 6px 0;
+            margin: 1rem 0;
+            color: #fde68a;
+            font-size: 0.95rem;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            font-size: 0.9rem;
+        }
+
+        .nav-links a {
+            color: var(--accent-blue);
+            text-decoration: none;
+        }
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="badge">Architecture & Implementation</div>
+            <h1>01. 离散物理与碰撞模块 (Discrete Physics)</h1>
+            <div class="subtitle">1:1 逆向 Flash 原版 25 Hz 确定性物理积分、AABB 栅格碰撞与水域动力学</div>
+        </header>
+
+        <!-- 1. 为什么自研而不使用 Rigidbody2D -->
+        <section class="card">
+            <h2>1. 核心设计背景：为何抛弃 Unity 物理引擎？</h2>
+            <p>
+                在《Mutiny》中，弹弓瞄准的手感、炮弹反弹轨迹以及炸药静止判定的手感是游戏的核心体验。Flash 原版基于 <strong>ActionScript 2 (AVM1)</strong>，在每帧（25 FPS）以极其固定的离散公式更新像素坐标：
+            </p>
+            <div class="highlight-box">
+                <strong>确定性要求：</strong>
+                原版所有的物理运动、初速度衰减、弹道虚线预测与入水浮力，均建立在离散像素步长之上。如果直接套用 Unity 的 <code>Rigidbody2D</code>（PhysX/Box2D 连续时间求解器），会因为浮点累积误差、平滑插值以及材质摩擦力模型不一致，导致<strong>弹道预测线与真实飞行轨迹无法做到 100% 绝对重合</strong>，且破坏原版的“蓄力-反弹”物理原汁原味性。
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>对比维度</th>
+                        <th>Unity 内置 Rigidbody2D</th>
+                        <th>Mutiny X 自研离散物理 (MutinyPhysics)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>步长机制</strong></td>
+                        <td>基于 <code>FixedUpdate</code> (默认 50 Hz) 连续积分</td>
+                        <td><strong>固定 25 Hz (TimeStep = 0.04s)</strong>，单 tick 步进</td>
+                    </tr>
+                    <tr>
+                        <td><strong>坐标单位</strong></td>
+                        <td>Unity 世界米 (Units)</td>
+                        <td><strong>Flash 像素 (Pixel Coordinates)</strong>，渲染时转 Units</td>
+                    </tr>
+                    <tr>
+                        <td><strong>确定性预测</strong></td>
+                        <td>难以快速无副作用预测 60 步后的落点</td>
+                        <td><strong>纯状态快照数学求解</strong>，可在 1 毫秒内计算出 60 步轨迹</td>
+                    </tr>
+                    <tr>
+                        <td><strong>碰撞检测</strong></td>
+                        <td>连续重叠检测 (Circle / BoxCollider2D)</td>
+                        <td><strong>逐轴 Swept AABB 栅格扫描</strong> (完全重现原版 Flash Solid.as)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- 2. 坐标系与物理常数 -->
+        <section class="card">
+            <h2>2. 坐标系映射与核心物理常数</h2>
+            <p>游戏内部所有物理积分均在 <strong>Flash 像素空间</strong> 中完成，只有在挂载物同步渲染时，才映射到 Unity 世界坐标：</p>
+            
+            <div class="grid-2">
+                <div>
+                    <h3>坐标系转换关系</h3>
+                    <ul>
+                        <li><strong>网格比例：</strong><code>PixelsPerUnit = 32f</code> (1 个瓦片 Tile = 32 × 32 像素)。</li>
+                        <li><strong>原点约定：</strong>Flash 原点位于左上角（+X 向右，+Y 向下）；Unity 原点 Y 轴向上。</li>
+                        <li><strong>转换公式：</strong>
+                            <br><code>Unity.X = Flash.X / 32.0f</code>
+                            <br><code>Unity.Y = -Flash.Y / 32.0f</code>
+                        </li>
+                    </ul>
+                </div>
+                <div>
+                    <h3>核心物理常数表</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>常量标识</th>
+                                <th>数值</th>
+                                <th>物理含义</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>TimeStep</code></td>
+                                <td><code>0.04s</code></td>
+                                <td>25 Hz 模拟步长 (1 / 25 秒)</td>
+                            </tr>
+                            <tr>
+                                <td><code>Gravity</code></td>
+                                <td><code>1.0 px/tick</code></td>
+                                <td>垂直向下重力加速度</td>
+                            </tr>
+                            <tr>
+                                <td><code>MaxTwangForce</code></td>
+                                <td><code>20.0 px/tick</code></td>
+                                <td>弹弓反向拉拽的最大出射初速度</td>
+                            </tr>
+                            <tr>
+                                <td><code>WallBounce</code></td>
+                                <td><code>-0.4</code></td>
+                                <td>撞墙水平反弹系数 (固定值)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <h3>弹弓拉拽蓄力初速度计算 (Twang Velocity)</h3>
+            <pre><code><span class="tp">Vector2</span> <span class="fn">CalculateTwangVelocity</span>(<span class="tp">Vector2</span> startPosPx, <span class="tp">Vector2</span> dragPosPx, <span class="tp">float</span> maxForce = <span class="num">20.0f</span>)
+{
+    <span class="cm">// 反向拉拽矢量，缩放系数为 -0.25</span>
+    <span class="tp">float</span> vx = (dragPosPx.x - startPosPx.x) * <span class="num">-0.25f</span>;
+    <span class="tp">float</span> vy = (dragPosPx.y - startPosPx.y) * <span class="num">-0.25f</span>;
+
+    <span class="tp">float</span> sqrLen = vx * vx + vy * vy;
+    <span class="kw">if</span> (sqrLen > maxForce * maxForce)
+    {
+        <span class="tp">float</span> len = Mathf.<span class="fn">Sqrt</span>(sqrLen);
+        vx *= maxForce / len;
+        vy *= maxForce / len;
+    }
+    <span class="kw">return new</span> <span class="tp">Vector2</span>(vx, vy);
+}</code></pre>
+        </section>
+
+        <!-- 3. 数据模型与碰撞算法 -->
+        <section class="card">
+            <h2>3. 物理状态结构体与两步碰撞算法</h2>
+            <p>
+                物理引擎的核心执行函数为纯静态、无 GC 分配的 <code>MutinyPhysics.Step(ref PhysicsBodyState body, string[,] terrainGrid, int w, int h)</code>。
+            </p>
+
+            <h3>数据结构：PhysicsBodyState</h3>
+            <pre><code><span class="kw">public struct</span> <span class="tp">PhysicsBodyState</span>
+{
+    <span class="kw">public float</span> X, Y;                   <span class="cm">// Flash 像素坐标 (浮点数)</span>
+    <span class="kw">public float</span> VelocityX, VelocityY;   <span class="cm">// 当前速度分量 (px/tick)</span>
+    <span class="kw">public float</span> Weight;                 <span class="cm">// 重力系数 (默认 1.0f)</span>
+    <span class="kw">public float</span> Bounce;                 <span class="cm">// 地面弹性系数 (默认 0.2f)</span>
+    <span class="kw">public float</span> Friction;               <span class="cm">// 地面摩擦力 (道具 0.3f，海盗角色 2.0f)</span>
+    <span class="kw">public float</span> LeftExtent, RightExtent; <span class="cm">// AABB 包围盒半径 (左/右，默认 6px)</span>
+    <span class="kw">public float</span> TopExtent, BottomExtent; <span class="cm">// AABB 包围盒半径 (上/下，默认 8px)</span>
+    <span class="kw">public bool</span> HitsTiles;               <span class="cm">// 是否与地形发生碰撞</span>
+
+    <span class="cm">// 静止阈值：水平几乎归零且垂直动能小于 0.2 px/tick</span>
+    <span class="kw">public bool</span> IsAtRest => Mathf.<span class="fn">Abs</span>(VelocityX) < <span class="num">0.001f</span> && Mathf.<span class="fn">Abs</span>(VelocityY) < <span class="num">0.2f</span>;
+}</code></pre>
+
+            <h3>两步碰撞求解 (Two-Pass Swept Collision)</h3>
+            <p>原版 Flash <code>Solid.as</code> 采用<strong>先垂直、后水平</strong>的独立轴求解策略，有效规避了角落斜向穿透与卡墙死锁问题：</p>
+            <ol>
+                <li>
+                    <strong>垂直步进与碰撞：</strong>
+                    <ul>
+                        <li>累加重力：<code>body.VelocityY += body.Weight;</code></li>
+                        <li>计算 Y 轴跨越的格网范围 <code>minGridRow ~ maxGridRow</code>。</li>
+                        <li>沿运动方向逐行探测格子是否为实体 <code>IsSolidTile</code>（排除空标记 <code>"-"</code> 与水面涟漪 <code>"ripple"</code>）。</li>
+                        <li>若发生碰撞：修正 Y 轴坐标贴合瓦片边缘（保留 0.1px 偏移），垂直反弹 <code>VelocityY *= -Bounce</code>。</li>
+                        <li><strong>地面动摩擦衰减：</strong>若是触地反弹，水平速度立即扣减滑动摩擦力：<code>absVx = Math.Max(0, absVx - Friction)</code>。</li>
+                    </ul>
+                </li>
+                <li>
+                    <strong>水平步进与碰撞：</strong>
+                    <ul>
+                        <li>计算 X 轴跨越的格网范围 <code>minGridCol ~ maxGridCol</code>。</li>
+                        <li>沿运动方向逐列扫描是否存在阻挡实体。</li>
+                        <li>若撞墙：修正 X 轴贴合墙壁边缘，固定反弹 <code>VelocityX *= -0.4f</code>。</li>
+                    </ul>
+                </li>
+                <li>
+                    <strong>静止判定：</strong>
+                    检查 <code>IsAtRest</code> 状态并填充 <code>StepResult</code>。
+                </li>
+            </ol>
+        </section>
+
+        <!-- 4. Unity 运行时宿主组件 -->
+        <section class="card">
+            <h2>4. Unity 运行时宿主组件：MutinyPhysicsBody</h2>
+            <p>
+                为了将纯数学的 <code>MutinyPhysics</code> 接入 Unity 生命周期，实现了 <code>MutinyPhysicsBody</code>（MonoBehaviour）。它采用<strong>累加器固定步长</strong>模式，完全隔离了渲染帧率对物理结算的影响。
+            </p>
+
+            <h3>时间累加器与 Substep 保护</h3>
+            <pre><code><span class="kw">private void</span> <span class="fn">Update</span>()
+{
+    <span class="kw">if</span> (!IsActive) <span class="kw">return</span>;
+
+    <span class="cm">// 累加渲染耗时</span>
+    m_TimeAccumulator += Time.deltaTime;
+    <span class="tp">int</span> maxSubSteps = <span class="num">5</span>; <span class="cm">// 限制单帧最大步数，防止极端卡顿下的死循环</span>
+    <span class="tp">int</span> steps = <span class="num">0</span>;
+
+    <span class="kw">while</span> (m_TimeAccumulator >= MutinyPhysics.TimeStep && steps < maxSubSteps)
+    {
+        m_TimeAccumulator -= MutinyPhysics.TimeStep;
+        steps++;
+
+        <span class="cm">// 执行一次离散物理求解</span>
+        <span class="tp">StepResult</span> res = MutinyPhysics.<span class="fn">Step</span>(<span class="kw">ref</span> State, m_CachedTerrain, m_GridWidth, m_GridHeight);
+
+        <span class="cm">// 检查落水动力学</span>
+        <span class="fn">EvaluateWaterState</span>();
+
+        <span class="cm">// 触发对应的状态机事件</span>
+        <span class="kw">if</span> (res.HitFloor) OnFloorLanded?.<span class="fn">Invoke</span>();
+        <span class="kw">if</span> (res.HitLeftWall || res.HitRightWall) OnWallHit?.<span class="fn">Invoke</span>();
+        <span class="kw">if</span> (res.IsAtRest) OnRest?.<span class="fn">Invoke</span>();
+        OnSimulationStep?.<span class="fn">Invoke</span>();
+    }
+
+    <span class="cm">// 将最终离散位置映射同步到 Unity Transform</span>
+    <span class="kw">if</span> (SyncTransform)
+    {
+        transform.position = MutinyPhysics.<span class="fn">PixelToUnity</span>(State.X, State.Y);
+    }
+}</code></pre>
+
+            <h3>落水动力学 (Water Mechanics)</h3>
+            <p>当实体的 <code>State.Y &gt; WaterPixelY</code> 时触发落水，原版定义了独特的入水阻尼与限速阻抗：</p>
+            <ul>
+                <li><strong>速度阻尼：</strong><code>VelocityX *= 0.8f; VelocityY *= 0.8f;</code></li>
+                <li><strong>浮力与下沉限速：</strong>若 <code>VelocityY &gt; 1.5f</code>，每 tick 扣除 4.0f 并将下沉速度截断在最低 1.5f。</li>
+                <li><strong>入水旋转翻滚：</strong>角速度与动量成正比 <code>transform.Rotate(0, 0, -(vx + vy) * 4f)</code>。</li>
+            </ul>
+        </section>
+
+        <!-- 5. 确定性弹道预测 -->
+        <section class="card">
+            <h2>5. 确定性弹道预测 (Deterministic Trajectory)</h2>
+            <p>
+                在玩家拖拽瞄准（或 AI 决策评估）时，调用 <code>MutinyPhysics.SimulateTrajectory</code>：
+            </p>
+            <div class="highlight-box">
+                通过在内存中拷贝一个临时的 <code>PhysicsBodyState simBody = initialState</code> 副本，连续调用 <code>Step</code> 模拟最多 60 步，记录经过的每一个像素坐标并转换为 Unity 坐标点。
+                由于算法中没有任何不确定的浮点随机数或外部物理引擎干扰，<strong>弹道虚线预测点就是物体最终实际飞行的绝对轨迹</strong>。
+            </div>
+        </section>
+
+        <!-- 6. 模块文件清单 -->
+        <section class="card">
+            <h2>6. 相关代码文件索引</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>文件路径</th>
+                        <th>类名 / 结构体</th>
+                        <th>定位与职责</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>Assets/Mutiny/Scripts/Simulation/MutinyPhysics.cs</code></td>
+                        <td><code>MutinyPhysics</code>, <code>PhysicsBodyState</code>, <code>StepResult</code></td>
+                        <td>纯数学无状态物理内核：坐标转换、蓄力公式、Swept AABB 碰撞检测与轨迹预计算</td>
+                    </tr>
+                    <tr>
+                        <td><code>Assets/Mutiny/Scripts/Simulation/MutinyPhysicsBody.cs</code></td>
+                        <td><code>MutinyPhysicsBody</code></td>
+                        <td>Unity 宿主组件：25 Hz 固定步长调度、落水状态评估、Transform 同步与物理事件触发</td>
+                    </tr>
+                    <tr>
+                        <td><code>Assets/Mutiny/Scripts/Presentation/MutinyTrajectoryRenderer.cs</code></td>
+                        <td><code>MutinyTrajectoryRenderer</code></td>
+                        <td>表现层预测线：调用仿真算法并在场景中生成 50 步弹道指示虚线</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <div class="nav-links">
+            <span><strong>Mutiny X 架构文档体系</strong></span>
+            <span>·</span>
+            <span>下一模块待编写：02. 武器与爆炸系统 (Weapons & Explosion)</span>
+        </div>
+    </div>
+</body>
+</html>

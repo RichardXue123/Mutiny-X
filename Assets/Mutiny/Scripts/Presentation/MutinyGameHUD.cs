@@ -7,9 +7,21 @@ using UnityEngine;
 
 namespace Mutiny.Presentation
 {
+    public enum MutinyThrowButtonVisualState
+    {
+        Disabled,
+        RedUp,
+        RedOver,
+        BlueUp,
+        BlueOver
+    }
+
     [DisallowMultipleComponent]
     public sealed class MutinyGameHUD : MonoBehaviour
     {
+        private const float OriginalUiTickSeconds = 1f / 25f;
+        private const float OriginalPanelAlphaStep = 0.25f;
+
         public MutinyTurnManager TurnManager;
         public MutinyPlayerInput PlayerInput;
         public MutinyLevelController LevelController;
@@ -22,18 +34,47 @@ namespace Mutiny.Presentation
         private GUIStyle m_PanelStyle;
         private GUIStyle m_SubheaderStyle;
         private GUIStyle m_OriginalSlotStyle;
-        private GUIStyle m_OriginalPanelTextStyle;
+        private GUIStyle m_OriginalTitleTextStyle;
+        private GUIStyle m_OriginalDescriptionTextStyle;
+        private GUIStyle m_OriginalAmmoTextStyle;
         private Texture2D m_RedWeaponPanel;
         private Texture2D m_BlueWeaponPanel;
+        private Texture2D m_WeaponSlotDisabledTexture;
+        private Texture2D m_WeaponSlotRedUpTexture;
+        private Texture2D m_WeaponSlotBlueUpTexture;
+        private Texture2D m_WeaponSlotOverTexture;
+        private Texture2D m_InfiniteAmmoTexture;
         private Texture2D m_ThrowDisabledTexture;
+        private Texture2D m_ThrowRedUpTexture;
+        private Texture2D m_ThrowRedOverTexture;
+        private Texture2D m_ThrowBlueUpTexture;
+        private Texture2D m_ThrowBlueOverTexture;
+        private Texture2D m_EndTurnRedUpTexture;
+        private Texture2D m_EndTurnRedOverTexture;
+        private Texture2D m_EndTurnBlueUpTexture;
+        private Texture2D m_EndTurnBlueOverTexture;
         private Texture2D m_RedCancelButton;
         private Texture2D m_BlueCancelButton;
+        private Texture2D m_Team1Panel;
+        private Texture2D m_Team2Panel;
+        private Texture2D m_Team1Portrait;
+        private Texture2D[] m_OpponentPortraits = Array.Empty<Texture2D>();
         private readonly Dictionary<string, Texture2D> m_WeaponIcons = new Dictionary<string, Texture2D>();
         private bool m_StylesInitialized = false;
+        private float m_ActionPanelAlpha = 0f;
+        private float m_ActionPanelTickAccumulator = 0f;
+        private bool m_ActionPanelContentsActive = false;
+        private int m_Team1HealthFrame = 1;
+        private int m_Team2HealthFrame = 1;
+        private TextAsset m_CachedMapXml;
+        private MutinyLevelData m_CachedMapLevel;
+
+        public float ActionPanelAlpha => Mathf.Clamp01(m_ActionPanelAlpha);
+        public bool ActionPanelContentsActive => m_ActionPanelContentsActive;
 
         private static readonly string[] OriginalWeaponOrder =
         {
-            "cherryBomb", "dynamite", "boulder", "piecesOfEight", "rumBottle",
+            "cherryBomb", "boulder", "dynamite", "piecesOfEight", "rumBottle",
             "banana", "parachuteBomb", "woodenCrate", "gunpowderBarrel", "seagull",
             "mine", "cannon", "anchor", "voodooDoll", "tidalWave"
         };
@@ -41,6 +82,87 @@ namespace Mutiny.Presentation
         private void Start()
         {
             EnsureReferences();
+        }
+
+        private void Update()
+        {
+            EnsureReferences();
+            m_ActionPanelTickAccumulator += Time.unscaledDeltaTime;
+            while (m_ActionPanelTickAccumulator >= OriginalUiTickSeconds)
+            {
+                m_ActionPanelTickAccumulator -= OriginalUiTickSeconds;
+                AdvanceActionPanelAnimationTick();
+                AdvanceTeamHealthAnimationTick();
+            }
+        }
+
+        private void AdvanceTeamHealthAnimationTick()
+        {
+            m_Team1HealthFrame = SlideFrame(
+                m_Team1HealthFrame, ResolveTeamHealthTargetFrame(TurnManager != null ? TurnManager.Team1 : null));
+            m_Team2HealthFrame = SlideFrame(
+                m_Team2HealthFrame, ResolveTeamHealthTargetFrame(TurnManager != null ? TurnManager.Team2 : null));
+        }
+
+        public static int ResolveTeamHealthTargetFrame(MutinyTeam team)
+        {
+            if (team == null || team.Characters == null || team.Characters.Count == 0)
+                return 1;
+
+            float health = 0f;
+            float maxHealth = 0f;
+            for (int i = 0; i < team.Characters.Count; i++)
+            {
+                MutinyCharacter character = team.Characters[i];
+                if (character == null)
+                    continue;
+                health += Mathf.Max(0f, character.Health);
+                maxHealth += Mathf.Max(0f, character.MaxHealth);
+            }
+
+            if (maxHealth <= 0f)
+                return 1;
+            return Mathf.Clamp(1 + Mathf.FloorToInt(96f * health / maxHealth), 1, 97);
+        }
+
+        public static int SlideFrame(int currentFrame, int targetFrame)
+        {
+            currentFrame = Mathf.Clamp(currentFrame, 1, 97);
+            targetFrame = Mathf.Clamp(targetFrame, 1, 97);
+            return currentFrame < targetFrame ? currentFrame + 1 :
+                currentFrame > targetFrame ? currentFrame - 1 : currentFrame;
+        }
+
+        private void AdvanceActionPanelAnimationTick()
+        {
+            bool shouldOpen = PlayerInput != null && PlayerInput.IsActionMenuOpen &&
+                              TurnManager != null && TurnManager.CurrentTeam != null &&
+                              !TurnManager.CurrentTeam.IsAiControlled &&
+                              TurnManager.CurrentTeam.SelectedCharacter != null &&
+                              TurnManager.CurrentTeam.SelectedCharacter.IsAlive;
+
+            AdvanceActionPanelState(shouldOpen, ref m_ActionPanelAlpha, ref m_ActionPanelContentsActive);
+        }
+
+        internal static void AdvanceActionPanelState(
+            bool shouldOpen, ref float panelAlpha, ref bool contentsActive)
+        {
+            if (shouldOpen)
+            {
+                panelAlpha += OriginalPanelAlphaStep;
+                if (panelAlpha >= 1f)
+                {
+                    panelAlpha = 1f;
+                    contentsActive = true;
+                }
+            }
+            else
+            {
+                panelAlpha -= OriginalPanelAlphaStep;
+                if (panelAlpha <= 0f)
+                    panelAlpha = -OriginalPanelAlphaStep;
+                contentsActive = false;
+            }
         }
 
         public void EnsureReferences()
@@ -107,28 +229,70 @@ namespace Mutiny.Presentation
             m_OriginalSlotStyle.normal.textColor = Color.white;
             m_OriginalSlotStyle.hover.textColor = Color.yellow;
 
-            m_OriginalPanelTextStyle = new GUIStyle(GUI.skin.label)
+            m_OriginalTitleTextStyle = new GUIStyle(GUI.skin.label)
             {
                 alignment = TextAnchor.UpperLeft,
                 fontStyle = FontStyle.Bold,
-                wordWrap = true,
-                fontSize = 10
+                wordWrap = false,
+                clipping = TextClipping.Clip,
+                fontSize = 10,
+                padding = new RectOffset(0, 0, 0, 0)
             };
-            m_OriginalPanelTextStyle.normal.textColor = Color.white;
+            m_OriginalTitleTextStyle.normal.textColor = Color.white;
+
+            m_OriginalDescriptionTextStyle = new GUIStyle(m_OriginalTitleTextStyle)
+            {
+                fontStyle = FontStyle.Normal,
+                wordWrap = true,
+                fontSize = 9
+            };
+
+            m_OriginalAmmoTextStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.UpperCenter,
+                fontStyle = FontStyle.Bold,
+                wordWrap = false,
+                clipping = TextClipping.Clip,
+                fontSize = 8,
+                padding = new RectOffset(0, 0, 0, 0)
+            };
+            m_OriginalAmmoTextStyle.normal.textColor = Color.white;
 
             m_RedWeaponPanel = Resources.Load<Texture2D>("UI/weapon_select_red");
             m_BlueWeaponPanel = Resources.Load<Texture2D>("UI/weapon_select_blue");
             if (m_RedWeaponPanel != null) m_RedWeaponPanel.filterMode = FilterMode.Point;
             if (m_BlueWeaponPanel != null) m_BlueWeaponPanel.filterMode = FilterMode.Point;
 
+            m_WeaponSlotDisabledTexture = LoadPointTexture("UI/weapon_slot_disabled");
+            m_WeaponSlotRedUpTexture = LoadPointTexture("UI/weapon_slot_red_up");
+            m_WeaponSlotBlueUpTexture = LoadPointTexture("UI/weapon_slot_blue_up");
+            m_WeaponSlotOverTexture = LoadPointTexture("UI/weapon_slot_over");
+            m_InfiniteAmmoTexture = LoadPointTexture("UI/weapon_ammo_infinite");
+
             m_ThrowDisabledTexture = Resources.Load<Texture2D>("UI/button_throw_disabled");
             if (m_ThrowDisabledTexture != null) m_ThrowDisabledTexture.filterMode = FilterMode.Point;
+
+            m_ThrowRedUpTexture = LoadPointTexture("UI/button_throw_red_up");
+            m_ThrowRedOverTexture = LoadPointTexture("UI/button_throw_red_over");
+            m_ThrowBlueUpTexture = LoadPointTexture("UI/button_throw_blue_up");
+            m_ThrowBlueOverTexture = LoadPointTexture("UI/button_throw_blue_over");
+
+            m_EndTurnRedUpTexture = LoadPointTexture("UI/button_end_turn_red_up");
+            m_EndTurnRedOverTexture = LoadPointTexture("UI/button_end_turn_red_over");
+            m_EndTurnBlueUpTexture = LoadPointTexture("UI/button_end_turn_blue_up");
+            m_EndTurnBlueOverTexture = LoadPointTexture("UI/button_end_turn_blue_over");
 
             m_RedCancelButton = Resources.Load<Texture2D>("UI/button_cancel_red");
             if (m_RedCancelButton != null) m_RedCancelButton.filterMode = FilterMode.Point;
 
             m_BlueCancelButton = Resources.Load<Texture2D>("UI/button_cancel_blue");
             if (m_BlueCancelButton != null) m_BlueCancelButton.filterMode = FilterMode.Point;
+
+            m_Team1Panel = LoadPointTexture("UI/BattleHUD/team1_panel");
+            m_Team2Panel = LoadPointTexture("UI/BattleHUD/team2_panel");
+            m_Team1Portrait = LoadPointTexture("UI/BattleHUD/team1_portrait");
+            m_OpponentPortraits = Resources.LoadAll<Texture2D>("UI/BattleHUD/Opponents");
+            Array.Sort(m_OpponentPortraits, (a, b) => ParseNumericTextureName(a).CompareTo(ParseNumericTextureName(b)));
             for (int i = 0; i < OriginalWeaponOrder.Length; i++)
             {
                 string weaponType = OriginalWeaponOrder[i];
@@ -140,12 +304,25 @@ namespace Mutiny.Presentation
             m_StylesInitialized = true;
         }
 
+        private static Texture2D LoadPointTexture(string path)
+        {
+            Texture2D texture = Resources.Load<Texture2D>(path);
+            if (texture != null)
+                texture.filterMode = FilterMode.Point;
+            return texture;
+        }
+
+        private static int ParseNumericTextureName(Texture2D texture)
+        {
+            return texture != null && int.TryParse(texture.name, out int value) ? value : int.MaxValue;
+        }
+
         private void OnGUI()
         {
             EnsureReferences();
             InitStyles();
 
-            DrawTopBar();
+            DrawOriginalBattleHud();
             DrawBottomBar();
 
             if (TurnManager != null && TurnManager.CurrentPhase == TurnPhase.GameOver)
@@ -157,6 +334,173 @@ namespace Mutiny.Presentation
             {
                 DrawLevelSelectModal();
             }
+        }
+
+        private void DrawOriginalBattleHud()
+        {
+            if (TurnManager == null || TurnManager.Team1 == null || TurnManager.Team2 == null)
+                return;
+
+            const float canvasWidth = 550f;
+            const float canvasHeight = 400f;
+            float scale = Mathf.Min(Screen.width / canvasWidth, Screen.height / canvasHeight);
+            float left = (Screen.width - canvasWidth * scale) * 0.5f;
+            float top = (Screen.height - canvasHeight * scale) * 0.5f;
+            Matrix4x4 previousMatrix = GUI.matrix;
+            Color previousColor = GUI.color;
+            GUI.matrix = Matrix4x4.TRS(
+                new Vector3(left, top, 0f), Quaternion.identity, new Vector3(scale, scale, 1f));
+
+            DrawOriginalMap();
+            DrawOriginalTeamHealth();
+
+            GUI.color = previousColor;
+            GUI.matrix = previousMatrix;
+        }
+
+        private void DrawOriginalTeamHealth()
+        {
+            DrawSolidRect(new Rect(38f, 381f, 96f, 8f), new Color32(49, 49, 49, 255));
+            float redWidth = Mathf.Clamp(m_Team1HealthFrame - 1, 0, 96);
+            if (redWidth > 0f)
+                DrawSolidRect(new Rect(38f, 381f, redWidth, 8f), new Color32(255, 56, 41, 255));
+            if (m_Team1Panel != null)
+                GUI.DrawTexture(new Rect(6f, 363f, 132f, 34f), m_Team1Panel, ScaleMode.StretchToFill, true);
+            if (m_Team1Portrait != null)
+                GUI.DrawTexture(new Rect(13f, 370f, 22f, 21f), m_Team1Portrait, ScaleMode.StretchToFill, true);
+
+            DrawSolidRect(new Rect(416f, 381f, 96f, 8f), new Color32(49, 49, 49, 255));
+            float blueWidth = Mathf.Clamp(m_Team2HealthFrame - 1, 0, 96);
+            if (blueWidth > 0f)
+                DrawSolidRect(new Rect(512f - blueWidth, 381f, blueWidth, 8f), new Color32(51, 95, 255, 255));
+            if (m_Team2Panel != null)
+                GUI.DrawTexture(new Rect(412f, 363f, 132f, 34f), m_Team2Panel, ScaleMode.StretchToFill, true);
+
+            int level = LevelController != null ? LevelController.CurrentLevelIndex : 1;
+            if (m_OpponentPortraits.Length > 0)
+            {
+                int portraitIndex = Mathf.Clamp(level - 1, 0, m_OpponentPortraits.Length - 1);
+                if (m_OpponentPortraits[portraitIndex] != null)
+                {
+                    GUI.DrawTexture(new Rect(506f, 337f, 40f, 58f),
+                        m_OpponentPortraits[portraitIndex], ScaleMode.StretchToFill, true);
+                }
+            }
+        }
+
+        private void DrawOriginalMap()
+        {
+            MutinyLevelData level = GetMapLevelData();
+            if (level == null || level.Width <= 0 || level.Height <= 0)
+                return;
+
+            const float holderX = 20f;
+            const float holderY = 20f;
+            const float dotSize = 3f;
+            for (int x = -2; x < level.Width + 2; x++)
+            {
+                for (int y = -2; y < level.Height + 2; y++)
+                {
+                    bool occupied = x >= 0 && y >= 0 && x < level.Width && y < level.Height &&
+                                    level.Terrain != null && level.Terrain[y, x] != null;
+                    byte alpha = occupied ? (byte)128 : (byte)51;
+                    DrawSolidRect(new Rect(holderX + x * dotSize, holderY + y * dotSize, dotSize, dotSize),
+                        new Color32(0, 0, 0, alpha));
+                }
+            }
+
+            MutinyTreasureChest[] chests = FindObjectsByType<MutinyTreasureChest>();
+            for (int i = 0; i < chests.Length; i++)
+            {
+                MutinyTreasureChest chest = chests[i];
+                if (chest == null || chest.IsFinished || chest.PixelY <= -64f)
+                    continue;
+                int x = ProjectMapCoordinate(chest.PixelX, 0);
+                int y = ProjectMapCoordinate(chest.PixelY, 0);
+                if (y > -6)
+                    DrawSolidRect(new Rect(holderX + x - 1f, holderY + y - 1f, dotSize, dotSize),
+                        new Color32(255, 255, 0, 128));
+            }
+
+            DrawMapTeam(TurnManager.Team1, new Color32(255, 56, 41, 255), holderX, holderY, level, dotSize);
+            DrawMapTeam(TurnManager.Team2, new Color32(51, 95, 255, 255), holderX, holderY, level, dotSize);
+
+            float borderX = holderX - 7f;
+            float borderY = holderY - 7f;
+            float borderWidth = level.Width * dotSize + 14f;
+            float borderHeight = level.Height * dotSize + 14f;
+            DrawOutline(new Rect(borderX + 1f, borderY + 1f, borderWidth, borderHeight),
+                new Color32(0, 0, 0, 52));
+            DrawOutline(new Rect(borderX, borderY, borderWidth, borderHeight), Color.white);
+        }
+
+        private static void DrawMapTeam(
+            MutinyTeam team, Color color, float holderX, float holderY, MutinyLevelData level, float dotSize)
+        {
+            if (team == null || team.Characters == null)
+                return;
+
+            for (int i = 0; i < team.Characters.Count; i++)
+            {
+                MutinyCharacter character = team.Characters[i];
+                if (character == null || !character.IsAlive || character.PhysicsBody == null)
+                    continue;
+                PhysicsBodyState state = character.PhysicsBody.State;
+                int x = ProjectMapCoordinate(state.X, 0);
+                int y = ProjectMapCoordinate(state.Y, 0);
+                if (x <= -6 || x >= (level.Width + 2) * dotSize ||
+                    y <= -6 || y >= (level.Height + 2) * dotSize)
+                    continue;
+                DrawSolidRect(new Rect(holderX + x - 2f, holderY + y - 2f, dotSize, dotSize), color);
+            }
+        }
+
+        private MutinyLevelData GetMapLevelData()
+        {
+            TextAsset xml = LevelController != null ? LevelController.LevelXml : null;
+            if (xml != null && (m_CachedMapLevel == null || m_CachedMapXml != xml))
+            {
+                try
+                {
+                    m_CachedMapLevel = MutinyLevelXmlParser.Parse(xml.text, xml.name);
+                    m_CachedMapXml = xml;
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogException(exception, this);
+                    m_CachedMapLevel = null;
+                    m_CachedMapXml = xml;
+                }
+            }
+
+            if (m_CachedMapLevel != null)
+                return m_CachedMapLevel;
+
+            MutinyLevelRoot root = LevelController != null ? LevelController.CurrentLevel : null;
+            if (root == null)
+                root = FindAnyObjectByType<MutinyLevelRoot>();
+            return root == null ? null : new MutinyLevelData { Width = root.Width, Height = root.Height };
+        }
+
+        public static int ProjectMapCoordinate(float pixelCoordinate, int pixelOffset)
+        {
+            return ((int)(pixelCoordinate * 3f) >> 5) + pixelOffset;
+        }
+
+        private static void DrawOutline(Rect rect, Color color)
+        {
+            DrawSolidRect(new Rect(rect.x, rect.y, rect.width, 1f), color);
+            DrawSolidRect(new Rect(rect.x, rect.yMax - 1f, rect.width, 1f), color);
+            DrawSolidRect(new Rect(rect.x, rect.y, 1f, rect.height), color);
+            DrawSolidRect(new Rect(rect.xMax - 1f, rect.y, 1f, rect.height), color);
+        }
+
+        private static void DrawSolidRect(Rect rect, Color color)
+        {
+            Color previous = GUI.color;
+            GUI.color = color;
+            GUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill);
+            GUI.color = previous;
         }
 
         private void DrawTopBar()
@@ -244,7 +588,7 @@ namespace Mutiny.Presentation
             if (TurnManager == null || TurnManager.CurrentTeam == null || TurnManager.CurrentTeam.IsAiControlled)
                 return;
 
-            if (PlayerInput == null || !PlayerInput.IsActionMenuOpen)
+            if (PlayerInput == null || m_ActionPanelAlpha <= 0f)
                 return;
 
             MutinyCharacter selectedChar = TurnManager.CurrentTeam.SelectedCharacter;
@@ -253,12 +597,20 @@ namespace Mutiny.Presentation
 
             float scale = Mathf.Min(Screen.width / 550f, Screen.height / 400f);
             m_OriginalSlotStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(9f * scale));
-            m_OriginalPanelTextStyle.fontSize = Mathf.Max(10, Mathf.RoundToInt(10f * scale));
-            float panelWidth = 270f * scale;
-            float panelHeight = 246f * scale;
+            m_OriginalTitleTextStyle.fontSize = Mathf.Max(10, Mathf.RoundToInt(10f * scale));
+            m_OriginalDescriptionTextStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(9f * scale));
+            m_OriginalAmmoTextStyle.fontSize = Mathf.Max(8, Mathf.RoundToInt(8f * scale));
+            float panelWidth = 271f * scale;
+            float panelHeight = 247f * scale;
             float left = (Screen.width - panelWidth) * 0.5f;
             float top = 23f * scale;
             Rect panelRect = new Rect(left, top, panelWidth, panelHeight);
+            Color previousColor = GUI.color;
+            bool previousEnabled = GUI.enabled;
+            GUI.color = new Color(previousColor.r, previousColor.g, previousColor.b,
+                previousColor.a * Mathf.Clamp01(m_ActionPanelAlpha));
+            bool contentsActive = m_ActionPanelContentsActive && PlayerInput.IsActionMenuOpen;
+            string hoveredAction = null;
 
             Texture2D panelTexture = TurnManager.CurrentTeam.TeamNumber == 2
                 ? m_BlueWeaponPanel
@@ -268,21 +620,27 @@ namespace Mutiny.Presentation
             else
                 GUI.Box(panelRect, GUIContent.none, m_PanelStyle);
 
-            Rect throwRect = ScaledRect(left, top, scale, 10f, 24f, 86f, 57f);
+            Rect throwRect = ScaledRect(left, top, scale, 11f, 29f, 86f, 57f);
+            bool throwHovered = throwRect.Contains(Event.current.mousePosition);
+            MutinyThrowButtonVisualState throwState = ResolveThrowButtonVisualState(
+                TurnManager.CurrentTeam.TeamNumber, selectedChar.CanThrow, throwHovered);
+            Texture2D throwTexture = GetThrowButtonTexture(throwState);
+            if (throwTexture != null)
+                GUI.DrawTexture(throwRect, throwTexture, ScaleMode.StretchToFill, true);
+
             if (selectedChar.CanThrow)
             {
+                if (throwHovered)
+                    hoveredAction = "throw character";
+                GUI.enabled = previousEnabled && contentsActive;
                 if (GUI.Button(throwRect, new GUIContent(string.Empty, "throw character"), m_OriginalSlotStyle))
                     PlayerInput.SelectCharacterThrow();
             }
             else
             {
-                if (m_ThrowDisabledTexture != null)
+                if (throwTexture == null)
                 {
-                    GUI.DrawTexture(throwRect, m_ThrowDisabledTexture, ScaleMode.StretchToFill, true);
-                }
-                else
-                {
-                    var origColor = GUI.color;
+                    Color origColor = GUI.color;
                     GUI.color = new Color(0.25f, 0.25f, 0.25f, 0.7f);
                     GUI.DrawTexture(throwRect, Texture2D.whiteTexture, ScaleMode.StretchToFill);
                     GUI.color = origColor;
@@ -290,10 +648,18 @@ namespace Mutiny.Presentation
 
                 GUI.enabled = false;
                 GUI.Button(throwRect, new GUIContent(string.Empty, "throw character used"), m_OriginalSlotStyle);
-                GUI.enabled = true;
             }
 
-            if (GUI.Button(ScaledRect(left, top, scale, 10f, 89f, 86f, 57f),
+            Rect endTurnRect = ScaledRect(left, top, scale, 11f, 93.95f, 86f, 57f);
+            bool endTurnHovered = endTurnRect.Contains(Event.current.mousePosition);
+            if (endTurnHovered)
+                hoveredAction = "end turn";
+            Texture2D endTurnTexture = GetEndTurnButtonTexture(
+                TurnManager.CurrentTeam.TeamNumber, endTurnHovered);
+            if (endTurnTexture != null)
+                GUI.DrawTexture(endTurnRect, endTurnTexture, ScaleMode.StretchToFill, true);
+            GUI.enabled = previousEnabled && contentsActive;
+            if (GUI.Button(endTurnRect,
                     new GUIContent(string.Empty, "end turn"), m_OriginalSlotStyle))
                 PlayerInput.EndTurn();
 
@@ -302,48 +668,103 @@ namespace Mutiny.Presentation
                 Texture2D cancelTex = TurnManager.CurrentTeam.TeamNumber == 2
                     ? m_BlueCancelButton
                     : m_RedCancelButton;
-                Rect cancelRect = ScaledRect(left, top, scale, 250f, 0f, 20f, 20f);
+                Rect cancelRect = ScaledRect(left, top, scale, 256f, 0f, 20f, 20f);
                 if (cancelTex != null)
                 {
                     GUI.DrawTexture(cancelRect, cancelTex, ScaleMode.StretchToFill, true);
                 }
 
+                if (cancelRect.Contains(Event.current.mousePosition))
+                    hoveredAction = "cancel character";
+                GUI.enabled = previousEnabled && contentsActive;
                 if (GUI.Button(cancelRect, new GUIContent(string.Empty, "cancel character"), m_OriginalSlotStyle))
                     PlayerInput.ReturnToCharacterSelection();
             }
 
             for (int i = 0; i < OriginalWeaponOrder.Length; i++)
             {
+                GUI.enabled = previousEnabled;
                 string weaponType = OriginalWeaponOrder[i];
                 int column = i % 5;
                 int row = i / 5;
-                Rect slot = ScaledRect(left, top, scale, 111f + column * 31f, 25f + row * 42f, 24f, 35f);
+                Rect slot = ScaledRect(left, top, scale, 112f + column * 31f, 29f + row * 43f, 24f, 36f);
                 bool available = selectedChar.CanShoot && selectedChar.HasWeapon(weaponType);
                 int ammo = selectedChar.GetAmmunition(weaponType);
-                string ammoText = ammo < 0 ? "∞" : ammo.ToString();
-                string shortName = GetWeaponAbbreviation(weaponType);
                 m_WeaponIcons.TryGetValue(weaponType, out Texture2D icon);
+                bool slotHovered = available && slot.Contains(Event.current.mousePosition);
+
+                Texture2D slotTexture = available
+                    ? (TurnManager.CurrentTeam.TeamNumber == 2
+                        ? m_WeaponSlotBlueUpTexture
+                        : m_WeaponSlotRedUpTexture)
+                    : m_WeaponSlotDisabledTexture;
+                if (slotTexture != null)
+                    GUI.DrawTexture(slot, slotTexture, ScaleMode.StretchToFill, true);
 
                 if (icon != null && available)
                 {
-                    Rect iconRect = new Rect(
-                        slot.x + 3f * scale,
-                        slot.y + 3f * scale,
-                        slot.width - 6f * scale,
-                        slot.height - 9f * scale);
-                    GUI.DrawTexture(iconRect, icon, ScaleMode.ScaleToFit, true);
+                    Rect iconRect = ScaledRect(slot.x, slot.y, scale, 3f, 3f, 18f, 17f);
+                    GUI.DrawTexture(iconRect, icon, ScaleMode.StretchToFill, true);
                 }
 
-                GUI.enabled = available;
-                string slotText = icon != null ? $"\n{ammoText}" : $"{shortName}\n{ammoText}";
-                if (GUI.Button(slot, new GUIContent(slotText, weaponType), m_OriginalSlotStyle))
+                if (available && ammo < 0 && m_InfiniteAmmoTexture != null)
+                {
+                    Rect infinityRect = ScaledRect(slot.x, slot.y, scale, 3f, 27f, 18f, 9f);
+                    GUI.DrawTexture(infinityRect, m_InfiniteAmmoTexture, ScaleMode.StretchToFill, true);
+                }
+                else if (available)
+                {
+                    Rect countRect = ScaledRect(slot.x, slot.y, scale, 0f, 21f, 24f, 13f);
+                    GUI.Label(countRect, ammo.ToString("D2"), m_OriginalAmmoTextStyle);
+                }
+
+                if (slotHovered && m_WeaponSlotOverTexture != null)
+                    GUI.DrawTexture(slot, m_WeaponSlotOverTexture, ScaleMode.StretchToFill, true);
+
+                if (slotHovered)
+                    hoveredAction = weaponType;
+                GUI.enabled = previousEnabled && contentsActive && available;
+                if (GUI.Button(slot, new GUIContent(string.Empty, weaponType), m_OriginalSlotStyle))
                     PlayerInput.SelectWeapon(weaponType);
-                GUI.enabled = true;
             }
 
-            string description = GetOriginalActionDescription(GUI.tooltip, selectedChar);
-            Rect descriptionRect = ScaledRect(left, top, scale, 13f, 164f, 244f, 69f);
-            GUI.Label(descriptionRect, description, m_OriginalPanelTextStyle);
+            GetOriginalActionCopy(hoveredAction, out string title, out string description);
+            Rect titleRect = ScaledRect(left, top, scale, 10.35f, 9.35f, 94f, 16f);
+            Rect descriptionRect = ScaledRect(left, top, scale, 20f, 170.95f, 238f, 67f);
+            GUI.enabled = previousEnabled;
+            GUI.Label(titleRect, title, m_OriginalTitleTextStyle);
+            GUI.Label(descriptionRect, description, m_OriginalDescriptionTextStyle);
+            GUI.color = previousColor;
+            GUI.enabled = previousEnabled;
+        }
+
+        public static MutinyThrowButtonVisualState ResolveThrowButtonVisualState(
+            int teamNumber, bool canThrow, bool hovered)
+        {
+            if (!canThrow)
+                return MutinyThrowButtonVisualState.Disabled;
+            if (teamNumber == 2)
+                return hovered ? MutinyThrowButtonVisualState.BlueOver : MutinyThrowButtonVisualState.BlueUp;
+            return hovered ? MutinyThrowButtonVisualState.RedOver : MutinyThrowButtonVisualState.RedUp;
+        }
+
+        private Texture2D GetThrowButtonTexture(MutinyThrowButtonVisualState state)
+        {
+            switch (state)
+            {
+                case MutinyThrowButtonVisualState.RedUp: return m_ThrowRedUpTexture;
+                case MutinyThrowButtonVisualState.RedOver: return m_ThrowRedOverTexture;
+                case MutinyThrowButtonVisualState.BlueUp: return m_ThrowBlueUpTexture;
+                case MutinyThrowButtonVisualState.BlueOver: return m_ThrowBlueOverTexture;
+                default: return m_ThrowDisabledTexture;
+            }
+        }
+
+        private Texture2D GetEndTurnButtonTexture(int teamNumber, bool hovered)
+        {
+            if (teamNumber == 2)
+                return hovered ? m_EndTurnBlueOverTexture : m_EndTurnBlueUpTexture;
+            return hovered ? m_EndTurnRedOverTexture : m_EndTurnRedUpTexture;
         }
 
         private static Rect ScaledRect(float left, float top, float scale, float x, float y, float width, float height)
@@ -351,30 +772,85 @@ namespace Mutiny.Presentation
             return new Rect(left + x * scale, top + y * scale, width * scale, height * scale);
         }
 
-        private static string GetWeaponAbbreviation(string weaponType)
+        public static void GetOriginalActionCopy(string action, out string title, out string description)
         {
-            if (weaponType == "piecesOfEight") return "8";
-            if (weaponType == "gunpowderBarrel") return "GB";
-            if (weaponType == "parachuteBomb") return "PB";
-            if (weaponType == "woodenCrate") return "CR";
-            if (weaponType == "voodooDoll") return "VD";
-            if (weaponType == "tidalWave") return "TW";
-            return weaponType.Substring(0, Mathf.Min(2, weaponType.Length)).ToUpperInvariant();
-        }
-
-        private static string GetOriginalActionDescription(string action, MutinyCharacter character)
-        {
-            if (string.IsNullOrEmpty(action))
-                return $"{character.CharacterType}\nHP {character.Health:F0}/{character.MaxHealth:F0}";
-            if (action == "throw character")
-                return "THROW CHARACTER\nClick your character and drag with the mouse to aim and set the power.\nYou get to use this once per turn before you use a weapon.";
-            if (action == "throw character used")
-                return "THROW CHARACTER (USED)\nJump already used this turn. Select a weapon to attack, or click End Go.";
-            if (action == "end turn")
-                return "END GO\nClick here if you want to finish your turn without using a weapon.";
-            if (action == "cancel character")
-                return "CLOSE\nClick here to cancel and select another player.";
-            return $"{action.ToUpperInvariant()}\nSelect this weapon, then use the mouse on the stage.";
+            title = "weapons";
+            description = "Click one of the options above\nto select it.";
+            switch (action)
+            {
+                case "throw character":
+                    title = "throw character";
+                    description = "Click your character and drag\nwith the mouse to aim and set\nthe power.\nyou get to use this once per\nturn before you use a weapon.";
+                    break;
+                case "end turn":
+                    title = "end go";
+                    description = "click here if you want to finish\nyour turn without using a\nweapon.";
+                    break;
+                case "cancel character":
+                    title = "close";
+                    description = "click here to cancel and select\nanother player.";
+                    break;
+                case "cherryBomb":
+                    title = "cherry bomb";
+                    description = "Basic weak weapon which\nexplodes on impact.\nClick the cherry bomb and drag\nwith your mouse to aim and set\nthe power.";
+                    break;
+                case "dynamite":
+                    title = "dynamite";
+                    description = "This weapon explodes when it\ncomes to rest.\nClick the dynamite and drag\nwith your mouse to aim and set\nthe power.";
+                    break;
+                case "boulder":
+                    title = "boulder";
+                    description = "Large boulder which can bash\nother players out of the way.\nClick the boulder and drag\nwith your mouse to aim and set\nthe power.";
+                    break;
+                case "piecesOfEight":
+                    title = "pieces of eight";
+                    description = "Eight coins which inflict a small\namount of damage. You get\neight turns with this weapon.\nClick each one and drag to aim\nand set the power.";
+                    break;
+                case "rumBottle":
+                    title = "rum bottle";
+                    description = "This weapon explodes on impact\nand sets the nearby area on fire.\nClick it and drag\nwith your mouse to aim and set\nthe power.";
+                    break;
+                case "banana":
+                    title = "banana";
+                    description = "This weapon is very bouncy.\nClick and drag with the mouse\nto aim and set the power.\nThen click your mouse again to\nmake it explode.";
+                    break;
+                case "parachuteBomb":
+                    title = "parachute bomb";
+                    description = "Click and drag with the mouse\nto aim and set the power.\nAs it drifts down use\nyour cursor as a fan to push it\nleft or right.";
+                    break;
+                case "woodenCrate":
+                    title = "crates";
+                    description = "Click anywhere on the stage to\nplace down three crates.\nuse these to form a wall to\nprotect your characters.";
+                    break;
+                case "gunpowderBarrel":
+                    title = "gunpowder barrels";
+                    description = "Click anywhere on the stage to\nplace down two barrels.\nthese will explode when hit by\na weapon.";
+                    break;
+                case "seagull":
+                    title = "seagull";
+                    description = "Click on the screen to choose a\npath for the seagull to fly.\nThen click repeatedly to poop\non the enemy!";
+                    break;
+                case "mine":
+                    title = "mine";
+                    description = "Click the mine and drag\nwith the mouse to aim and\nset the power.\nIt will detonate when\nanother player moves nearby.";
+                    break;
+                case "cannon":
+                    title = "cannon";
+                    description = "Drag the cannon into position\nwithin the circle.\nclick and drag the pin at the\nback to turn the cannon.\nrelease it to fire!";
+                    break;
+                case "anchor":
+                    title = "anchor";
+                    description = "Click anywhere in the stage to\ndrop a huge anchor down\nonto enemies!";
+                    break;
+                case "voodooDoll":
+                    title = "voodoo doll";
+                    description = "choose an enemy player by\nclicking on them. then click\nand drag to throw the doll and\nwatch the enemy helplessly\nfly off in the same direction!";
+                    break;
+                case "tidalWave":
+                    title = "tidal wave";
+                    description = "click to send a huge tidal wave\nacross the bottom of the stage.\nIt will affect all players it\nhits.";
+                    break;
+            }
         }
 
         private void DrawGameOverModal()

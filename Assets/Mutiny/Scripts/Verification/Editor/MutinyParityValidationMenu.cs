@@ -50,6 +50,27 @@ namespace Mutiny.Verification.Editor
             else
                 Debug.LogError("[Mutiny Parity] Missing runtime resources:\n" + string.Join("\n", failures));
         }
+
+        [MenuItem("Mutiny/Parity/Validate Turn Action UI")]
+        public static void ValidateTurnActionUi()
+        {
+            MutinyLevel1VerificationResult result = MutinyTurnActionUiVerificationTest.Run();
+            if (result.Passed)
+                Debug.Log($"[Mutiny Parity] Turn action UI verification passed: {result.PassedAssertions}/{result.TotalAssertions} assertions.");
+            else
+                Debug.LogError("[Mutiny Parity] Turn action UI verification failed:\n" +
+                               string.Join("\n", result.Failures));
+        }
+
+        [MenuItem("Mutiny/Parity/Validate Battle HUD")]
+        public static void ValidateBattleHud()
+        {
+            MutinyLevel1VerificationResult result = MutinyTurnActionUiVerificationTest.RunBattleHud();
+            if (result.Passed)
+                Debug.Log($"[Mutiny Parity] Battle HUD verification passed: {result.PassedAssertions}/{result.TotalAssertions} assertions.");
+            else
+                Debug.LogError("[Mutiny Parity] Battle HUD verification failed:\n" +
+                               string.Join("\n", result.Failures));
+        }
     }
 }
-

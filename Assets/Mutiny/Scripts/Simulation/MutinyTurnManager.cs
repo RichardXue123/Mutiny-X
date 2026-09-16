@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Mutiny.Diagnostics;
 using Mutiny.Levels;
 using UnityEngine;
 
@@ -25,7 +26,7 @@ namespace Mutiny.Simulation
     [DisallowMultipleComponent]
     public sealed class MutinyTurnManager : MonoBehaviour
     {
-        public const int InactivitySettlingThreshold = 10; // Exact Nitrome standard: 10 frames = 0.4s
+        public const int InactivitySettlingThreshold = 10;
 
         [Header("Teams")]
         public MutinyTeam Team1;
@@ -45,6 +46,8 @@ namespace Mutiny.Simulation
         private float m_TickAccumulator = 0f;
         private List<MutinyCharacter> m_AllCharacters = new List<MutinyCharacter>();
         private bool m_ActionCommittedThisTurn;
+        private string m_LastRestBlocker;
+        private int m_RestBlockerTicks;
 
         public bool ActionCommittedThisTurn => m_ActionCommittedThisTurn;
 
@@ -105,6 +108,8 @@ namespace Mutiny.Simulation
             }
 
             Debug.Log($"[MutinyTurnManager] Started with Team 1={Team1.AliveCount}, Team 2={Team2.AliveCount} alive.", this);
+            MutinyDebugLog.Info("Turn",
+                $"game started active={TeamLabel(CurrentTeam)} phase={CurrentPhase} team1Alive={Team1.AliveCount} team2Alive={Team2.AliveCount}", this);
 
             Mutiny.Presentation.MutinyAudioManager.Instance?.PlayMusic("game_music");
         }
@@ -121,6 +126,8 @@ namespace Mutiny.Simulation
             m_ActionCommittedThisTurn = true;
             InactivityTicks = 0;
             CurrentPhase = TurnPhase.ActionExecuting;
+            MutinyDebugLog.Info("Turn",
+                $"action committed team={TeamLabel(CurrentTeam)} selected={CharacterLabel(CurrentTeam?.SelectedCharacter)} phase={CurrentPhase}", this);
         }
 
         public void NotifyAmbientActivity()
@@ -131,8 +138,13 @@ namespace Mutiny.Simulation
         public void PassTurn()
         {
             if (CurrentPhase == TurnPhase.GameOver || CurrentPhase == TurnPhase.NotStarted || CurrentTeam == null)
+            {
+                MutinyDebugLog.Warning("Turn",
+                    $"pass rejected team={TeamLabel(CurrentTeam)} phase={CurrentPhase}", this);
                 return;
+            }
 
+            MutinyDebugLog.Info("Turn", $"pass requested team={TeamLabel(CurrentTeam)}", this);
             CurrentTeam.FinishTurn();
             NotifyActionStarted();
         }
@@ -152,13 +164,20 @@ namespace Mutiny.Simulation
 
         public void AdvanceSimulationTick()
         {
-            bool allAtRest = CheckAllBodiesAtRest();
+            bool allAtRest = CheckAllBodiesAtRest(out string restBlocker);
 
             if (allAtRest)
             {
+                if (!string.IsNullOrEmpty(m_LastRestBlocker))
+                {
+                    MutinyDebugLog.Info("Turn", $"board settled after blocker={m_LastRestBlocker}", this);
+                    m_LastRestBlocker = null;
+                }
+                m_RestBlockerTicks = 0;
                 InactivityTicks++;
 
-                if (InactivityTicks >= InactivitySettlingThreshold)
+                // Flash increments first and evaluates only when inactivity > 10.
+                if (HasReachedInactivityThreshold(InactivityTicks))
                 {
                     InactivityTicks = 0;
                     EvaluateTurnOrGameOver();
@@ -166,22 +185,74 @@ namespace Mutiny.Simulation
             }
             else
             {
+                if (!string.Equals(m_LastRestBlocker, restBlocker, StringComparison.Ordinal))
+                {
+                    m_LastRestBlocker = restBlocker;
+                    m_RestBlockerTicks = 0;
+                    MutinyDebugLog.Info("Turn",
+                        $"waiting team={TeamLabel(CurrentTeam)} committed={m_ActionCommittedThisTurn} blocker={restBlocker}", this);
+                }
+                m_RestBlockerTicks++;
+                if (m_RestBlockerTicks == 50 ||
+                    (m_RestBlockerTicks > 50 && (m_RestBlockerTicks - 50) % 125 == 0))
+                {
+                    MutinyDebugLog.Warning("Turn",
+                        $"still waiting ticks={m_RestBlockerTicks} {DescribeRestBlocker(restBlocker)}", this);
+                }
+
+                // Safety timeout recovery for stuck weapons (150 ticks = 6.0 seconds)
+                if (m_RestBlockerTicks > 150 && !string.IsNullOrEmpty(restBlocker) && restBlocker.StartsWith("weapon:"))
+                {
+                    MutinyDebugLog.Warning("Turn", $"force settling stuck weapon blocker: {restBlocker}", this);
+                    var activeWeapons = FindObjectsByType<MutinyWeapon>();
+                    for (int i = 0; i < activeWeapons.Length; i++)
+                    {
+                        var w = activeWeapons[i];
+                        if (w != null && w.IsFired && !w.IsFinished)
+                        {
+                            w.Finish();
+                            Destroy(w.gameObject, 0.1f);
+                        }
+                    }
+                    m_RestBlockerTicks = 0;
+                }
+
                 InactivityTicks = 0;
                 CurrentPhase = TurnPhase.ActionExecuting;
             }
         }
 
+        public static bool HasReachedInactivityThreshold(int inactivityTicks)
+        {
+            return inactivityTicks > InactivitySettlingThreshold;
+        }
+
         public bool CheckAllBodiesAtRest()
+        {
+            return CheckAllBodiesAtRest(out _);
+        }
+
+        private bool CheckAllBodiesAtRest(out string blocker)
         {
             // 1. Check characters
             for (int i = 0; i < m_AllCharacters.Count; i++)
             {
                 var ch = m_AllCharacters[i];
-                if (ch == null || !ch.IsAlive)
+                if (ch == null)
+                    continue;
+
+                if (ch.IsResolvingHealthDisplay)
+                {
+                    blocker = $"character:{CharacterLabel(ch)}";
+                    return false;
+                }
+
+                if (!ch.IsAlive)
                     continue;
 
                 if (ch.PhysicsBody != null && !ch.PhysicsBody.IsAtRest)
                 {
+                    blocker = $"character:{CharacterLabel(ch)}";
                     return false;
                 }
             }
@@ -193,6 +264,7 @@ namespace Mutiny.Simulation
                 var w = activeWeapons[i];
                 if (w != null && w.IsFired && !w.IsFinished)
                 {
+                    blocker = $"weapon:{w.WeaponType}/{w.name} fired={w.IsFired} finished={w.IsFinished}";
                     return false;
                 }
             }
@@ -201,10 +273,37 @@ namespace Mutiny.Simulation
             var activeExplosions = FindObjectsByType<MutinyExplosion>();
             if (activeExplosions.Length > 0)
             {
+                blocker = $"explosions:{activeExplosions.Length}";
                 return false;
             }
 
+            blocker = null;
             return true;
+        }
+
+        private string DescribeRestBlocker(string blocker)
+        {
+            if (!string.IsNullOrEmpty(blocker) && blocker.StartsWith("character:", StringComparison.Ordinal))
+            {
+                for (int i = 0; i < m_AllCharacters.Count; i++)
+                {
+                    MutinyCharacter character = m_AllCharacters[i];
+                    if (character == null || !string.Equals(blocker, $"character:{CharacterLabel(character)}", StringComparison.Ordinal))
+                        continue;
+
+                    MutinyPhysicsBody body = character.PhysicsBody;
+                    if (body == null)
+                        return $"blocker={blocker} physicsBody=missing alive={character.IsAlive}";
+
+                    PhysicsBodyState state = body.State;
+                    return $"blocker={blocker} alive={character.IsAlive} drowned={character.IsDrowned} " +
+                           $"health={character.Health:F0} shownHealth={character.ShownHealth:F0} landDeath={character.HasLandDeathPresentation} " +
+                           $"inWater={body.IsInWater} position=({state.X:F2},{state.Y:F2}) " +
+                           $"velocity=({state.VelocityX:F3},{state.VelocityY:F3})";
+                }
+            }
+
+            return $"blocker={blocker}";
         }
 
         private void EvaluateTurnOrGameOver()
@@ -258,13 +357,20 @@ namespace Mutiny.Simulation
             // explicit pass) has actually been committed.
             if (!m_ActionCommittedThisTurn)
             {
+                bool resumedFromWait = CurrentPhase != TurnPhase.TurnActive;
                 CurrentPhase = TurnPhase.TurnActive;
+                if (resumedFromWait)
+                {
+                    MutinyDebugLog.Info("Turn",
+                        $"board idle without committed action; resumed {TeamLabel(CurrentTeam)}", this);
+                }
                 return;
             }
 
             // 2. Check if current team finished its turn actions
             if (CurrentTeam != null && CurrentTeam.IsTurnComplete())
             {
+                MutinyTeam finishedTeam = CurrentTeam;
                 OnTurnEnded?.Invoke(CurrentTeam);
                 CurrentTeam.FinishTurn();
 
@@ -277,12 +383,27 @@ namespace Mutiny.Simulation
                 FindAnyObjectByType<MutinyTreasureChestManager>()?.TryDropNew();
                 CurrentTeam.StartTurn();
                 OnTurnStarted?.Invoke(CurrentTeam);
+                MutinyDebugLog.Info("Turn",
+                    $"turn switched from={TeamLabel(finishedTeam)} to={TeamLabel(CurrentTeam)} turnCount={TurnCount} phase={CurrentPhase}", this);
             }
             else
             {
                 // Current character still has remaining actions
                 CurrentPhase = TurnPhase.TurnActive;
+                CurrentTeam?.ContinueSelectedCharacterAfterAction();
+                MutinyDebugLog.Info("Turn",
+                    $"continuing team={TeamLabel(CurrentTeam)} selected={CharacterLabel(CurrentTeam?.SelectedCharacter)} canThrow={CurrentTeam?.SelectedCharacter?.CanThrow} canShoot={CurrentTeam?.SelectedCharacter?.CanShoot}", this);
             }
+        }
+
+        private static string TeamLabel(MutinyTeam team)
+        {
+            return team == null ? "none" : $"T{team.TeamNumber}{(team.IsAiControlled ? "(AI)" : "(Human)")}";
+        }
+
+        private static string CharacterLabel(MutinyCharacter character)
+        {
+            return character == null ? "none" : $"{character.name}/{character.CharacterType}";
         }
 
         private bool HasPlayableTeams()
@@ -303,6 +424,26 @@ namespace Mutiny.Simulation
                 if (character != null && !m_AllCharacters.Contains(character))
                     m_AllCharacters.Add(character);
             }
+        }
+    }
+}
+
+namespace Mutiny.Diagnostics
+{
+    public static class MutinyDebugLog
+    {
+        public static bool Enabled = true;
+
+        public static void Info(string module, string message, UnityEngine.Object context = null)
+        {
+            if (Enabled && UnityEngine.Debug.isDebugBuild)
+                UnityEngine.Debug.Log($"[Mutiny:{module}] {message}", context);
+        }
+
+        public static void Warning(string module, string message, UnityEngine.Object context = null)
+        {
+            if (Enabled && UnityEngine.Debug.isDebugBuild)
+                UnityEngine.Debug.LogWarning($"[Mutiny:{module}] {message}", context);
         }
     }
 }

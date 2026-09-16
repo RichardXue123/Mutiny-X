@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Mutiny.Diagnostics;
 using Mutiny.Levels;
 using UnityEngine;
 
@@ -19,12 +20,20 @@ namespace Mutiny.Simulation
         [Header("Health")]
         public float Health = 100f;
         public float MaxHealth = 100f;
+        public float ShownHealth = 100f;
+        [NonSerialized] public float Evilness = 0f;
         public bool IsAlive = true;
         public bool IsDrowned = false;
 
         [Header("Action State")]
         public bool CanThrow = true;
         public bool CanShoot = true;
+        // Character.thrown in the original only records a deliberate self throw.
+        // It must not be inferred from velocity: explosions and collisions also move
+        // a character while its overlay remains visible.
+        [NonSerialized] public bool IsSelfThrown = false;
+        [Tooltip("Flash level XML <obj luck>; used by AI candidate sampling.")]
+        public float Luck = 5f;
         public bool IsSelected = false;
         [NonSerialized] public bool IsHovered = false;
 
@@ -47,6 +56,12 @@ namespace Mutiny.Simulation
         private SpriteRenderer m_SpriteRenderer;
         private Color m_OriginalColor = Color.white;
         private float m_HurtFlashTimer = 0f;
+        private bool m_LandDeathPresented;
+        private MutinyDeadCharacterEffect m_DeadCharacterEffect;
+
+        public bool IsResolvingHealthDisplay =>
+            !IsDrowned && !Mathf.Approximately(ShownHealth, Health);
+        public bool HasLandDeathPresentation => m_LandDeathPresented;
 
         public event Action OnHealthChanged;
         public event Action OnDeath;
@@ -57,6 +72,7 @@ namespace Mutiny.Simulation
             PhysicsBody = GetComponent<MutinyPhysicsBody>();
             if (PhysicsBody == null)
                 PhysicsBody = gameObject.AddComponent<MutinyPhysicsBody>();
+            BindPhysicsEvents();
         }
 
         private void Start()
@@ -82,6 +98,10 @@ namespace Mutiny.Simulation
             {
                 m_OriginalColor = m_SpriteRenderer.color;
             }
+
+            // New serialized fields are zero in some legacy baked scenes.
+            if (Health > 0f && ShownHealth <= 0f)
+                ShownHealth = Health;
         }
 
         private void RestoreInventoryFromLevelXml()
@@ -134,10 +154,15 @@ namespace Mutiny.Simulation
             GridX = gx;
             GridY = gy;
             Health = MaxHealth = 100f;
+            ShownHealth = 100f;
             IsAlive = true;
             IsDrowned = false;
+            Evilness = 0f;
+            m_LandDeathPresented = false;
+            m_DeadCharacterEffect = null;
             CanThrow = true;
             CanShoot = true;
+            IsSelfThrown = false;
             IsSelected = false;
 
             ParseWeapons(properties);
@@ -148,10 +173,7 @@ namespace Mutiny.Simulation
                 PhysicsBody = gameObject.AddComponent<MutinyPhysicsBody>();
             }
 
-            PhysicsBody.OnEnterWater -= Drown;
-            PhysicsBody.OnEnterWater += Drown;
-            PhysicsBody.OnSimulationStep -= AdvanceOriginalVisualTick;
-            PhysicsBody.OnSimulationStep += AdvanceOriginalVisualTick;
+            BindPhysicsEvents();
 
             Vector2 px = MutinyPhysics.UnityToPixel(transform.position);
             PhysicsBody.State = PhysicsBodyState.CreateDefault(px.x, px.y);
@@ -172,7 +194,14 @@ namespace Mutiny.Simulation
             foreach (var kvp in properties)
             {
                 string key = kvp.Key;
-                if (key == "x" || key == "y" || key == "type" || key == "luck" || key == "maxChests")
+                if (key == "luck")
+                {
+                    if (float.TryParse(kvp.Value, out float parsedLuck))
+                        Luck = parsedLuck;
+                    continue;
+                }
+
+                if (key == "x" || key == "y" || key == "type" || key == "maxChests")
                     continue;
 
                 if (int.TryParse(kvp.Value, out int count))
@@ -251,7 +280,8 @@ namespace Mutiny.Simulation
             if (!IsAlive)
                 return;
 
-            Health = Mathf.Max(0f, Health - damage);
+            float roundedDamage = Mathf.Round(damage);
+            Health = Mathf.Max(0f, Health - roundedDamage);
             OnHealthChanged?.Invoke();
             GetComponent<MutinyCharacterAnimator>()?.PlayHit();
 
@@ -265,7 +295,7 @@ namespace Mutiny.Simulation
 
             if (Health <= 0f)
             {
-                Die();
+                MarkDead();
             }
         }
 
@@ -276,12 +306,18 @@ namespace Mutiny.Simulation
 
             IsDrowned = true;
             Health = 0f;
+            ShownHealth = 1f;
             OnHealthChanged?.Invoke();
+            PhysicsBodyState state = PhysicsBody != null ? PhysicsBody.State : default;
+            float waterPixelY = PhysicsBody != null ? PhysicsBody.WaterPixelY : state.Y;
+            MutinyWaterSurface.SpawnSplash(state.X, waterPixelY);
             Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("splash");
-            Die();
+            MutinyDebugLog.Info("Water",
+                $"character drowned name={name} team=T{TeamIndex} position=({state.X:F2},{state.Y:F2}) waterY={waterPixelY:F2}", this);
+            MarkDead();
         }
 
-        private void Die()
+        private void MarkDead()
         {
             if (!IsAlive)
                 return;
@@ -290,13 +326,41 @@ namespace Mutiny.Simulation
             CanThrow = false;
             CanShoot = false;
             IsSelected = false;
-            Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("die");
             OnDeath?.Invoke();
+        }
 
+        private void AdvanceOriginalHealthTick()
+        {
+            if (IsDrowned || Mathf.Approximately(ShownHealth, Health) || PhysicsBody == null)
+                return;
+
+            PhysicsBodyState state = PhysicsBody.State;
+            if (state.VelocityX != 0f || Mathf.Abs(state.VelocityY) >= 0.2f)
+                return;
+
+            ShownHealth = Mathf.MoveTowards(ShownHealth, Health, 1f);
+            OnHealthChanged?.Invoke();
+
+            if (Health <= 0f && ShownHealth < 1f)
+                PresentLandDeath();
+        }
+
+        private void PresentLandDeath()
+        {
+            if (m_LandDeathPresented || IsDrowned)
+                return;
+
+            m_LandDeathPresented = true;
             if (m_SpriteRenderer != null)
             {
-                m_SpriteRenderer.color = new Color(0.45f, 0.45f, 0.45f, 0.55f);
+                m_SpriteRenderer.color = m_OriginalColor;
+                m_SpriteRenderer.enabled = false;
             }
+
+            m_DeadCharacterEffect = MutinyDeadCharacterEffect.Spawn(this);
+            Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("die");
+            MutinyDebugLog.Info("Death",
+                $"land death presented name={name} shownHealth={ShownHealth:F0} frameCount={(m_DeadCharacterEffect == null ? 0 : m_DeadCharacterEffect.FrameCount)}", this);
         }
 
         public void ApplyImpulse(Vector2 impulse)
@@ -308,19 +372,87 @@ namespace Mutiny.Simulation
             }
         }
 
+        public void MarkSelfThrown(string source)
+        {
+            if (IsSelfThrown)
+                return;
+
+            IsSelfThrown = true;
+            MutinyDebugLog.Info("Character",
+                $"self throw started name={name} source={source}", this);
+        }
+
+        public void ClearSelfThrown(string reason)
+        {
+            if (!IsSelfThrown)
+                return;
+
+            IsSelfThrown = false;
+            MutinyDebugLog.Info("Character",
+                $"self throw cleared name={name} reason={reason}", this);
+        }
+
         public void ResetTurnActions()
         {
             if (IsAlive)
             {
                 CanThrow = true;
                 CanShoot = true;
+                ClearSelfThrown("start turn");
             }
         }
 
-        private void AdvanceOriginalVisualTick()
+        private void AdvanceOriginalRotationTick()
         {
-            if (PhysicsBody != null && Mathf.Abs(PhysicsBody.State.VelocityX) > 0f)
-                transform.Rotate(0f, 0f, -PhysicsBody.State.VelocityX * 3f);
+            if (PhysicsBody == null)
+                return;
+
+            float delta = MutinyRotationRules.CharacterMotionDelta(PhysicsBody.State.VelocityX);
+            if (!Mathf.Approximately(delta, 0f))
+                transform.Rotate(0f, 0f, delta);
+        }
+
+        private void AdvanceOriginalWaterRotationTick()
+        {
+            if (PhysicsBody == null)
+                return;
+
+            float delta = MutinyRotationRules.CharacterWaterDelta(
+                PhysicsBody.State.VelocityX, PhysicsBody.State.VelocityY);
+            if (!Mathf.Approximately(delta, 0f))
+                transform.Rotate(0f, 0f, delta);
+        }
+
+        private void HandleFloorContact()
+        {
+            float before = Mathf.DeltaAngle(0f, transform.eulerAngles.z);
+            float after = MutinyRotationRules.SettleCharacterFloorAngle(before);
+            transform.rotation = Quaternion.Euler(0f, 0f, after);
+
+            if (!Mathf.Approximately(before, 0f) && Mathf.Approximately(after, 0f))
+            {
+                MutinyDebugLog.Info("Animation",
+                    $"character rotation settled name={name} from={before:F2} to=0", this);
+            }
+        }
+
+        private void BindPhysicsEvents()
+        {
+            if (PhysicsBody == null)
+                return;
+
+            // C# event subscriptions are not serialized into baked Unity scenes.
+            // Rebind in Awake on every Play Mode start as well as after Initialize.
+            PhysicsBody.OnEnterWater -= Drown;
+            PhysicsBody.OnEnterWater += Drown;
+            PhysicsBody.OnFloorLanded -= HandleFloorContact;
+            PhysicsBody.OnFloorLanded += HandleFloorContact;
+            PhysicsBody.OnAfterMotionStep -= AdvanceOriginalRotationTick;
+            PhysicsBody.OnAfterMotionStep += AdvanceOriginalRotationTick;
+            PhysicsBody.OnWaterMotionAdjusted -= AdvanceOriginalWaterRotationTick;
+            PhysicsBody.OnWaterMotionAdjusted += AdvanceOriginalWaterRotationTick;
+            PhysicsBody.OnSimulationStep -= AdvanceOriginalHealthTick;
+            PhysicsBody.OnSimulationStep += AdvanceOriginalHealthTick;
         }
 
         private void OnDestroy()
@@ -328,7 +460,10 @@ namespace Mutiny.Simulation
             if (PhysicsBody != null)
             {
                 PhysicsBody.OnEnterWater -= Drown;
-                PhysicsBody.OnSimulationStep -= AdvanceOriginalVisualTick;
+                PhysicsBody.OnFloorLanded -= HandleFloorContact;
+                PhysicsBody.OnAfterMotionStep -= AdvanceOriginalRotationTick;
+                PhysicsBody.OnWaterMotionAdjusted -= AdvanceOriginalWaterRotationTick;
+                PhysicsBody.OnSimulationStep -= AdvanceOriginalHealthTick;
             }
         }
     }

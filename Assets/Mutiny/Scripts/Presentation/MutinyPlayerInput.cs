@@ -1,3 +1,4 @@
+using Mutiny.Diagnostics;
 using Mutiny.Levels;
 using Mutiny.Simulation;
 using UnityEngine;
@@ -31,6 +32,19 @@ namespace Mutiny.Presentation
             MutinyPlayerInteractionState.CharacterSelection;
         public bool IsActionMenuOpen => InteractionState == MutinyPlayerInteractionState.ActionMenu;
         public bool IsAiming => InteractionState == MutinyPlayerInteractionState.Aiming;
+
+        // Controller.dragging == character in the Flash game.  Aiming a weapon
+        // drags its equipped weapon instead, so it deliberately does not hide the
+        // character's triangle or health bar.
+        public bool IsCharacterThrowDragInProgress(MutinyCharacter character)
+        {
+            return character != null &&
+                   InteractionState == MutinyPlayerInteractionState.Aiming &&
+                   string.IsNullOrEmpty(ActiveWeapon) &&
+                   TurnManager != null &&
+                   TurnManager.CurrentTeam != null &&
+                   TurnManager.CurrentTeam.SelectedCharacter == character;
+        }
 
         private Vector3 m_AimOrigin;
         private string[,] m_CachedTerrain;
@@ -187,11 +201,16 @@ namespace Mutiny.Presentation
         {
             MutinyCharacter character = GetHumanSelectedCharacter();
             if (character == null || !character.CanShoot || !character.HasWeapon(weaponType))
+            {
+                MutinyDebugLog.Warning("Input",
+                    $"weapon selection rejected weapon={weaponType} character={(character == null ? "none" : character.name)}", this);
                 return false;
+            }
 
             ActiveWeapon = weaponType;
             InteractionState = MutinyPlayerInteractionState.WeaponArmed;
             HideTrajectory();
+            MutinyDebugLog.Info("Input", $"weapon selected character={character.name} weapon={weaponType}", this);
             return true;
         }
 
@@ -199,11 +218,16 @@ namespace Mutiny.Presentation
         {
             MutinyCharacter character = GetHumanSelectedCharacter();
             if (character == null || !character.CanThrow)
+            {
+                MutinyDebugLog.Warning("Input",
+                    $"character throw selection rejected character={(character == null ? "none" : character.name)}", this);
                 return false;
+            }
 
             ActiveWeapon = null;
             InteractionState = MutinyPlayerInteractionState.WeaponArmed;
             HideTrajectory();
+            MutinyDebugLog.Info("Input", $"character throw selected character={character.name}", this);
             return true;
         }
 
@@ -216,6 +240,7 @@ namespace Mutiny.Presentation
             InteractionState = character != null
                 ? MutinyPlayerInteractionState.ActionMenu
                 : MutinyPlayerInteractionState.CharacterSelection;
+            MutinyDebugLog.Info("Input", $"weapon selection cancelled nextState={InteractionState}", this);
         }
 
         public void ReturnToCharacterSelection()
@@ -235,7 +260,10 @@ namespace Mutiny.Presentation
         {
             MutinyCharacter character = GetHumanSelectedCharacter();
             if (character == null)
+            {
+                MutinyDebugLog.Warning("Input", "end turn rejected because no human character is selected", this);
                 return;
+            }
 
             HideTrajectory();
             ClearHoveredCharacter();
@@ -243,6 +271,7 @@ namespace Mutiny.Presentation
             character.CanThrow = false;
             character.CanShoot = false;
             InteractionState = MutinyPlayerInteractionState.WeaponArmed;
+            MutinyDebugLog.Info("Input", $"end turn character={character.name}", this);
             TurnManager.NotifyActionStarted();
         }
 
@@ -259,6 +288,7 @@ namespace Mutiny.Presentation
             ClearHoveredCharacter();
             ActiveWeapon = null;
             InteractionState = MutinyPlayerInteractionState.ActionMenu;
+            MutinyDebugLog.Info("Input", $"character selected team=T{team.TeamNumber} character={clicked.name}", this);
         }
 
         private bool CanAim(MutinyCharacter character)
@@ -341,27 +371,43 @@ namespace Mutiny.Presentation
             if (!string.IsNullOrEmpty(ActiveWeapon) && character.HasWeapon(ActiveWeapon) && character.CanShoot)
             {
                 MutinyWeaponFactory.SpawnAndLaunch(ActiveWeapon, character, startPixels, dragPixels);
+                MutinyDebugLog.Info("Input",
+                    $"weapon launched character={character.name} weapon={ActiveWeapon} start={startPixels} drag={dragPixels}", this);
                 character.CanShoot = false;
                 character.CanThrow = false;
                 TurnManager.NotifyActionStarted();
             }
             else if (string.IsNullOrEmpty(ActiveWeapon) && character.CanThrow)
             {
-                MutinyPhysicsBody body = character.PhysicsBody;
-                if (body == null)
-                {
-                    Debug.LogError($"[MutinyPlayerInput] {character.name} has no physics body.", character);
-                    InteractionState = MutinyPlayerInteractionState.WeaponArmed;
-                    return;
-                }
-
-                body.Twang(startPixels, dragPixels);
-                character.CanThrow = false;
-                TurnManager.NotifyActionStarted();
-                MutinyAudioManager.Instance?.PlaySFX("click");
+                TryCommitCharacterThrow(character, startPixels, dragPixels);
             }
 
             InteractionState = MutinyPlayerInteractionState.WeaponArmed;
+        }
+
+        internal bool TryCommitCharacterThrow(
+            MutinyCharacter character, Vector2 startPixels, Vector2 dragPixels)
+        {
+            if (character == null || character != GetHumanSelectedCharacter() || !character.CanThrow)
+                return false;
+
+            MutinyPhysicsBody body = character.PhysicsBody;
+            if (body == null)
+            {
+                Debug.LogError($"[MutinyPlayerInput] {character.name} has no physics body.", character);
+                InteractionState = MutinyPlayerInteractionState.WeaponArmed;
+                return false;
+            }
+
+            body.Twang(startPixels, dragPixels);
+            character.MarkSelfThrown("player input");
+            character.CanThrow = false;
+            MutinyDebugLog.Info("Input",
+                $"character throw committed character={character.name} start={startPixels} drag={dragPixels}", this);
+            TurnManager.NotifyActionStarted();
+            MutinyAudioManager.Instance?.PlaySFX("click");
+            InteractionState = MutinyPlayerInteractionState.WeaponArmed;
+            return true;
         }
 
         private void ResetForCurrentTurn()
@@ -374,6 +420,8 @@ namespace Mutiny.Presentation
                 m_ObservedTeam.SelectedCharacter.IsSelected = false;
             ActiveWeapon = null;
             InteractionState = MutinyPlayerInteractionState.CharacterSelection;
+            MutinyDebugLog.Info("Input",
+                $"reset for team={(m_ObservedTeam == null ? "none" : $"T{m_ObservedTeam.TeamNumber}")} ai={m_ObservedTeam?.IsAiControlled}", this);
         }
 
         private MutinyCharacter GetHumanSelectedCharacter()

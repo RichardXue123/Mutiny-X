@@ -36,8 +36,12 @@ namespace Mutiny.Simulation
             m_FramesSinceFire = 0;
         }
 
-        private void Update()
+        protected override void Update()
         {
+            if (IsFinished)
+                return;
+
+            base.Update();
             if (IsFinished)
                 return;
 
@@ -45,8 +49,17 @@ namespace Mutiny.Simulation
             {
                 m_FramesSinceFire++;
 
-                // Spin during flight
-                transform.Rotate(0f, 0f, -PhysicsBody.State.VelocityX * 2f);
+                // Water invalidation: submerged banana duds and finishes
+                if (PhysicsBody.IsInWater)
+                {
+                    float waterY = PhysicsBody.WaterPixelY;
+                    if (m_WaterTimer >= 0.35f || (!float.IsInfinity(waterY) && PhysicsBody.State.Y > waterY + 20f))
+                    {
+                        Finish();
+                        Destroy(gameObject, 0.3f);
+                        return;
+                    }
+                }
 
                 bool shouldExplode = PhysicsBody.State.VelocityX == 0f &&
                                      Mathf.Abs(PhysicsBody.State.VelocityY) < 0.5f;

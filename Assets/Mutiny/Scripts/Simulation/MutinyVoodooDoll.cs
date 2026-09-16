@@ -30,8 +30,12 @@ namespace Mutiny.Simulation
             TargetCharacter = target;
         }
 
-        private void Update()
+        protected override void Update()
         {
+            if (IsFinished)
+                return;
+
+            base.Update();
             if (IsFinished)
                 return;
 

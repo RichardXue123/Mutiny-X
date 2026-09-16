@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using Mutiny.Diagnostics;
 using Mutiny.Simulation;
 using UnityEngine;
 
@@ -9,30 +10,39 @@ namespace Mutiny.Presentation
     public sealed class MutinyCharacterOverlay : MonoBehaviour
     {
         private const int OverlaySortingOrder = 25;
+        private const float PixelsPerUnit = MutinyPhysics.PixelsPerUnit;
+        private const int HealthSegments = 27;
 
         private MutinyCharacter m_Character;
+        private MutinyTeam m_Team;
         private GameObject m_OverlayRoot;
-        private Transform m_HealthBarFill;
-        private SpriteRenderer m_HealthBarFillRenderer;
-        private GameObject m_IndicatorArrow;
+        private GameObject m_Indicator;
+        private SpriteRenderer m_IndicatorRenderer;
+        private Transform m_HealthFill;
+        private SpriteRenderer m_HealthFillRenderer;
+        private GameObject m_HealthBar;
         private GameObject m_SelectionCorners;
+        private bool m_LastIndicatorVisible;
+        private bool m_LastHealthVisible;
+        private int m_LastHealthSegments = -1;
+        private string m_IndicatorResource;
 
-        private static Sprite s_WhiteSprite;
+        private static Sprite s_WhitePixel;
 
-        private static Sprite WhiteSprite
+        public bool IsTurnIndicatorVisible => m_Indicator != null && m_Indicator.activeInHierarchy;
+        public bool IsHealthBarVisible => m_HealthBar != null && m_HealthBar.activeInHierarchy;
+        public int CurrentHealthFrame => 1 + Mathf.Max(0, m_LastHealthSegments);
+
+        private static Sprite WhitePixel
         {
             get
             {
-                if (s_WhiteSprite == null)
+                if (s_WhitePixel == null)
                 {
-                    s_WhiteSprite = Sprite.Create(
-                        Texture2D.whiteTexture,
-                        new Rect(0f, 0f, 1f, 1f),
-                        new Vector2(0.5f, 0.5f),
-                        1f
-                    );
+                    s_WhitePixel = Sprite.Create(Texture2D.whiteTexture,
+                        new Rect(0f, 0f, 1f, 1f), new Vector2(0f, 0.5f), PixelsPerUnit);
                 }
-                return s_WhiteSprite;
+                return s_WhitePixel;
             }
         }
 
@@ -64,129 +74,218 @@ namespace Mutiny.Presentation
         {
             if (m_Character == null || !m_Character.IsAlive)
             {
-                if (m_OverlayRoot != null && m_OverlayRoot.activeSelf)
-                    m_OverlayRoot.SetActive(false);
+                SetOverlayVisible(false);
                 return;
             }
 
-            if (m_IndicatorArrow != null)
-            {
-                bool showIndicator = m_Character.IsSelected;
-                if (m_IndicatorArrow.activeSelf != showIndicator)
-                    m_IndicatorArrow.SetActive(showIndicator);
-            }
+            ResolveTeam();
+            bool isCurrentTeam = m_Team != null &&
+                                 FindAnyObjectByType<MutinyTurnManager>()?.CurrentTeam == m_Team;
+            bool isDragged = IsCharacterThrowDragged();
+            bool isSelfThrown = m_Character.IsSelfThrown;
+
+            // Character.updateOverlay: triangle = current team && !dragging/self-throw
+            // && alive && speechBubble.target != character. The Unity dialogue
+            // target layer is not implemented yet. Physical velocity is deliberately
+            // absent here: a blast or collision does not set Character.thrown in
+            // Flash, so it must keep this overlay visible.
+            bool hideForCharacterAction = isDragged || isSelfThrown;
+            bool showIndicator = isCurrentTeam && !hideForCharacterAction;
+            bool showHealth = !hideForCharacterAction;
+            SetActive(m_Indicator, showIndicator, ref m_LastIndicatorVisible, "indicator");
+            SetActive(m_HealthBar, showHealth, ref m_LastHealthVisible, "health");
 
             if (m_SelectionCorners != null)
             {
-                bool showCorners = m_Character.IsSelected || m_Character.IsHovered;
+                bool showCorners = (m_Character.IsSelected || m_Character.IsHovered) && !hideForCharacterAction;
                 if (m_SelectionCorners.activeSelf != showCorners)
                     m_SelectionCorners.SetActive(showCorners);
             }
+
+            UpdateIndicatorSprite();
+            UpdateHealthBar();
+        }
+
+        public void RefreshVisualStateForVerification()
+        {
+            LateUpdate();
+        }
+
+        public static int CalculateOriginalHealthFrame(float shownHealth, float maxHealth)
+        {
+            return 1 + Mathf.Clamp(Mathf.CeilToInt(HealthSegments * shownHealth / Mathf.Max(1f, maxHealth)),
+                0, HealthSegments);
+        }
+
+        private void ResolveTeam()
+        {
+            if (m_Team != null && m_Team.Characters.Contains(m_Character))
+                return;
+
+            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>();
+            for (int i = 0; i < teams.Length; i++)
+            {
+                if (teams[i] != null && teams[i].Characters.Contains(m_Character))
+                {
+                    m_Team = teams[i];
+                    return;
+                }
+            }
+        }
+
+        private bool IsCharacterThrowDragged()
+        {
+            MutinyPlayerInput playerInput = FindAnyObjectByType<MutinyPlayerInput>();
+            return playerInput != null && playerInput.IsCharacterThrowDragInProgress(m_Character);
         }
 
         private void CreateOverlayUI()
         {
-            m_OverlayRoot = new GameObject("OverlayUI");
+            m_OverlayRoot = new GameObject("OriginalCharacterOverlay");
             m_OverlayRoot.transform.SetParent(transform, false);
-            m_OverlayRoot.transform.localPosition = new Vector3(0f, 0.45f, 0f);
+            // characterOverlay's exported placement is x=0.5px, y=-2.4px.
+            m_OverlayRoot.transform.localPosition = new Vector3(0.5f / PixelsPerUnit, 2.4f / PixelsPerUnit, 0f);
 
-            // 1. Health bar background (black/dark border)
-            GameObject barBg = new GameObject("HealthBar_Bg");
-            barBg.transform.SetParent(m_OverlayRoot.transform, false);
-            barBg.transform.localScale = new Vector3(0.6f, 0.08f, 1f);
-            var srBg = barBg.AddComponent<SpriteRenderer>();
-            srBg.sprite = WhiteSprite;
-            srBg.color = new Color(0f, 0f, 0f, 0.8f);
-            srBg.sortingOrder = OverlaySortingOrder;
+            m_Indicator = new GameObject("TurnIndicator");
+            m_Indicator.transform.SetParent(m_OverlayRoot.transform, false);
+            // characterOverlay.triangle is placed at source y=-761 twips (-38.05px).
+            m_Indicator.transform.localPosition = new Vector3(0f, 38.05f / PixelsPerUnit, 0f);
+            m_IndicatorRenderer = m_Indicator.AddComponent<SpriteRenderer>();
+            m_IndicatorRenderer.sortingOrder = OverlaySortingOrder + 2;
+            m_Indicator.SetActive(false);
 
-            // 2. Health bar fill
-            GameObject barFill = new GameObject("HealthBar_Fill");
-            barFill.transform.SetParent(m_OverlayRoot.transform, false);
-            barFill.transform.localPosition = new Vector3(-0.28f, 0f, 0f);
-            barFill.transform.localScale = new Vector3(0.56f, 0.06f, 1f);
-            m_HealthBarFill = barFill.transform;
-            m_HealthBarFillRenderer = barFill.AddComponent<SpriteRenderer>();
-            m_HealthBarFillRenderer.sprite = Sprite.Create(
-                Texture2D.whiteTexture,
-                new Rect(0f, 0f, 1f, 1f),
-                new Vector2(0f, 0.5f), // Pivot at left edge so scaling scales to right
-                1f
-            );
-            m_HealthBarFillRenderer.color = Color.green;
-            m_HealthBarFillRenderer.sortingOrder = OverlaySortingOrder + 1;
+            m_HealthBar = new GameObject("HealthBar");
+            m_HealthBar.transform.SetParent(m_OverlayRoot.transform, false);
+            // characterOverlay.health is placed at source y=360 twips (+18px).
+            m_HealthBar.transform.localPosition = new Vector3(0f, -18f / PixelsPerUnit, 0f);
+            var barBackground = new GameObject("OriginalFrame");
+            barBackground.transform.SetParent(m_HealthBar.transform, false);
+            SpriteRenderer backgroundRenderer = barBackground.AddComponent<SpriteRenderer>();
+            backgroundRenderer.sprite = LoadSprite("UI/CharacterOverlay/health_background", new Vector2(0.5f, 0.5f));
+            backgroundRenderer.sortingOrder = OverlaySortingOrder;
 
-            // 3. Selection indicator arrow (downwards pointing triangle)
-            m_IndicatorArrow = new GameObject("SelectionIndicator");
-            m_IndicatorArrow.transform.SetParent(m_OverlayRoot.transform, false);
-            m_IndicatorArrow.transform.localPosition = new Vector3(0f, 0.15f, 0f);
-            m_IndicatorArrow.transform.localScale = new Vector3(0.18f, 0.18f, 1f);
-            var srArrow = m_IndicatorArrow.AddComponent<SpriteRenderer>();
-            srArrow.sprite = WhiteSprite;
-            srArrow.color = m_Character.TeamIndex == 1 ? Color.yellow : new Color(0.2f, 0.8f, 1f);
-            srArrow.sortingOrder = OverlaySortingOrder + 2;
-            m_IndicatorArrow.transform.localRotation = Quaternion.Euler(0f, 0f, 45f); // diamond / arrow style
-            m_IndicatorArrow.SetActive(false);
+            var fill = new GameObject("DiscreteFill");
+            fill.transform.SetParent(m_HealthBar.transform, false);
+            fill.transform.localPosition = new Vector3(-13f / PixelsPerUnit, 0f, 0f);
+            m_HealthFill = fill.transform;
+            m_HealthFillRenderer = fill.AddComponent<SpriteRenderer>();
+            m_HealthFillRenderer.sprite = WhitePixel;
+            m_HealthFillRenderer.sortingOrder = OverlaySortingOrder + 1;
 
-            // Original Character.overlay.corners: four white corner brackets shown
-            // for the character under the mouse and for the selected character.
-            m_SelectionCorners = new GameObject("SelectionCorners");
-            m_SelectionCorners.transform.SetParent(m_OverlayRoot.transform, false);
-            m_SelectionCorners.transform.localPosition = new Vector3(0f, -0.45f, 0f);
-            CreateCorner("TopLeft", new Vector2(-0.45f, 0.45f), new Vector2(1f, -1f));
-            CreateCorner("TopRight", new Vector2(0.45f, 0.45f), new Vector2(-1f, -1f));
-            CreateCorner("BottomLeft", new Vector2(-0.45f, -0.45f), new Vector2(1f, 1f));
-            CreateCorner("BottomRight", new Vector2(0.45f, -0.45f), new Vector2(-1f, 1f));
-            m_SelectionCorners.SetActive(false);
-
+            CreateSelectionCorners();
+            UpdateIndicatorSprite();
             UpdateHealthBar();
         }
 
-        private void CreateCorner(string cornerName, Vector2 corner, Vector2 direction)
+        private void UpdateIndicatorSprite()
         {
-            GameObject cornerObject = new GameObject(cornerName);
-            cornerObject.transform.SetParent(m_SelectionCorners.transform, false);
+            if (m_IndicatorRenderer == null)
+                return;
 
-            LineRenderer line = cornerObject.AddComponent<LineRenderer>();
-            line.useWorldSpace = false;
-            line.loop = false;
-            line.positionCount = 3;
-            line.startWidth = 2f / MutinyPhysics.PixelsPerUnit;
-            line.endWidth = 2f / MutinyPhysics.PixelsPerUnit;
-            line.numCapVertices = 0;
-            line.sortingOrder = OverlaySortingOrder + 3;
-            line.material = new Material(Shader.Find("Sprites/Default"));
-            line.startColor = Color.white;
-            line.endColor = Color.white;
+            string resource = m_Team != null && m_Team.IsAiControlled
+                ? "UI/CharacterOverlay/cpu_indicator"
+                : m_Character.TeamIndex == 2
+                    ? "UI/CharacterOverlay/p2_indicator"
+                    : "UI/CharacterOverlay/p1_indicator";
+            if (string.Equals(m_IndicatorResource, resource, StringComparison.Ordinal))
+                return;
 
-            const float length = 0.18f;
-            line.SetPosition(0, new Vector3(corner.x, corner.y + direction.y * length, 0f));
-            line.SetPosition(1, new Vector3(corner.x, corner.y, 0f));
-            line.SetPosition(2, new Vector3(corner.x + direction.x * length, corner.y, 0f));
+            Sprite sprite = LoadSprite(resource, new Vector2(0.5f, 0.5f));
+            if (sprite != null)
+            {
+                m_IndicatorRenderer.sprite = sprite;
+                m_IndicatorResource = resource;
+            }
         }
 
         private void UpdateHealthBar()
         {
-            if (m_Character == null || m_HealthBarFill == null)
+            if (m_Character == null || m_HealthFill == null || m_HealthFillRenderer == null)
                 return;
 
-            float ratio = Mathf.Clamp01(m_Character.Health / m_Character.MaxHealth);
-            m_HealthBarFill.localScale = new Vector3(0.56f * ratio, 0.06f, 1f);
-
-            if (m_HealthBarFillRenderer != null)
+            float maximum = Mathf.Max(1f, m_Character.MaxHealth);
+            int segments = CalculateOriginalHealthFrame(m_Character.ShownHealth, maximum) - 1;
+            if (segments != m_LastHealthSegments)
             {
-                if (ratio > 0.5f)
-                    m_HealthBarFillRenderer.color = Color.Lerp(Color.yellow, Color.green, (ratio - 0.5f) * 2f);
-                else
-                    m_HealthBarFillRenderer.color = Color.Lerp(Color.red, Color.yellow, ratio * 2f);
+                // The Flash health movie has one initial empty state plus 27
+                // discrete morph positions. Scaling in whole source pixels keeps
+                // its change cadence tied to shownHealth's 25 Hz progression.
+                m_HealthFill.localScale = new Vector3(segments, 4f, 1f);
+                m_LastHealthSegments = segments;
+                MutinyDebugLog.Info("Overlay",
+                    $"health frame character={m_Character.name} frame={1 + segments} shown={m_Character.ShownHealth:0} health={m_Character.Health:0}", this);
             }
+
+            // health (1864) is red; the p2 overlay substitutes the blue health movie (1877).
+            m_HealthFillRenderer.color = m_Character.TeamIndex == 2
+                ? new Color32(51, 95, 255, 255)
+                : new Color32(230, 49, 19, 255);
+        }
+
+        private static Sprite LoadSprite(string resourcePath, Vector2 pivot)
+        {
+            Texture2D texture = Resources.Load<Texture2D>(resourcePath);
+            if (texture == null)
+                return null;
+            texture.filterMode = FilterMode.Point;
+            return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), pivot, PixelsPerUnit);
+        }
+
+        private void CreateSelectionCorners()
+        {
+            m_SelectionCorners = new GameObject("SelectionCorners");
+            m_SelectionCorners.transform.SetParent(m_OverlayRoot.transform, false);
+            m_SelectionCorners.transform.localPosition = Vector3.zero;
+            CreateCorner("TopLeft", new Vector2(-14f, 14f), new Vector2(1f, -1f));
+            CreateCorner("TopRight", new Vector2(14f, 14f), new Vector2(-1f, -1f));
+            CreateCorner("BottomLeft", new Vector2(-14f, -14f), new Vector2(1f, 1f));
+            CreateCorner("BottomRight", new Vector2(14f, -14f), new Vector2(-1f, 1f));
+            m_SelectionCorners.SetActive(false);
+        }
+
+        private void CreateCorner(string cornerName, Vector2 pixelCorner, Vector2 direction)
+        {
+            GameObject cornerObject = new GameObject(cornerName);
+            cornerObject.transform.SetParent(m_SelectionCorners.transform, false);
+            LineRenderer line = cornerObject.AddComponent<LineRenderer>();
+            line.useWorldSpace = false;
+            line.positionCount = 3;
+            line.startWidth = 2f / PixelsPerUnit;
+            line.endWidth = 2f / PixelsPerUnit;
+            line.sortingOrder = OverlaySortingOrder + 3;
+            line.material = new Material(Shader.Find("Sprites/Default"));
+            line.startColor = Color.white;
+            line.endColor = Color.white;
+            const float length = 6f;
+            line.SetPosition(0, ToUnityPixel(pixelCorner + new Vector2(0f, direction.y * length)));
+            line.SetPosition(1, ToUnityPixel(pixelCorner));
+            line.SetPosition(2, ToUnityPixel(pixelCorner + new Vector2(direction.x * length, 0f)));
+        }
+
+        private static Vector3 ToUnityPixel(Vector2 sourcePixel)
+        {
+            return new Vector3(sourcePixel.x / PixelsPerUnit, -sourcePixel.y / PixelsPerUnit, 0f);
+        }
+
+        private void SetActive(GameObject target, bool active, ref bool previous, string label)
+        {
+            if (target == null || previous == active)
+                return;
+            target.SetActive(active);
+            previous = active;
+            MutinyDebugLog.Info("Overlay", $"{label} visible={active} character={m_Character.name}", this);
+        }
+
+        private void SetOverlayVisible(bool visible)
+        {
+            if (m_OverlayRoot != null && m_OverlayRoot.activeSelf != visible)
+                m_OverlayRoot.SetActive(visible);
         }
 
         private void OnCharacterDeath()
         {
-            if (m_OverlayRoot != null)
-            {
-                m_OverlayRoot.SetActive(false);
-            }
+            SetOverlayVisible(false);
+            MutinyDebugLog.Info("Overlay", $"hidden on death character={m_Character.name}", this);
         }
     }
 }

@@ -134,8 +134,12 @@ namespace Mutiny.Verification
             res.Assert(Mathf.Approximately(damage, 20f), "Damage at 30 px is exactly 20 HP (50% falloff)");
             res.Assert(Mathf.Approximately(upwardPop, -7.2f), "Upward pop velocity is exactly -7.2 px/tick");
 
-            // 5. Inactivity Settling Threshold
-            res.Assert(MutinyTurnManager.InactivitySettlingThreshold == 10, "Settling inactivity threshold is exactly 10 ticks (0.4s)");
+            // 5. Inactivity Settling Threshold. Flash evaluates only after the
+            // incremented counter is greater than 10.
+            res.Assert(!MutinyTurnManager.HasReachedInactivityThreshold(10),
+                "Settling does not begin when inactivity is exactly 10 ticks");
+            res.Assert(MutinyTurnManager.HasReachedInactivityThreshold(11),
+                "Settling begins when inactivity reaches 11 ticks");
 
             // 6. Water Line & Drowning
             float waterLineY = 14f * 32f; // 448 px
@@ -148,25 +152,7 @@ namespace Mutiny.Verification
             MutinySaveSystem.UnlockLevel(2);
             res.Assert(MutinySaveSystem.IsLevelUnlocked(2), "Level 2 is unlocked after victory");
 
-            // 8. Authentic Turn Action Semantics (Jump + Weapon)
-            // Rule: IsTurnComplete == !(canThrow || canShoot)
-            bool canThrow = true;
-            bool canShoot = true;
-            bool isComplete = !(canThrow || canShoot);
-            res.Assert(!isComplete, "Turn is not complete before any action (CanThrow=true, CanShoot=true)");
-
-            // Jump used: canThrow becomes false, canShoot remains true
-            canThrow = false;
-            isComplete = !(canThrow || canShoot);
-            res.Assert(!isComplete, "Turn is not complete after jump alone (CanThrow=false, CanShoot=true)");
-
-            // Weapon used: canShoot becomes false, canThrow is false
-            canShoot = false;
-            isComplete = !(canThrow || canShoot);
-            res.Assert(isComplete, "Turn completes once both jump and weapon are consumed (CanThrow=false, CanShoot=false)");
-
             return res;
         }
     }
 }
-

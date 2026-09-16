@@ -43,24 +43,39 @@ namespace Mutiny.Simulation
             PhysicsBody.State.VelocityY *= 0.5f;
         }
 
-        private void Update()
+        protected override void Update()
         {
             if (IsFinished)
                 return;
 
-            if (IsFired && PhysicsBody != null)
-            {
-                // Roll with ground speed
-                transform.Rotate(0f, 0f, -PhysicsBody.State.VelocityX * 2.5f);
-            }
+            base.Update();
         }
 
         private void AdvanceOriginalTick()
         {
-            if (!IsFired || IsFinished)
+            if (!IsFired || IsFinished || PhysicsBody == null)
                 return;
 
-            if (PhysicsBody.State.VelocityX == 0f && Mathf.Abs(PhysicsBody.State.VelocityY) < 0.5f)
+            // Water invalidation: boulder quickly sinks and fades away in water
+            if (PhysicsBody.IsInWater)
+            {
+                m_Visibility -= 0.08f;
+                if (SpriteRenderer != null)
+                {
+                    Color color = SpriteRenderer.color;
+                    color.a = Mathf.Clamp01(m_Visibility);
+                    SpriteRenderer.color = color;
+                }
+
+                float waterY = PhysicsBody.WaterPixelY;
+                if (m_Visibility <= 0f || (!float.IsInfinity(waterY) && PhysicsBody.State.Y > waterY + 28f))
+                {
+                    Finish();
+                    Destroy(gameObject, 0.2f);
+                    return;
+                }
+            }
+            else if (PhysicsBody.State.VelocityX == 0f && Mathf.Abs(PhysicsBody.State.VelocityY) < 0.5f)
             {
                 m_Visibility -= 0.1f;
                 if (m_Visibility < 1f && SpriteRenderer != null)
@@ -70,7 +85,11 @@ namespace Mutiny.Simulation
                     SpriteRenderer.color = color;
                 }
                 if (m_Visibility < 0f)
+                {
                     Finish();
+                    Destroy(gameObject, 0.2f);
+                    return;
+                }
             }
 
             var characters = FindObjectsByType<MutinyCharacter>();

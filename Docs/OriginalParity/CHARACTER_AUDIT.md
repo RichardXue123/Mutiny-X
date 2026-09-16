@@ -32,7 +32,6 @@
 | redPirate | 1324 |
 | redPirateCaptain | 1331 |
 
-945 张原版角色帧现已放入 Unity 运行时资源。`MutinyCharacterAnimator` 播放各角色 frame 1–14 的 idle 和 frame 15–35 的 hit 段，并在受击飞行时保持原版 hit 起始姿态。角色飞行旋转已按原版每 tick `vx*3` 接入。
+945 张原版角色帧现已放入 Unity 运行时资源。`MutinyCharacterAnimator` 以 25 Hz 播放各角色 frame 1–12 的 static 段：第 1、4、7、10 帧切换姿势且各保持 3 tick，第 13 帧动作直接跳回 static；hit 可见段为 frame 15–34，第 35 帧动作跳回 static。初始烘焙角色与运行时重建角色均从自身 `CharacterType` 初始化同一时间轴，并在受击飞行时保持原版 hit 起始姿态。角色飞行旋转已按原版每 tick `vx*3` 接入。
 
-尚未签收：原版死亡使用独立 `deadCharacter` symbol；落地后的角度归正、hit 时间轴 action、装备遮挡层及逐角色声音仍需运行画面对比。当前静态 Preview 不再是唯一角色画面来源。
-
+尚未签收：装备遮挡层、内部嵌套 MovieClip 的独立播放相位及逐角色声音仍需运行画面对比。当前静态 Preview 不再是唯一角色画面来源；陆地死亡、整体旋转和父级 static/hit 时间轴已有独立规格记录各自的验证状态。

@@ -28,8 +28,12 @@ namespace Mutiny.Simulation
             PhysicsBody.State.Weight = 0f;
         }
 
-        private void Update()
+        protected override void Update()
         {
+            if (IsFinished)
+                return;
+
+            base.Update();
             if (IsFinished)
                 return;
 

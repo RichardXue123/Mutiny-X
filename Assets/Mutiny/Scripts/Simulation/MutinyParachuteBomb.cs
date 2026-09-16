@@ -36,8 +36,12 @@ namespace Mutiny.Simulation
             PhysicsBody.OnSimulationStep += AdvanceOriginalTick;
         }
 
-        private void Update()
+        protected override void Update()
         {
+            if (IsFinished)
+                return;
+
+            base.Update();
             if (IsFinished)
                 return;
 

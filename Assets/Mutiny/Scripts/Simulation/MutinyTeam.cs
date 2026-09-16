@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Mutiny.Diagnostics;
 using UnityEngine;
 
 namespace Mutiny.Simulation
@@ -48,13 +49,18 @@ namespace Mutiny.Simulation
             if (character != null && character.IsAlive && Characters.Contains(character))
             {
                 SelectedCharacter = character;
+                // Team.select resets Character.thrown in the original game.
+                SelectedCharacter.ClearSelfThrown("character selected");
                 SelectedCharacter.IsSelected = true;
+                MutinyDebugLog.Info("Team",
+                    $"T{TeamNumber} selected={character.name}/{character.CharacterType}", this);
                 Mutiny.Presentation.MutinyAudioManager.Instance?.PlayCharacterVoice(character.CharacterType);
                 OnCharacterSelected?.Invoke(SelectedCharacter);
             }
             else
             {
                 SelectedCharacter = null;
+                MutinyDebugLog.Info("Team", $"T{TeamNumber} selection cleared", this);
             }
         }
 
@@ -111,6 +117,8 @@ namespace Mutiny.Simulation
         public void StartTurn()
         {
             TotalTurnsTaken++;
+            MutinyDebugLog.Info("Team",
+                $"T{TeamNumber} start turn number={TotalTurnsTaken} ai={IsAiControlled} alive={AliveCount}", this);
 
             for (int i = 0; i < Characters.Count; i++)
             {
@@ -121,6 +129,7 @@ namespace Mutiny.Simulation
                     if (Characters[i].IsAlive && !Characters[i].HasAnyWeapon())
                         Characters[i].AddWeapon("cannonball");
                     Characters[i].ResetTurnActions();
+                    Characters[i].Evilness = 0f;
                 }
             }
 
@@ -131,11 +140,21 @@ namespace Mutiny.Simulation
 
         public void FinishTurn()
         {
+            MutinyDebugLog.Info("Team",
+                $"T{TeamNumber} finish turn selected={(SelectedCharacter == null ? "none" : SelectedCharacter.name)}", this);
             if (SelectedCharacter != null)
             {
+                SelectedCharacter.ClearSelfThrown("turn finished");
                 SelectedCharacter.IsSelected = false;
                 SelectedCharacter = null;
             }
+        }
+
+        public void ContinueSelectedCharacterAfterAction()
+        {
+            // Team.continueTurn calls select(selectedCharacter, true), which clears
+            // Character.thrown after the board has settled and before phase two.
+            SelectedCharacter?.ClearSelfThrown("continued turn");
         }
     }
 }

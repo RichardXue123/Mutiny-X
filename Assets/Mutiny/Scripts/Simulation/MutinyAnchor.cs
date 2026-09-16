@@ -68,10 +68,25 @@ namespace Mutiny.Simulation
             }
         }
 
-        private void Update()
+        protected override void Update()
         {
             if (IsFinished)
                 return;
+
+            base.Update();
+            if (IsFinished)
+                return;
+
+            if (IsFired && !m_HitBottom && PhysicsBody != null && PhysicsBody.IsInWater)
+            {
+                float waterY = PhysicsBody.WaterPixelY;
+                if (!float.IsInfinity(waterY) && PhysicsBody.State.Y > waterY + 48f)
+                {
+                    Finish();
+                    Destroy(gameObject, 0.2f);
+                    return;
+                }
+            }
 
             if (IsFired && m_HitBottom)
             {

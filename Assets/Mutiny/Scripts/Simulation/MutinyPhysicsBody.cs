@@ -20,6 +20,9 @@ namespace Mutiny.Simulation
         public event Action OnWallHit;
         public event Action OnRest;
         public event Action OnEnterWater;
+        public event Action OnBeforeSimulationStep;
+        public event Action OnAfterMotionStep;
+        public event Action OnWaterMotionAdjusted;
         public event Action OnSimulationStep;
 
         private float m_TimeAccumulator;
@@ -102,43 +105,67 @@ namespace Mutiny.Simulation
             {
                 m_TimeAccumulator -= MutinyPhysics.TimeStep;
                 steps++;
-
-                StepResult res = MutinyPhysics.Step(ref State, m_CachedTerrain, m_GridWidth, m_GridHeight);
-
-                // Water check (Flash Character.as / Solid.as behavior)
-                if (State.Y > WaterPixelY)
-                {
-                    if (!IsInWater)
-                    {
-                        IsInWater = true;
-                        OnEnterWater?.Invoke();
-                    }
-
-                    // Water resistance & buoyancy
-                    State.VelocityX *= 0.8f;
-                    State.VelocityY *= 0.8f;
-                    if (State.VelocityY > 1.5f)
-                    {
-                        State.VelocityY -= 4f;
-                        if (State.VelocityY < 1.5f)
-                            State.VelocityY = 1.5f;
-
-                        transform.Rotate(0f, 0f, -(State.VelocityX + State.VelocityY) * 4f);
-                    }
-                }
-
-                if (res.HitFloor)
-                    OnFloorLanded?.Invoke();
-                if (res.HitLeftWall || res.HitRightWall)
-                    OnWallHit?.Invoke();
-                if (res.IsAtRest)
-                    OnRest?.Invoke();
-                OnSimulationStep?.Invoke();
+                AdvanceSimulationTick();
             }
 
             if (SyncTransform)
             {
                 transform.position = MutinyPhysics.PixelToUnity(State.X, State.Y);
+            }
+        }
+
+        public StepResult AdvanceSimulationTick()
+        {
+            // Flash weapon advanceMotion overrides rotate before Solid.advanceMotion.
+            OnBeforeSimulationStep?.Invoke();
+
+            StepResult result = MutinyPhysics.Step(ref State, m_CachedTerrain, m_GridWidth, m_GridHeight);
+
+            // Solid.contact runs inside advanceMotion in Flash. Character floor
+            // correction therefore precedes Character.advance's airborne rotation.
+            if (result.HitFloor)
+                OnFloorLanded?.Invoke();
+            if (result.HitLeftWall || result.HitRightWall)
+                OnWallHit?.Invoke();
+            if (result.IsAtRest)
+                OnRest?.Invoke();
+
+            OnAfterMotionStep?.Invoke();
+            EvaluateWaterState();
+            OnSimulationStep?.Invoke();
+            return result;
+        }
+
+        public void EvaluateWaterState()
+        {
+            if (float.IsInfinity(WaterPixelY))
+            {
+                var levelRoot = FindAnyObjectByType<MutinyLevelRoot>();
+                if (levelRoot != null && levelRoot.WaterLevelY != 0f)
+                {
+                    WaterPixelY = -levelRoot.WaterLevelY * MutinyPhysics.PixelsPerUnit;
+                }
+            }
+
+            if (State.Y <= WaterPixelY)
+                return;
+
+            if (!IsInWater)
+            {
+                IsInWater = true;
+                OnEnterWater?.Invoke();
+            }
+
+            // Flash Character.advance: motion continues below the water after the
+            // one-shot crossing event, with drag and a capped downward velocity.
+            State.VelocityX *= 0.8f;
+            State.VelocityY *= 0.8f;
+            if (State.VelocityY > 1.5f)
+            {
+                State.VelocityY -= 4f;
+                if (State.VelocityY < 1.5f)
+                    State.VelocityY = 1.5f;
+                OnWaterMotionAdjusted?.Invoke();
             }
         }
 

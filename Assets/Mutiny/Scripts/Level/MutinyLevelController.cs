@@ -1,4 +1,5 @@
 using System;
+using Mutiny.Diagnostics;
 using UnityEngine;
 
 namespace Mutiny.Levels
@@ -78,6 +79,9 @@ namespace Mutiny.Levels
 
         public void RestartCurrentLevel()
         {
+            MutinyDebugLog.Info("Level",
+                $"restart requested level={CurrentLevelIndex} frame={Time.frameCount} currentRoot={(m_CurrentLevel != null ? m_CurrentLevel.name : "none")}",
+                this);
             LoadLevel(CurrentLevelIndex);
         }
 

@@ -39,8 +39,12 @@ namespace Mutiny.Simulation
             m_CurrentCountdown = CountdownTicks;
         }
 
-        private void Update()
+        protected override void Update()
         {
+            if (IsFinished)
+                return;
+
+            base.Update();
             if (IsFinished)
                 return;
 
