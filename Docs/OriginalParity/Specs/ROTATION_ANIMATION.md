@@ -27,6 +27,7 @@ Flash 正角度为顺时针，Unity Z 正角度为逆时针，因此 Unity 使�
 | ROT-03 | 角色在水下且进入 ROT-E02 的 Y 速度分支 | 使用水阻及钳制后的速度额外旋转 `-(velocityX + velocityY) * 4` 度 | `OnWaterMotionAdjusted` → `MutinyCharacter.AdvanceOriginalWaterRotationTick` |
 | ROT-04 | 已发射的 Banana/Dynamite/RumBottle/VoodooDoll/Boulder 开始一次物理 tick | 分别按 `-velocityX * 2/2.5` 旋转一次；与渲染帧率无关 | `MutinyPhysicsBody.OnBeforeSimulationStep` → `MutinyWeapon.AdvanceOriginalRotationTick` |
 | ROT-05 | CherryBomb 或其他没有原版公式的武器飞行 | 不施加通用 Transform 旋转 | `MutinyRotationRules.WeaponRotationDelta` |
+| ROT-06 | 角色因跳跃、爆炸、碰撞或落水而旋转 | 只旋转角色内部画面；characterOverlay 跟随位置并保持屏幕正向 | `MutinyCharacterOverlay.KeepOverlayUpright` |
 
 ## 回归用例
 
@@ -37,6 +38,7 @@ Flash 正角度为顺时针，Unity Z 正角度为逆时针，因此 Unity 使�
 | ROT-TC03 | 入水速度经 0.8 阻尼及 Y 钳制后，只由角色收到额外水中旋转事件。 | 待自动验证 |
 | ROT-TC04 | 五种有旋转公式的武器倍率分别为 2/2.5；CherryBomb 为 0；渲染 `Update` 不再改变整体角度。 | 待自动验证 |
 | ROT-TC05 | Unity Level 1 手动观察跳跃、爆炸击飞、墙/地面碰撞、落水以及五种武器飞行，与原版录像逐 tick 对照。 | 待 Play Mode / 原版运行对照 |
+| ROT-TC06 | 将生产角色 Transform 旋转 73° 并移动，驱动覆盖层刷新；断言 overlay 世界位置跟随角色且世界 Z 旋转为 0°。 | 自动断言已添加；Unity 待执行 |
 
 ## 已知结构差异
 

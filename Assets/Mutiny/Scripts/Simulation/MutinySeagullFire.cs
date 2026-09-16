@@ -1,0 +1,111 @@
+using Mutiny.Diagnostics;
+using UnityEngine;
+
+namespace Mutiny.Simulation
+{
+    [DisallowMultipleComponent]
+    [RequireComponent(typeof(SpriteRenderer))]
+    public sealed class MutinySeagullFire : MonoBehaviour
+    {
+        public const float OriginalExtent = 10f;
+        public const float OriginalWeight = 1f;
+        public const float ExplosionSize = 50f;
+        public const float ExplosionDamage = 50f;
+
+        private MutinySeagull m_Parent;
+        private MutinyCharacter m_Owner;
+        private MutinyPhysicsBody m_PhysicsBody;
+        private bool m_Ended;
+
+        public MutinyPhysicsBody PhysicsBody => m_PhysicsBody;
+
+        public static MutinySeagullFire Spawn(MutinySeagull parent, Vector2 position, float velocityX)
+        {
+            GameObject shotObject = new GameObject("SeagullFire");
+            shotObject.transform.position = MutinyPhysics.PixelToUnity(position.x, position.y);
+            MutinySeagullFire shot = shotObject.AddComponent<MutinySeagullFire>();
+            shot.Initialize(parent, position, velocityX);
+            return shot;
+        }
+
+        private void Awake()
+        {
+            SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+            renderer.sortingOrder = MutinyWeapon.WeaponSortingOrder + 1;
+            renderer.sprite = Resources.Load<Sprite>("Art/Weapons/SeagullFire/1");
+            m_PhysicsBody = gameObject.AddComponent<MutinyPhysicsBody>();
+            m_PhysicsBody.OnFloorLanded += ExplodeOnContact;
+            m_PhysicsBody.OnWallHit += ExplodeOnContact;
+            m_PhysicsBody.OnEnterWater += EndInWater;
+        }
+
+        private void Initialize(MutinySeagull parent, Vector2 position, float velocityX)
+        {
+            m_Parent = parent;
+            m_Owner = parent != null ? parent.Owner : null;
+            m_PhysicsBody.State = PhysicsBodyState.CreateDefault(position.x, position.y);
+            m_PhysicsBody.State.LeftExtent = OriginalExtent;
+            m_PhysicsBody.State.RightExtent = OriginalExtent;
+            m_PhysicsBody.State.TopExtent = OriginalExtent;
+            m_PhysicsBody.State.BottomExtent = OriginalExtent;
+            m_PhysicsBody.State.Weight = OriginalWeight;
+            m_PhysicsBody.State.HitsTiles = true;
+            m_PhysicsBody.SetVelocity(velocityX, 0f);
+
+            if (parent != null && parent.PhysicsBody != null)
+            {
+                parent.PhysicsBody.TryGetTerrain(out string[,] terrain, out int width, out int height);
+                m_PhysicsBody.SetTerrain(terrain, width, height);
+                m_PhysicsBody.WaterPixelY = parent.PhysicsBody.WaterPixelY;
+            }
+        }
+
+        private void ExplodeOnContact()
+        {
+            if (m_Ended)
+                return;
+
+            Vector2 position = new Vector2(m_PhysicsBody.State.X, m_PhysicsBody.State.Y);
+            // Seagull.as creates Explosion directly and contains no pop call. The
+            // dedicated poop sound was played when this projectile was spawned.
+            MutinyExplosion.Spawn(position, ExplosionSize, ExplosionDamage, m_Owner, playPopOnHit: false);
+            MutinyDebugLog.Info("Seagull", $"seagullFire impact pos=({position.x:F1},{position.y:F1})", this);
+            End();
+        }
+
+        private void EndInWater()
+        {
+            // The shot's custom advance destroys it below water without an explosion.
+            MutinyDebugLog.Info("Seagull", "seagullFire entered water without explosion", this);
+            End();
+        }
+
+        private void Update()
+        {
+            if (m_Ended || m_PhysicsBody == null)
+                return;
+
+            if (!float.IsInfinity(m_PhysicsBody.WaterPixelY) && m_PhysicsBody.State.Y > m_PhysicsBody.WaterPixelY)
+                EndInWater();
+        }
+
+        private void End()
+        {
+            if (m_Ended)
+                return;
+
+            m_Ended = true;
+            m_Parent?.EndShot(this);
+            Destroy(gameObject);
+        }
+
+        private void OnDestroy()
+        {
+            if (m_PhysicsBody == null)
+                return;
+            m_PhysicsBody.OnFloorLanded -= ExplodeOnContact;
+            m_PhysicsBody.OnWallHit -= ExplodeOnContact;
+            m_PhysicsBody.OnEnterWater -= EndInWater;
+        }
+    }
+}

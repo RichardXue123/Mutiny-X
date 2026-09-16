@@ -9,7 +9,9 @@ namespace Mutiny.Simulation
     [RequireComponent(typeof(SpriteRenderer))]
     public abstract class MutinyWeapon : MonoBehaviour
     {
-        public const int WeaponSortingOrder = 22;
+        // Dynamic Character-layer clips are created after all XML characters.
+        // Keep them above the largest initial character holder and below water.
+        public const int WeaponSortingOrder = 180;
 
         [Header("Weapon Identity")]
         public string WeaponType = "weapon";
@@ -78,12 +80,36 @@ namespace Mutiny.Simulation
             PhysicsBody.CacheLevelTerrain();
 
             PhysicsBody.OnFloorLanded += () => OnContact(CollisionSide.Floor);
+            PhysicsBody.OnCeilingHit += () => OnContact(CollisionSide.Ceiling);
             PhysicsBody.OnWallHit += () => OnContact(CollisionSide.Wall);
             PhysicsBody.OnEnterWater += HandleEnterWater;
             PhysicsBody.OnBeforeSimulationStep -= AdvanceOriginalRotationTick;
             PhysicsBody.OnBeforeSimulationStep += AdvanceOriginalRotationTick;
             MutinyDebugLog.Info("Weapon",
                 $"initialized type={WeaponType} owner={(Owner == null ? "none" : Owner.name)} waterY={PhysicsBody.WaterPixelY}", this);
+        }
+
+        // Character.equip in the Flash game creates the real weapon before the
+        // player starts pulling it.  Keep that instance fixed at the original
+        // equipment point until a weapon-specific commit method activates it.
+        public virtual void PrepareForEquip()
+        {
+            if (Owner == null || PhysicsBody == null)
+                return;
+
+            float yOffset = string.Equals(WeaponType, "boulder", StringComparison.OrdinalIgnoreCase)
+                ? -30f
+                : -10f;
+            Vector2 ownerPixels = Owner.PhysicsBody != null
+                ? new Vector2(Owner.PhysicsBody.State.X, Owner.PhysicsBody.State.Y)
+                : MutinyPhysics.UnityToPixel(Owner.transform.position);
+            PhysicsBody.State.X = ownerPixels.x;
+            PhysicsBody.State.Y = ownerPixels.y + yOffset;
+            PhysicsBody.SetVelocity(0f, 0f);
+            PhysicsBody.IsActive = false;
+            transform.position = MutinyPhysics.PixelToUnity(PhysicsBody.State.X, PhysicsBody.State.Y);
+            MutinyDebugLog.Info("Weapon",
+                $"equipped type={WeaponType} owner={Owner.name} pos=({PhysicsBody.State.X:F1},{PhysicsBody.State.Y:F1})", this);
         }
 
         public virtual void Fire(Vector2 velocityPx)
@@ -96,6 +122,7 @@ namespace Mutiny.Simulation
 
             IsFired = true;
             IsFinished = false;
+            PhysicsBody.IsActive = true;
             m_LifetimeTimer = 0f;
             m_WaterTimer = 0f;
 
@@ -135,6 +162,10 @@ namespace Mutiny.Simulation
         {
             // Base weapon contact handling (overridden by CherryBomb, Dynamite, etc.)
         }
+
+        // Most weapons rotate their root sprite.  Symbols with a non-rotating
+        // overlay can override this to rotate only their original child layer.
+        protected virtual Transform RotationTransform => transform;
 
         protected virtual void HandleEnterWater()
         {
@@ -205,7 +236,7 @@ namespace Mutiny.Simulation
             }
         }
 
-        private void AdvanceOriginalRotationTick()
+        protected void AdvanceOriginalRotationTick()
         {
             if (!IsFired || IsFinished || PhysicsBody == null)
                 return;
@@ -213,7 +244,7 @@ namespace Mutiny.Simulation
             float delta = MutinyRotationRules.WeaponMotionDelta(
                 WeaponType, PhysicsBody.State.VelocityX);
             if (!Mathf.Approximately(delta, 0f))
-                transform.Rotate(0f, 0f, delta);
+                RotationTransform?.Rotate(0f, 0f, delta);
         }
 
         public virtual void Finish()

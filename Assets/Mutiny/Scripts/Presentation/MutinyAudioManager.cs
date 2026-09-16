@@ -39,6 +39,10 @@ namespace Mutiny.Presentation
         private Dictionary<string, AudioClip> m_SfxClips = new Dictionary<string, AudioClip>(StringComparer.OrdinalIgnoreCase);
         private Dictionary<string, AudioClip> m_MusicClips = new Dictionary<string, AudioClip>(StringComparer.OrdinalIgnoreCase);
 
+        // Production diagnostics and parity tests observe actual resolved SFX here.
+        // The event is raised only when a loaded clip is about to be played.
+        public event Action<string> SfxPlayed;
+
         private void Awake()
         {
             if (s_Instance != null && s_Instance != this)
@@ -100,6 +104,7 @@ namespace Mutiny.Presentation
 
             if (m_SfxClips.TryGetValue(soundName, out AudioClip clip))
             {
+                SfxPlayed?.Invoke(soundName);
                 SfxSource.PlayOneShot(clip, SfxVolume * volumeScale);
             }
         }
@@ -142,6 +147,7 @@ namespace Mutiny.Presentation
         {
             SfxEnabled = !SfxEnabled;
             Mutiny.Persistence.MutinySaveSystem.SfxEnabled = SfxEnabled;
+            Debug.Log($"[MutinyAudio] HUD-CORNER-06 SFX={(SfxEnabled ? "on" : "off")}", this);
         }
 
         public void ToggleMusic()
@@ -150,12 +156,21 @@ namespace Mutiny.Presentation
             Mutiny.Persistence.MutinySaveSystem.MusicEnabled = MusicEnabled;
             if (!MusicEnabled && MusicSource != null)
             {
-                MusicSource.Pause();
+                // MusicController.turnOffMusic stops both Flash Sound instances. Do
+                // not pause: turning it back on restarts the current menu/game track.
+                MusicSource.Stop();
             }
             else if (MusicEnabled && MusicSource != null)
             {
-                MusicSource.UnPause();
+                if (MusicSource.clip != null)
+                {
+                    MusicSource.loop = true;
+                    MusicSource.volume = MusicVolume;
+                    MusicSource.Play();
+                }
             }
+
+            Debug.Log($"[MutinyAudio] HUD-CORNER-06 music={(MusicEnabled ? "on" : "off")} clip={(MusicSource != null && MusicSource.clip != null ? MusicSource.clip.name : "none")}", this);
         }
 
         public void SetSfxVolume(float vol)

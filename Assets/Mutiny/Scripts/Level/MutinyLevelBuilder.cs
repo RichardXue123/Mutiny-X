@@ -14,8 +14,18 @@ namespace Mutiny.Levels
         public const int BackgroundSortingOrder = -10;
         public const int ObjectSortingOrder = 0;
         public const int TerrainSortingOrder = 10;
+        // Clip.show() places each Character holder at characterLayer's next
+        // highest Flash depth. Reserve eight Unity orders for each holder: the
+        // body plus characterOverlay's five child levels, with one spare order.
         public const int CharacterSortingOrder = 20;
-        public const int WaterSortingOrder = 30;
+        public const int CharacterSortingStride = 8;
+        public const int CharacterOverlaySortingOffset = 1;
+        public const int WaterSortingOrder = 300;
+
+        public static int GetCharacterSortingOrder(int originalCreationIndex)
+        {
+            return CharacterSortingOrder + Mathf.Max(0, originalCreationIndex) * CharacterSortingStride;
+        }
 
         public static GameObject BuildLevel(MutinyLevelData levelData, Transform parent = null)
         {
@@ -243,7 +253,10 @@ namespace Mutiny.Levels
                 {
                     sr = charObj.AddComponent<SpriteRenderer>();
                 }
-                sr.sortingOrder = CharacterSortingOrder;
+                // TileSystem reads XML objects sequentially. Character's Solid
+                // constructor calls characterLayer.getNextHighestDepth(), so a
+                // later XML character must be entirely above an earlier one.
+                sr.sortingOrder = GetCharacterSortingOrder(charIndex);
                 if (charSprite != null)
                 {
                     sr.sprite = charSprite;

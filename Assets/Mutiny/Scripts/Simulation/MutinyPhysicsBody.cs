@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Mutiny.Levels;
 using UnityEngine;
 
@@ -13,10 +14,12 @@ namespace Mutiny.Simulation
         [Header("Settings")]
         public bool IsActive = true;
         public bool SyncTransform = true;
+        public bool ApplyWaterPhysics = true;
         public float WaterPixelY = float.PositiveInfinity;
         public bool IsInWater { get; private set; }
 
         public event Action OnFloorLanded;
+        public event Action OnCeilingHit;
         public event Action OnWallHit;
         public event Action OnRest;
         public event Action OnEnterWater;
@@ -87,6 +90,17 @@ namespace Mutiny.Simulation
             m_GridHeight = height;
         }
 
+        public bool TryGetTerrain(out string[,] terrain, out int width, out int height)
+        {
+            if (m_CachedTerrain == null)
+                CacheLevelTerrain();
+
+            terrain = m_CachedTerrain;
+            width = m_GridWidth;
+            height = m_GridHeight;
+            return terrain != null && width > 0 && height > 0;
+        }
+
         private void Update()
         {
             if (!IsActive)
@@ -119,12 +133,22 @@ namespace Mutiny.Simulation
             // Flash weapon advanceMotion overrides rotate before Solid.advanceMotion.
             OnBeforeSimulationStep?.Invoke();
 
-            StepResult result = MutinyPhysics.Step(ref State, m_CachedTerrain, m_GridWidth, m_GridHeight);
+            List<PhysicsBoxObstacle> boxes = null;
+            if (State.HitsBoxes)
+            {
+                // Controller.boxes contains both BoxWeapon subclasses. A barrel must
+                // therefore block tiles, characters, crates, and other barrels alike.
+                boxes = MutinyWoodenCrate.GetPhysicsObstacles(this);
+                boxes.AddRange(MutinyGunpowderBarrel.GetPhysicsObstacles(this));
+            }
+            StepResult result = MutinyPhysics.Step(ref State, m_CachedTerrain, m_GridWidth, m_GridHeight, boxes, this);
 
             // Solid.contact runs inside advanceMotion in Flash. Character floor
             // correction therefore precedes Character.advance's airborne rotation.
             if (result.HitFloor)
                 OnFloorLanded?.Invoke();
+            if (result.HitCeiling)
+                OnCeilingHit?.Invoke();
             if (result.HitLeftWall || result.HitRightWall)
                 OnWallHit?.Invoke();
             if (result.IsAtRest)
@@ -138,6 +162,9 @@ namespace Mutiny.Simulation
 
         public void EvaluateWaterState()
         {
+            if (!ApplyWaterPhysics)
+                return;
+
             if (float.IsInfinity(WaterPixelY))
             {
                 var levelRoot = FindAnyObjectByType<MutinyLevelRoot>();

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Mutiny.Diagnostics;
 using Mutiny.Levels;
 using Mutiny.Persistence;
 using Mutiny.Simulation;
@@ -16,11 +17,35 @@ namespace Mutiny.Presentation
         BlueOver
     }
 
+    public enum MutinyCornerToggleVisualState
+    {
+        OnUp,
+        OnOver,
+        OffUp,
+        OffOver
+    }
+
+    public enum MutinyGameEndPopupKind
+    {
+        None,
+        LevelComplete,
+        LevelFailed,
+        GameComplete
+    }
+
     [DisallowMultipleComponent]
     public sealed class MutinyGameHUD : MonoBehaviour
     {
         private const float OriginalUiTickSeconds = 1f / 25f;
         private const float OriginalPanelAlphaStep = 0.25f;
+        private const float OriginalPopupAlphaStep = 0.25f;
+        private const float OriginalCanvasWidth = 550f;
+        private const float OriginalCanvasHeight = 400f;
+        private const float OriginalMapHolderX = 20f;
+        private const float OriginalMapHolderY = 20f;
+        private const float OriginalTeam1OriginX = 1439f / 20f;
+        private const float OriginalTeam2OriginX = 9557f / 20f;
+        private const float OriginalTeamOriginY = 380f;
 
         public MutinyTurnManager TurnManager;
         public MutinyPlayerInput PlayerInput;
@@ -64,6 +89,22 @@ namespace Mutiny.Presentation
         private float m_ActionPanelAlpha = 0f;
         private float m_ActionPanelTickAccumulator = 0f;
         private bool m_ActionPanelContentsActive = false;
+        // IngamePopup has a distinct show flag and fade alpha. A fading-out popup
+        // still blocks CornerQuitButton, so it cannot be represented by alpha alone.
+        private bool m_QuitPromptShow;
+        private float m_QuitPromptAlpha;
+        private bool m_GameEndPopupShow;
+        private float m_GameEndPopupAlpha;
+        private MutinyGameEndPopupKind m_GameEndPopupKind;
+        private int m_GameEndTargetLevelScore;
+        private int m_GameEndTargetTotalScore;
+        private int m_GameEndDisplayedLevelScore;
+        private int m_GameEndDisplayedTotalScore;
+        private bool m_QuitHovered;
+        private bool m_MusicHovered;
+        private bool m_SfxHovered;
+        private Texture2D m_CornerButtonTexture;
+        private Texture2D m_CornerBackButtonTexture;
         private int m_Team1HealthFrame = 1;
         private int m_Team2HealthFrame = 1;
         private TextAsset m_CachedMapXml;
@@ -71,6 +112,12 @@ namespace Mutiny.Presentation
 
         public float ActionPanelAlpha => Mathf.Clamp01(m_ActionPanelAlpha);
         public bool ActionPanelContentsActive => m_ActionPanelContentsActive;
+        public bool IsQuitPromptVisible => m_QuitPromptAlpha > 0f;
+        public bool IsQuitPromptShowRequested => m_QuitPromptShow;
+        public float QuitPromptAlpha => Mathf.Clamp01(m_QuitPromptAlpha);
+        public bool IsGameEndPopupShowRequested => m_GameEndPopupShow;
+        public float GameEndPopupAlpha => Mathf.Clamp01(m_GameEndPopupAlpha);
+        public MutinyGameEndPopupKind GameEndPopupKind => m_GameEndPopupKind;
 
         private static readonly string[] OriginalWeaponOrder =
         {
@@ -93,7 +140,101 @@ namespace Mutiny.Presentation
                 m_ActionPanelTickAccumulator -= OriginalUiTickSeconds;
                 AdvanceActionPanelAnimationTick();
                 AdvanceTeamHealthAnimationTick();
+                AdvanceQuitPromptAnimationTick();
+                AdvanceGameEndPopupAnimationTick();
             }
+        }
+
+        private void AdvanceQuitPromptAnimationTick()
+        {
+            AdvanceQuitPromptState(m_QuitPromptShow, ref m_QuitPromptAlpha);
+        }
+
+        internal static void AdvanceQuitPromptState(bool show, ref float alpha)
+        {
+            alpha = show
+                ? Mathf.Min(1f, alpha + OriginalPopupAlphaStep)
+                : Mathf.Max(0f, alpha - OriginalPopupAlphaStep);
+        }
+
+        internal static void AdvanceGameEndPopupState(bool show, ref float alpha)
+        {
+            AdvanceQuitPromptState(show, ref alpha);
+        }
+
+        public static MutinyGameEndPopupKind ResolveGameEndPopupKind(GameOverResult result, int levelIndex)
+        {
+            if (result == GameOverResult.Team1Wins)
+                return levelIndex == MutinyFrontendController.SinglePlayerLevelCount
+                    ? MutinyGameEndPopupKind.GameComplete
+                    : MutinyGameEndPopupKind.LevelComplete;
+            if (result == GameOverResult.Team2Wins || result == GameOverResult.Draw)
+                return MutinyGameEndPopupKind.LevelFailed;
+            return MutinyGameEndPopupKind.None;
+        }
+
+        internal static int AdvanceDisplayedScore(int displayedScore, int targetScore, int step)
+        {
+            return displayedScore >= targetScore ? targetScore : Mathf.Min(targetScore, displayedScore + step);
+        }
+
+        private void AdvanceGameEndPopupAnimationTick()
+        {
+            SynchronizeGameEndPopup();
+            if (!m_GameEndPopupShow)
+                return;
+
+            AdvanceGameEndPopupState(m_GameEndPopupShow, ref m_GameEndPopupAlpha);
+            if (m_GameEndPopupKind == MutinyGameEndPopupKind.LevelComplete)
+            {
+                m_GameEndDisplayedLevelScore = AdvanceDisplayedScore(
+                    m_GameEndDisplayedLevelScore, m_GameEndTargetLevelScore, 287);
+                m_GameEndDisplayedTotalScore = AdvanceDisplayedScore(
+                    m_GameEndDisplayedTotalScore, m_GameEndTargetTotalScore, 347);
+            }
+            else if (m_GameEndPopupKind == MutinyGameEndPopupKind.LevelFailed ||
+                     m_GameEndPopupKind == MutinyGameEndPopupKind.GameComplete)
+            {
+                m_GameEndDisplayedTotalScore = AdvanceDisplayedScore(
+                    m_GameEndDisplayedTotalScore, m_GameEndTargetTotalScore, 347);
+            }
+        }
+
+        /// <summary>
+        /// Production GameOver observer.  It is public so the parity harness can
+        /// drive exactly the same result-to-popup boundary without faking HUD
+        /// state; Update invokes it before every original-rate popup tick.
+        /// </summary>
+        public bool SynchronizeGameEndPopup()
+        {
+            if (TurnManager == null || TurnManager.CurrentPhase != TurnPhase.GameOver || m_GameEndPopupShow)
+                return false;
+
+            OpenGameEndPopupForCurrentResult();
+            return m_GameEndPopupShow;
+        }
+
+        private void OpenGameEndPopupForCurrentResult()
+        {
+            int levelIndex = LevelController != null ? LevelController.CurrentLevelIndex : 1;
+            m_GameEndPopupKind = ResolveGameEndPopupKind(TurnManager.GameResult, levelIndex);
+            if (m_GameEndPopupKind == MutinyGameEndPopupKind.None)
+                return;
+
+            m_GameEndTargetLevelScore = LevelController != null ? LevelController.LastCompletedLevelScore : 0;
+            m_GameEndTargetTotalScore = LevelController != null ? LevelController.SinglePlayerScore : 0;
+            m_GameEndDisplayedLevelScore = 0;
+            m_GameEndDisplayedTotalScore = 0;
+            m_GameEndPopupShow = true;
+            MutinyDebugLog.Info("HUD",
+                $"END-POP open kind={m_GameEndPopupKind} level={levelIndex} levelScore={m_GameEndTargetLevelScore} totalScore={m_GameEndTargetTotalScore}", this);
+        }
+
+        public static MutinyCornerToggleVisualState ResolveCornerToggleVisualState(bool isEnabled, bool isHovered)
+        {
+            if (isEnabled)
+                return isHovered ? MutinyCornerToggleVisualState.OnOver : MutinyCornerToggleVisualState.OnUp;
+            return isHovered ? MutinyCornerToggleVisualState.OffOver : MutinyCornerToggleVisualState.OffUp;
         }
 
         private void AdvanceTeamHealthAnimationTick()
@@ -291,6 +432,11 @@ namespace Mutiny.Presentation
             m_Team1Panel = LoadPointTexture("UI/BattleHUD/team1_panel");
             m_Team2Panel = LoadPointTexture("UI/BattleHUD/team2_panel");
             m_Team1Portrait = LoadPointTexture("UI/BattleHUD/team1_portrait");
+            // These are exported original button backgrounds also used by the
+            // front-end. Text remains an independent bitmap-font child just as in
+            // the Flash MovieClip; it is not baked into one state image.
+            m_CornerButtonTexture = LoadPointTexture("UI/Frontend/button_small");
+            m_CornerBackButtonTexture = LoadPointTexture("UI/Frontend/button_back");
             m_OpponentPortraits = Resources.LoadAll<Texture2D>("UI/BattleHUD/Opponents");
             Array.Sort(m_OpponentPortraits, (a, b) => ParseNumericTextureName(a).CompareTo(ParseNumericTextureName(b)));
             for (int i = 0; i < OriginalWeaponOrder.Length; i++)
@@ -323,17 +469,205 @@ namespace Mutiny.Presentation
             InitStyles();
 
             DrawOriginalBattleHud();
+            DrawOriginalCornerControls();
             DrawBottomBar();
 
             if (TurnManager != null && TurnManager.CurrentPhase == TurnPhase.GameOver)
             {
-                DrawGameOverModal();
+                DrawOriginalGameEndPopup();
             }
 
             if (m_ShowLevelSelect)
             {
                 DrawLevelSelectModal();
             }
+        }
+
+        private void DrawOriginalCornerControls()
+        {
+            if (TurnManager == null || TurnManager.CurrentPhase == TurnPhase.GameOver)
+                return;
+
+            Matrix4x4 oldMatrix = GUI.matrix;
+            Color oldColor = GUI.color;
+            float scale = Mathf.Min(Screen.width / OriginalCanvasWidth, Screen.height / OriginalCanvasHeight);
+            float left = (Screen.width - OriginalCanvasWidth * scale) * 0.5f;
+            float top = (Screen.height - OriginalCanvasHeight * scale) * 0.5f;
+            GUI.matrix = Matrix4x4.TRS(new Vector3(left, top, 0f), Quaternion.identity,
+                new Vector3(scale, scale, 1f));
+
+            // Root timeline controls sit on the upper right of the 550 x 400 stage.
+            // The x/y positions are kept in the Flash logical coordinate system.
+            Rect sfxRect = new Rect(377f, 5f, 52f, 13f);
+            Rect musicRect = new Rect(431f, 5f, 57f, 13f);
+            Rect quitRect = new Rect(490f, 5f, 55f, 13f);
+            MutinyAudioManager audio = MutinyAudioManager.Instance;
+
+            bool sfxHovered = sfxRect.Contains(GetOriginalCanvasMousePosition());
+            bool musicHovered = musicRect.Contains(GetOriginalCanvasMousePosition());
+            bool quitHovered = quitRect.Contains(GetOriginalCanvasMousePosition());
+            UpdateCornerHover(ref m_SfxHovered, sfxHovered);
+            UpdateCornerHover(ref m_MusicHovered, musicHovered);
+            UpdateCornerHover(ref m_QuitHovered, quitHovered);
+
+            DrawCornerToggle(sfxRect, "sfx", audio != null && audio.SfxEnabled, sfxHovered);
+            DrawCornerToggle(musicRect, "music", audio != null && audio.MusicEnabled, musicHovered);
+            DrawCornerButton(quitRect, "quit level", quitHovered);
+
+            if (GUI.Button(sfxRect, GUIContent.none, GUIStyle.none))
+                ToggleCornerSfx();
+            if (GUI.Button(musicRect, GUIContent.none, GUIStyle.none))
+                ToggleCornerMusic();
+            if (GUI.Button(quitRect, GUIContent.none, GUIStyle.none))
+                OpenQuitPrompt();
+
+            if (m_QuitPromptAlpha > 0f)
+                DrawQuitPrompt();
+
+            GUI.color = oldColor;
+            GUI.matrix = oldMatrix;
+        }
+
+        private void UpdateCornerHover(ref bool previous, bool current)
+        {
+            if (current && !previous)
+                MutinyAudioManager.Instance?.PlaySFX("rollover");
+            previous = current;
+        }
+
+        private void DrawCornerToggle(Rect rect, string label, bool enabled, bool hovered)
+        {
+            MutinyCornerToggleVisualState state = ResolveCornerToggleVisualState(enabled, hovered);
+            DrawCornerButton(rect, $"{label}: {(enabled ? "on" : "off")}",
+                state == MutinyCornerToggleVisualState.OnOver || state == MutinyCornerToggleVisualState.OffOver);
+        }
+
+        private void DrawCornerButton(Rect rect, string label, bool hovered)
+        {
+            if (m_CornerButtonTexture != null)
+                GUI.DrawTexture(rect, m_CornerButtonTexture, ScaleMode.StretchToFill, true);
+            else
+            {
+                DrawSolidRect(rect, hovered ? new Color32(112, 60, 37, 255) : new Color32(57, 43, 34, 255));
+                DrawOutline(rect, Color.black);
+            }
+
+            MutinyBitmapFont.DrawDangleText(rect, label, hovered ? Color.yellow : Color.white,
+                TextAnchor.MiddleCenter, -1, 5);
+        }
+
+        private void DrawQuitPrompt()
+        {
+            Color prior = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01(m_QuitPromptAlpha));
+
+            // `popup` is a separate MovieClip. This panel is deliberately drawn over
+            // the stage and its buttons, matching the root timeline depth ordering.
+            Rect shadow = new Rect(159f, 124f, 232f, 114f);
+            DrawPopupSolid(new Rect(shadow.x + 2f, shadow.y + 2f, shadow.width, shadow.height), Color.black);
+            DrawPopupSolid(shadow, new Color32(51, 51, 51, 255));
+            DrawPopupOutline(shadow, new Color32(239, 49, 28, 255));
+            DrawPopupOutline(new Rect(shadow.x + 3f, shadow.y + 3f, shadow.width - 6f, shadow.height - 6f), Color.black);
+            MutinyBitmapFont.DrawPirateText(new Rect(shadow.x, shadow.y + 13f, shadow.width, 20f),
+                "quit level", false, true, -3);
+            MutinyBitmapFont.DrawDangleText(new Rect(shadow.x + 16f, shadow.y + 42f, shadow.width - 32f, 18f),
+                "are you sure you want to quit?", Color.white, TextAnchor.MiddleCenter, 0, 7);
+
+            Rect continueRect = new Rect(183f, 205f, 86f, 16f);
+            Rect backRect = new Rect(281f, 205f, 86f, 16f);
+            bool continueHovered = continueRect.Contains(GetOriginalCanvasMousePosition());
+            bool backHovered = backRect.Contains(GetOriginalCanvasMousePosition());
+            DrawPopupButton(continueRect, "continue", continueHovered);
+            DrawPopupButton(backRect, "back to menu", backHovered);
+
+            if (GUI.Button(continueRect, GUIContent.none, GUIStyle.none))
+                ContinueQuitPrompt();
+            if (GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+                BackToSinglePlayerMenu();
+
+            GUI.color = prior;
+        }
+
+        private void DrawPopupButton(Rect rect, string label, bool hovered)
+        {
+            if (m_CornerBackButtonTexture != null)
+                GUI.DrawTexture(rect, m_CornerBackButtonTexture, ScaleMode.StretchToFill, true);
+            else
+                DrawCornerButton(rect, label, hovered);
+            MutinyBitmapFont.DrawPirateText(rect, label, hovered, true, -3);
+        }
+
+        private void DrawPopupSolid(Rect rect, Color color)
+        {
+            Color previous = GUI.color;
+            GUI.color = new Color(color.r, color.g, color.b, color.a * Mathf.Clamp01(m_QuitPromptAlpha));
+            GUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill);
+            GUI.color = previous;
+        }
+
+        private void DrawPopupOutline(Rect rect, Color color)
+        {
+            DrawPopupSolid(new Rect(rect.x, rect.y, rect.width, 1f), color);
+            DrawPopupSolid(new Rect(rect.x, rect.yMax - 1f, rect.width, 1f), color);
+            DrawPopupSolid(new Rect(rect.x, rect.y, 1f, rect.height), color);
+            DrawPopupSolid(new Rect(rect.xMax - 1f, rect.y, 1f, rect.height), color);
+        }
+
+        private static Vector2 GetOriginalCanvasMousePosition()
+        {
+            Vector3 mouse = GUI.matrix.inverse.MultiplyPoint3x4(Event.current.mousePosition);
+            return new Vector2(mouse.x, mouse.y);
+        }
+
+        public bool OpenQuitPrompt()
+        {
+            if (m_QuitPromptShow || m_QuitPromptAlpha > 0f)
+                return false;
+
+            m_QuitPromptShow = true;
+            Debug.Log("[MutinyHUD] HUD-CORNER-01 quit prompt opened", this);
+            return true;
+        }
+
+        public bool ContinueQuitPrompt()
+        {
+            if (!m_QuitPromptShow && m_QuitPromptAlpha <= 0f)
+                return false;
+
+            m_QuitPromptShow = false;
+            Debug.Log("[MutinyHUD] HUD-CORNER-03 quit prompt continued", this);
+            return true;
+        }
+
+        public void ToggleCornerMusic()
+        {
+            MutinyAudioManager.Instance?.ToggleMusic();
+        }
+
+        public void ToggleCornerSfx()
+        {
+            MutinyAudioManager.Instance?.ToggleSFX();
+        }
+
+        public bool BackToSinglePlayerMenu()
+        {
+            MutinyFrontendController frontend = FindAnyObjectByType<MutinyFrontendController>();
+            if (frontend == null)
+            {
+                Debug.LogWarning("[MutinyHUD] HUD-CORNER-04 cannot return to level select: front-end controller was not found.", this);
+                return false;
+            }
+
+            bool returned = frontend.ReturnToSinglePlayerLevelSelect();
+            if (returned)
+            {
+                m_QuitPromptShow = false;
+                m_QuitPromptAlpha = 0f;
+                m_GameEndPopupShow = false;
+                m_GameEndPopupAlpha = 0f;
+                Debug.Log("[MutinyHUD] HUD-CORNER-04 back to single-player level select", this);
+            }
+            return returned;
         }
 
         private void DrawOriginalBattleHud()
@@ -360,21 +694,25 @@ namespace Mutiny.Presentation
 
         private void DrawOriginalTeamHealth()
         {
-            DrawSolidRect(new Rect(38f, 381f, 96f, 8f), new Color32(49, 49, 49, 255));
+            Rect team1HealthRect = ResolveOriginalTeam1HealthRect();
+            DrawSolidRect(team1HealthRect, new Color32(49, 49, 49, 255));
             float redWidth = Mathf.Clamp(m_Team1HealthFrame - 1, 0, 96);
             if (redWidth > 0f)
-                DrawSolidRect(new Rect(38f, 381f, redWidth, 8f), new Color32(255, 56, 41, 255));
+                DrawSolidRect(new Rect(team1HealthRect.x, team1HealthRect.y, redWidth, team1HealthRect.height),
+                    new Color32(255, 56, 41, 255));
             if (m_Team1Panel != null)
-                GUI.DrawTexture(new Rect(6f, 363f, 132f, 34f), m_Team1Panel, ScaleMode.StretchToFill, true);
+                GUI.DrawTexture(ResolveOriginalTeam1PanelRect(), m_Team1Panel, ScaleMode.StretchToFill, true);
             if (m_Team1Portrait != null)
-                GUI.DrawTexture(new Rect(13f, 370f, 22f, 21f), m_Team1Portrait, ScaleMode.StretchToFill, true);
+                GUI.DrawTexture(ResolveOriginalTeam1PortraitRect(), m_Team1Portrait, ScaleMode.StretchToFill, true);
 
-            DrawSolidRect(new Rect(416f, 381f, 96f, 8f), new Color32(49, 49, 49, 255));
+            Rect team2HealthRect = ResolveOriginalTeam2HealthRect();
+            DrawSolidRect(team2HealthRect, new Color32(49, 49, 49, 255));
             float blueWidth = Mathf.Clamp(m_Team2HealthFrame - 1, 0, 96);
             if (blueWidth > 0f)
-                DrawSolidRect(new Rect(512f - blueWidth, 381f, blueWidth, 8f), new Color32(51, 95, 255, 255));
+                DrawSolidRect(new Rect(team2HealthRect.xMax - blueWidth, team2HealthRect.y,
+                    blueWidth, team2HealthRect.height), new Color32(51, 95, 255, 255));
             if (m_Team2Panel != null)
-                GUI.DrawTexture(new Rect(412f, 363f, 132f, 34f), m_Team2Panel, ScaleMode.StretchToFill, true);
+                GUI.DrawTexture(ResolveOriginalTeam2PanelRect(), m_Team2Panel, ScaleMode.StretchToFill, true);
 
             int level = LevelController != null ? LevelController.CurrentLevelIndex : 1;
             if (m_OpponentPortraits.Length > 0)
@@ -382,10 +720,46 @@ namespace Mutiny.Presentation
                 int portraitIndex = Mathf.Clamp(level - 1, 0, m_OpponentPortraits.Length - 1);
                 if (m_OpponentPortraits[portraitIndex] != null)
                 {
-                    GUI.DrawTexture(new Rect(506f, 337f, 40f, 58f),
+                    GUI.DrawTexture(ResolveOriginalTeam2PortraitRect(),
                         m_OpponentPortraits[portraitIndex], ScaleMode.StretchToFill, true);
                 }
             }
+        }
+
+        public static Rect ResolveOriginalTeam1PanelRect()
+        {
+            return new Rect(OriginalTeam1OriginX - 65.95f, OriginalTeamOriginY - 16.95f, 132f, 34f);
+        }
+
+        public static Rect ResolveOriginalTeam2PanelRect()
+        {
+            return new Rect(OriginalTeam2OriginX - 65.95f, OriginalTeamOriginY - 16.95f, 132f, 34f);
+        }
+
+        public static Rect ResolveOriginalTeam1HealthRect()
+        {
+            // team1.item is at +28px; shape 811 spans x=-62..34, y=1..9.
+            return new Rect(OriginalTeam1OriginX + 28f - 62f, OriginalTeamOriginY + 1f, 96f, 8f);
+        }
+
+        public static Rect ResolveOriginalTeam2HealthRect()
+        {
+            // team2.item is at 0px and uses the same 96x8 shape.
+            return new Rect(OriginalTeam2OriginX - 62f, OriginalTeamOriginY + 1f, 96f, 8f);
+        }
+
+        public static Rect ResolveOriginalTeam1PortraitRect()
+        {
+            // Bitmap 1999 is registered at (-59,-10) inside team1.
+            return new Rect(OriginalTeam1OriginX - 59f, OriginalTeamOriginY - 10f, 22f, 21f);
+        }
+
+        public static Rect ResolveOriginalTeam2PortraitRect()
+        {
+            // opponent_image is at (+50,+1); the shared 40x58 frame canvas
+            // spans x=-22..18 and y=-44..14 around its registration point.
+            return new Rect(OriginalTeam2OriginX + 50f - 22f,
+                OriginalTeamOriginY + 1f - 44f, 40f, 58f);
         }
 
         private void DrawOriginalMap()
@@ -394,8 +768,8 @@ namespace Mutiny.Presentation
             if (level == null || level.Width <= 0 || level.Height <= 0)
                 return;
 
-            const float holderX = 20f;
-            const float holderY = 20f;
+            const float holderX = OriginalMapHolderX;
+            const float holderY = OriginalMapHolderY;
             const float dotSize = 3f;
             for (int x = -2; x < level.Width + 2; x++)
             {
@@ -425,13 +799,20 @@ namespace Mutiny.Presentation
             DrawMapTeam(TurnManager.Team1, new Color32(255, 56, 41, 255), holderX, holderY, level, dotSize);
             DrawMapTeam(TurnManager.Team2, new Color32(51, 95, 255, 255), holderX, holderY, level, dotSize);
 
-            float borderX = holderX - 7f;
-            float borderY = holderY - 7f;
-            float borderWidth = level.Width * dotSize + 14f;
-            float borderHeight = level.Height * dotSize + 14f;
-            DrawOutline(new Rect(borderX + 1f, borderY + 1f, borderWidth, borderHeight),
+            Rect borderRect = ResolveOriginalMapBorderRect(level.Width, level.Height);
+            DrawOutline(new Rect(borderRect.x + 1f, borderRect.y + 1f, borderRect.width, borderRect.height),
                 new Color32(0, 0, 0, 52));
-            DrawOutline(new Rect(borderX, borderY, borderWidth, borderHeight), Color.white);
+            DrawOutline(borderRect, Color.white);
+        }
+
+        public static Rect ResolveOriginalMapBorderRect(int levelWidth, int levelHeight)
+        {
+            // Map.reset keeps the content origin at mapHolder (20,20). Its four
+            // corner symbols make the visible frame extend exactly 10px beyond
+            // the level's 3px-per-tile area on every side.
+            return new Rect(OriginalMapHolderX - 10f, OriginalMapHolderY - 10f,
+                Mathf.Max(0, levelWidth) * 3f + 20f,
+                Mathf.Max(0, levelHeight) * 3f + 20f);
         }
 
         private static void DrawMapTeam(
@@ -853,75 +1234,139 @@ namespace Mutiny.Presentation
             }
         }
 
-        private void DrawGameOverModal()
+        private void DrawOriginalGameEndPopup()
         {
-            float modalWidth = 380;
-            float modalHeight = 220;
-            float left = (Screen.width - modalWidth) * 0.5f;
-            float top = (Screen.height - modalHeight) * 0.5f;
+            if (!m_GameEndPopupShow && m_GameEndPopupAlpha <= 0f)
+                SynchronizeGameEndPopup();
+            if (m_GameEndPopupKind == MutinyGameEndPopupKind.None)
+                return;
 
-            Rect rect = new Rect(left, top, modalWidth, modalHeight);
-            GUI.Box(rect, GUIContent.none, m_PanelStyle);
+            Matrix4x4 previousMatrix = GUI.matrix;
+            Color previousColor = GUI.color;
+            float scale = Mathf.Min(Screen.width / OriginalCanvasWidth, Screen.height / OriginalCanvasHeight);
+            float left = (Screen.width - OriginalCanvasWidth * scale) * 0.5f;
+            float top = (Screen.height - OriginalCanvasHeight * scale) * 0.5f;
+            GUI.matrix = Matrix4x4.TRS(new Vector3(left, top, 0f), Quaternion.identity,
+                new Vector3(scale, scale, 1f));
 
-            GUILayout.BeginArea(new Rect(left + 20, top + 15, modalWidth - 40, modalHeight - 30));
-            GUILayout.BeginVertical();
+            float alpha = Mathf.Clamp01(m_GameEndPopupAlpha);
+            GUI.color = new Color(1f, 1f, 1f, alpha);
 
-            string title = "GAME OVER";
-            Color titleColor = Color.white;
+            // DefineSprite_342_popup places its common dark panel below text fields
+            // and independent button clips.  Keep those children separate so score
+            // values and hover states are never baked into a static popup texture.
+            Rect panel = new Rect(100f, 80f, 350f, 170f);
+            DrawGameEndSolid(new Rect(panel.x + 2f, panel.y + 2f, panel.width, panel.height), Color.black, alpha);
+            DrawGameEndSolid(panel, new Color32(51, 51, 51, 255), alpha);
+            DrawGameEndOutline(panel, new Color32(239, 49, 28, 255), alpha);
+            DrawGameEndOutline(new Rect(panel.x + 3f, panel.y + 3f, panel.width - 6f, panel.height - 6f), Color.black, alpha);
 
-            if (TurnManager.GameResult == GameOverResult.Team1Wins)
+            bool complete = m_GameEndPopupKind == MutinyGameEndPopupKind.LevelComplete;
+            bool finalComplete = m_GameEndPopupKind == MutinyGameEndPopupKind.GameComplete;
+            string title = complete ? "level complete" : finalComplete ? "game complete" : "level failed";
+            MutinyBitmapFont.DrawPirateText(new Rect(panel.x, panel.y + 10f, panel.width, 28f), title, false, true, -3);
+
+            if (complete)
             {
-                title = "VICTORY!";
-                titleColor = new Color(1f, 0.85f, 0.2f);
+                DrawGameEndScoreRow(panel.x + 78f, panel.y + 53f, "level score", m_GameEndDisplayedLevelScore, alpha);
+                DrawGameEndScoreRow(panel.x + 78f, panel.y + 78f, "total score", m_GameEndDisplayedTotalScore, alpha);
+
+                Rect nextRect = new Rect(193f, 181f, 163f, 24f);
+                Rect backRect = new Rect(205f, 211f, 140f, 24f);
+                DrawGameEndButton(nextRect, "next level", m_CornerButtonTexture, alpha);
+                DrawGameEndButton(backRect, "back to title", m_CornerBackButtonTexture, alpha);
+                if (alpha > 0f && GUI.Button(nextRect, GUIContent.none, GUIStyle.none))
+                    AdvanceToNextLevel();
+                if (alpha > 0f && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+                    BackToSinglePlayerMenu();
             }
-            else if (TurnManager.GameResult == GameOverResult.Team2Wins)
+            else if (finalComplete)
             {
-                title = "DEFEAT";
-                titleColor = new Color(1f, 0.35f, 0.35f);
+                DrawGameEndScoreRow(panel.x + 78f, panel.y + 66f, "final score", m_GameEndDisplayedTotalScore, alpha);
+                Rect congratsRect = new Rect(193f, 181f, 163f, 24f);
+                DrawGameEndButton(congratsRect, "congratulations", m_CornerButtonTexture, alpha);
+                if (alpha > 0f && GUI.Button(congratsRect, GUIContent.none, GUIStyle.none))
+                    CompleteCampaignAndReturnToLevelSelect();
             }
             else
             {
-                title = "DRAW!";
-                titleColor = Color.yellow;
+                DrawGameEndScoreRow(panel.x + 78f, panel.y + 66f, "final score", m_GameEndDisplayedTotalScore, alpha);
+                Rect restartRect = new Rect(193f, 181f, 163f, 24f);
+                DrawGameEndButton(restartRect, "restart level", m_CornerButtonTexture, alpha);
+                if (alpha > 0f && GUI.Button(restartRect, GUIContent.none, GUIStyle.none))
+                    RestartFromGameEndPopup();
             }
 
-            var origColor = GUI.color;
-            GUI.color = titleColor;
-            GUILayout.Label(title, m_TitleStyle);
-            GUI.color = origColor;
+            GUI.color = previousColor;
+            GUI.matrix = previousMatrix;
+        }
 
-            GUILayout.Space(10);
+        private static void DrawGameEndScoreRow(float x, float y, string label, int score, float alpha)
+        {
+            Color textColor = new Color(1f, 1f, 1f, alpha);
+            MutinyBitmapFont.DrawDangleText(new Rect(x, y, 110f, 13f), label, textColor, TextAnchor.MiddleLeft, 0, 13);
+            MutinyBitmapFont.DrawDangleText(new Rect(x + 126f, y, 40f, 13f), score.ToString(), textColor, TextAnchor.MiddleRight, 0, 13);
+        }
 
-            string desc = TurnManager.GameResult == GameOverResult.Team1Wins
-                ? "Enemy crew has been sent to Davy Jones' locker!"
-                : "Your crew has been defeated!";
-            GUILayout.Label(desc, m_SubheaderStyle);
+        private void DrawGameEndButton(Rect rect, string label, Texture2D texture, float alpha)
+        {
+            bool hovered = rect.Contains(GetOriginalCanvasMousePosition());
+            Color previous = GUI.color;
+            GUI.color = new Color(1f, 1f, 1f, alpha);
+            if (texture != null)
+                GUI.DrawTexture(rect, texture, ScaleMode.StretchToFill, true);
+            else
+                DrawGameEndSolid(rect, hovered ? new Color32(112, 60, 37, 255) : new Color32(57, 43, 34, 255), alpha);
+            MutinyBitmapFont.DrawPirateText(rect, label, hovered, true, -3);
+            GUI.color = previous;
+        }
 
-            GUILayout.Space(20);
+        private static void DrawGameEndSolid(Rect rect, Color color, float alpha)
+        {
+            Color previous = GUI.color;
+            GUI.color = new Color(color.r, color.g, color.b, color.a * alpha);
+            GUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill);
+            GUI.color = previous;
+        }
 
-            if (TurnManager.GameResult == GameOverResult.Team1Wins)
-            {
-                if (GUILayout.Button("Next Level", m_ButtonStyle, GUILayout.Height(36)))
-                {
-                    LevelController?.LoadNextLevel();
-                }
-                GUILayout.Space(6);
-            }
+        private static void DrawGameEndOutline(Rect rect, Color color, float alpha)
+        {
+            DrawGameEndSolid(new Rect(rect.x, rect.y, rect.width, 1f), color, alpha);
+            DrawGameEndSolid(new Rect(rect.x, rect.yMax - 1f, rect.width, 1f), color, alpha);
+            DrawGameEndSolid(new Rect(rect.x, rect.y, 1f, rect.height), color, alpha);
+            DrawGameEndSolid(new Rect(rect.xMax - 1f, rect.y, 1f, rect.height), color, alpha);
+        }
 
-            if (GUILayout.Button("Restart Level", m_ButtonStyle, GUILayout.Height(32)))
-            {
-                LevelController?.RestartCurrentLevel();
-            }
+        public bool AdvanceToNextLevel()
+        {
+            if (!m_GameEndPopupShow || m_GameEndPopupKind != MutinyGameEndPopupKind.LevelComplete || LevelController == null)
+                return false;
 
-            GUILayout.Space(6);
+            int nextLevel = LevelController.CurrentLevelIndex + 1;
+            m_GameEndPopupShow = false;
+            m_GameEndPopupAlpha = 0f;
+            MutinyDebugLog.Info("HUD", $"END-POP-05 next level={nextLevel}", this);
+            LevelController.LoadLevel(nextLevel);
+            return true;
+        }
 
-            if (GUILayout.Button("Level Select", m_ButtonStyle, GUILayout.Height(28)))
-            {
-                m_ShowLevelSelect = true;
-            }
+        public bool RestartFromGameEndPopup()
+        {
+            if (!m_GameEndPopupShow || m_GameEndPopupKind != MutinyGameEndPopupKind.LevelFailed || LevelController == null)
+                return false;
 
-            GUILayout.EndVertical();
-            GUILayout.EndArea();
+            m_GameEndPopupShow = false;
+            m_GameEndPopupAlpha = 0f;
+            MutinyDebugLog.Info("HUD", $"END-POP-06 restart level={LevelController.CurrentLevelIndex}", this);
+            LevelController.RestartCurrentLevel();
+            return true;
+        }
+
+        private bool CompleteCampaignAndReturnToLevelSelect()
+        {
+            if (!m_GameEndPopupShow || m_GameEndPopupKind != MutinyGameEndPopupKind.GameComplete)
+                return false;
+            return BackToSinglePlayerMenu();
         }
 
         private void DrawLevelSelectModal()

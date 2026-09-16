@@ -54,5 +54,18 @@ namespace Mutiny.Presentation
             CurrentPage = MutinyFrontendPage.Gameplay;
             return true;
         }
+
+        /// <summary>
+        /// Original QuitGameButton sends a one-player game to level_select_1p,
+        /// rather than the title page.
+        /// </summary>
+        public bool ReturnToSinglePlayerLevelSelect()
+        {
+            if (CurrentPage != MutinyFrontendPage.Gameplay)
+                return false;
+
+            CurrentPage = MutinyFrontendPage.LevelSelect;
+            return true;
+        }
     }
 }

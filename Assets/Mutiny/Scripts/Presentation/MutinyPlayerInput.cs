@@ -10,7 +10,7 @@ namespace Mutiny.Presentation
     {
         CharacterSelection,
         ActionMenu,
-        WeaponArmed,
+        WeaponReady,
         Aiming
     }
 
@@ -32,6 +32,32 @@ namespace Mutiny.Presentation
             MutinyPlayerInteractionState.CharacterSelection;
         public bool IsActionMenuOpen => InteractionState == MutinyPlayerInteractionState.ActionMenu;
         public bool IsAiming => InteractionState == MutinyPlayerInteractionState.Aiming;
+        public bool IsWeaponReady => InteractionState == MutinyPlayerInteractionState.WeaponReady &&
+                                     EquippedWeapon != null;
+        public MutinyWeapon EquippedWeapon => m_EquippedWeapon != null && !m_EquippedWeapon.IsFired
+            ? m_EquippedWeapon
+            : null;
+        public MutinyVoodooDoll ArmedVoodooDoll => m_ArmedVoodooDoll != null && !m_ArmedVoodooDoll.IsFired
+            ? m_ArmedVoodooDoll
+            : null;
+        public MutinyWoodenCrate ArmedWoodenCrate => m_ArmedWoodenCrate != null &&
+                                                       m_ArmedWoodenCrate.HasPendingPlacement
+            ? m_ArmedWoodenCrate
+            : null;
+        public MutinyGunpowderBarrel ArmedGunpowderBarrel => m_ArmedGunpowderBarrel != null &&
+                                                               m_ArmedGunpowderBarrel.HasPendingPlacement
+            ? m_ArmedGunpowderBarrel
+            : null;
+        public MutinyAnchor ArmedAnchor => m_ArmedAnchor != null && !m_ArmedAnchor.IsFired
+            ? m_ArmedAnchor
+            : null;
+        public MutinyCannon ArmedCannon => m_ArmedCannon != null && !m_ArmedCannon.IsFinished
+            ? m_ArmedCannon
+            : null;
+        public MutinyPiecesOfEight ArmedPiecesOfEight => m_ArmedPiecesOfEight != null &&
+                                                          !m_ArmedPiecesOfEight.IsFinished
+            ? m_ArmedPiecesOfEight
+            : null;
 
         // Controller.dragging == character in the Flash game.  Aiming a weapon
         // drags its equipped weapon instead, so it deliberately does not hide the
@@ -53,6 +79,15 @@ namespace Mutiny.Presentation
         private MutinyTeam m_ObservedTeam;
         private bool m_WasTurnActive;
         private MutinyCharacter m_HoveredCharacter;
+        private MutinyVoodooDoll m_ArmedVoodooDoll;
+        private MutinyWoodenCrate m_ArmedWoodenCrate;
+        private MutinyAnchor m_ArmedAnchor;
+        private MutinyGunpowderBarrel m_ArmedGunpowderBarrel;
+        private MutinyCannon m_ArmedCannon;
+        private MutinyWeapon m_EquippedWeapon;
+        // Unlike ordinary projectiles, PiecesOfEight remains equipped and is reused
+        // for coin 2..8 while the turn stays in ActionExecuting.
+        private MutinyPiecesOfEight m_ArmedPiecesOfEight;
 
         private void Start()
         {
@@ -97,7 +132,19 @@ namespace Mutiny.Presentation
 
         private void Update()
         {
-            if (TurnManager == null || TurnManager.CurrentPhase != TurnPhase.TurnActive)
+            // popup is above the game root in the Flash timeline. While it is
+            // visible (including the four-tick fade) its buttons consume mouse
+            // input; character selection and aiming must not see the same click.
+            MutinyGameHUD hud = FindAnyObjectByType<MutinyGameHUD>();
+            if (hud != null && hud.IsQuitPromptVisible)
+            {
+                ClearHoveredCharacter();
+                if (InteractionState == MutinyPlayerInteractionState.Aiming)
+                    HideTrajectory();
+                return;
+            }
+
+            if (!CanProcessCurrentTurnInput())
             {
                 ClearHoveredCharacter();
                 m_WasTurnActive = false;
@@ -107,6 +154,8 @@ namespace Mutiny.Presentation
             }
 
             MutinyTeam currentTeam = TurnManager.CurrentTeam;
+            bool placingWoodenCrate = m_ArmedWoodenCrate != null && m_ArmedWoodenCrate.HasPendingPlacement;
+            bool awaitingPiecesOfEight = IsAwaitingPiecesOfEight();
             if (currentTeam != m_ObservedTeam)
                 ResetForCurrentTurn();
             else if (!m_WasTurnActive &&
@@ -114,10 +163,12 @@ namespace Mutiny.Presentation
                      !currentTeam.IsAiControlled &&
                      currentTeam.SelectedCharacter != null &&
                      currentTeam.SelectedCharacter.IsAlive &&
-                     InteractionState == MutinyPlayerInteractionState.WeaponArmed)
+                     InteractionState == MutinyPlayerInteractionState.WeaponReady &&
+                     !placingWoodenCrate && !awaitingPiecesOfEight)
             {
                 // A character throw leaves the weapon action available. Reopen the
                 // action menu when the board has settled.
+                ClearEquippedWeapon();
                 InteractionState = MutinyPlayerInteractionState.ActionMenu;
                 ActiveWeapon = null;
             }
@@ -137,14 +188,8 @@ namespace Mutiny.Presentation
             Vector3 mouseWorld = GetMouseWorldPosition(mouse.position.ReadValue());
             UpdateHoveredCharacter(currentTeam, mouseWorld);
 
-            if (mouse.rightButton.wasPressedThisFrame &&
-                (InteractionState == MutinyPlayerInteractionState.WeaponArmed ||
-                 InteractionState == MutinyPlayerInteractionState.Aiming))
-            {
-                CancelWeaponSelection();
-                return;
-            }
-
+            // A new turn begins without SelectedCharacter.  Character-selection
+            // input must therefore run before any code that requires one.
             if (InteractionState == MutinyPlayerInteractionState.CharacterSelection)
             {
                 if (mouse.leftButton.wasPressedThisFrame)
@@ -159,22 +204,64 @@ namespace Mutiny.Presentation
                 return;
             }
 
+            // CancelWeaponButton.onPress is consumed before TileSystem begins a
+            // drag or routes the global Banana/Seagull click.
+            if (mouse.leftButton.wasPressedThisFrame &&
+                TryCancelWeaponFromOverlay(selectedCharacter, mouseWorld))
+                return;
+
+            // Banana.fire clears the release click in Flash. A later left click is a
+            // global tile-system press that requests detonation even though the
+            // character has already spent CanShoot.
+            if (mouse.leftButton.wasPressedThisFrame &&
+                MutinySeagull.TryRequestPlayerShot(currentTeam))
+            {
+                return;
+            }
+
+            if (mouse.leftButton.wasPressedThisFrame &&
+                MutinyBanana.TryRequestPlayerDetonation(currentTeam))
+            {
+                return;
+            }
+
+            if (mouse.rightButton.wasPressedThisFrame &&
+                InteractionState == MutinyPlayerInteractionState.Aiming)
+            {
+                CancelCurrentAim();
+                return;
+            }
+
             if (InteractionState == MutinyPlayerInteractionState.ActionMenu)
                 return;
 
-            if (InteractionState == MutinyPlayerInteractionState.WeaponArmed &&
+            if (InteractionState == MutinyPlayerInteractionState.WeaponReady &&
                 mouse.leftButton.wasPressedThisFrame)
             {
+                if (TryHandleCannonInput(mouse, selectedCharacter, mouseWorld))
+                    return;
+
+                if (TrySelectVoodooTarget(currentTeam, selectedCharacter, mouseWorld))
+                    return;
+
                 if (TryActivateClickWeapon(selectedCharacter, mouseWorld))
                     return;
 
-                float distancePixels = PixelDistance(mouseWorld, selectedCharacter.transform.position);
+                Vector3 readyOrigin = GetReadyActionOrigin(selectedCharacter);
+                float distancePixels = PixelDistance(mouseWorld, readyOrigin);
                 if (distancePixels <= DragSelectionRadiusPixels && CanAim(selectedCharacter))
                 {
                     InteractionState = MutinyPlayerInteractionState.Aiming;
-                    m_AimOrigin = selectedCharacter.transform.position;
+                    m_AimOrigin = readyOrigin;
+                    MutinyDebugLog.Info("Input",
+                        $"aim started character={selectedCharacter.name} weapon={ActiveWeapon ?? "character"} origin={MutinyPhysics.UnityToPixel(m_AimOrigin)}", this);
                 }
             }
+
+            if (InteractionState == MutinyPlayerInteractionState.WeaponReady &&
+                ActiveWeapon != null && ActiveWeapon.Equals("cannon", System.StringComparison.OrdinalIgnoreCase) &&
+                TryHandleCannonInput(mouse, selectedCharacter, mouseWorld))
+                return;
 
             if (InteractionState != MutinyPlayerInteractionState.Aiming)
                 return;
@@ -192,25 +279,64 @@ namespace Mutiny.Presentation
                     return;
                 }
 
-                HideTrajectory();
-                InteractionState = MutinyPlayerInteractionState.WeaponArmed;
+                CancelCurrentAim();
             }
+        }
+
+        // Banana.advanceMotion checks Controller.tileSystem.mouseButtonDown after
+        // Weapon.fire has spent CanShoot. Its next click therefore must remain
+        // routable while this team is in ActionExecuting, unlike ordinary input.
+        private bool CanProcessCurrentTurnInput()
+        {
+            if (TurnManager == null)
+                return false;
+
+            bool placingWoodenCrate = m_ArmedWoodenCrate != null && m_ArmedWoodenCrate.HasPendingPlacement;
+            bool awaitingPiecesOfEight = IsAwaitingPiecesOfEight();
+            bool awaitingBananaDetonation = MutinyBanana.HasPlayerDetonatableBanana(TurnManager.CurrentTeam);
+            return TurnManager.CurrentPhase == TurnPhase.TurnActive || placingWoodenCrate ||
+                   awaitingPiecesOfEight || awaitingBananaDetonation;
+        }
+
+        // The verification entry invokes exactly the Update phase gate; it avoids
+        // only physical Mouse.current acquisition.
+        internal bool CanProcessCurrentTurnInputForVerification()
+        {
+            return CanProcessCurrentTurnInput();
         }
 
         public bool SelectWeapon(string weaponType)
         {
             MutinyCharacter character = GetHumanSelectedCharacter();
-            if (character == null || !character.CanShoot || !character.HasWeapon(weaponType))
+            if (character == null || !character.CanShoot || character.WeaponLocked || !character.HasWeapon(weaponType))
             {
                 MutinyDebugLog.Warning("Input",
                     $"weapon selection rejected weapon={weaponType} character={(character == null ? "none" : character.name)}", this);
                 return false;
             }
 
+            ClearEquippedWeapon();
             ActiveWeapon = weaponType;
-            InteractionState = MutinyPlayerInteractionState.WeaponArmed;
+            InteractionState = MutinyPlayerInteractionState.WeaponReady;
+            m_EquippedWeapon = MutinyWeaponFactory.SpawnWeapon(weaponType, character);
+            if (m_EquippedWeapon == null)
+            {
+                ActiveWeapon = null;
+                InteractionState = MutinyPlayerInteractionState.ActionMenu;
+                MutinyDebugLog.Warning("Input",
+                    $"weapon selection rejected because production instance could not be created weapon={weaponType}", this);
+                return false;
+            }
+
+            m_ArmedPiecesOfEight = m_EquippedWeapon as MutinyPiecesOfEight;
+            m_ArmedVoodooDoll = m_EquippedWeapon as MutinyVoodooDoll;
+            m_ArmedWoodenCrate = m_EquippedWeapon as MutinyWoodenCrate;
+            m_ArmedGunpowderBarrel = m_EquippedWeapon as MutinyGunpowderBarrel;
+            m_ArmedAnchor = m_EquippedWeapon as MutinyAnchor;
+            m_ArmedCannon = m_EquippedWeapon as MutinyCannon;
             HideTrajectory();
-            MutinyDebugLog.Info("Input", $"weapon selected character={character.name} weapon={weaponType}", this);
+            MutinyDebugLog.Info("Input",
+                $"weapon ready character={character.name} weapon={weaponType} instance={m_EquippedWeapon.name} pos=({m_EquippedWeapon.PhysicsBody.State.X:F1},{m_EquippedWeapon.PhysicsBody.State.Y:F1})", this);
             return true;
         }
 
@@ -225,7 +351,7 @@ namespace Mutiny.Presentation
             }
 
             ActiveWeapon = null;
-            InteractionState = MutinyPlayerInteractionState.WeaponArmed;
+            InteractionState = MutinyPlayerInteractionState.WeaponReady;
             HideTrajectory();
             MutinyDebugLog.Info("Input", $"character throw selected character={character.name}", this);
             return true;
@@ -234,6 +360,7 @@ namespace Mutiny.Presentation
         public void CancelWeaponSelection()
         {
             HideTrajectory();
+            ClearEquippedWeapon();
             ActiveWeapon = null;
 
             MutinyCharacter character = GetHumanSelectedCharacter();
@@ -243,6 +370,61 @@ namespace Mutiny.Presentation
             MutinyDebugLog.Info("Input", $"weapon selection cancelled nextState={InteractionState}", this);
         }
 
+        public bool ShouldShowCancelWeapon(MutinyCharacter character)
+        {
+            MutinyCharacter selected = GetHumanSelectedCharacter();
+            return character != null && character == selected && character.IsAlive &&
+                   !character.WeaponLocked &&
+                   InteractionState == MutinyPlayerInteractionState.WeaponReady &&
+                   EquippedWeapon != null && EquippedWeapon.Owner == character;
+        }
+
+        public bool TryCancelWeaponFromOverlay(MutinyCharacter character, Vector3 mouseWorld)
+        {
+            if (!ShouldShowCancelWeapon(character) || character.PhysicsBody == null)
+                return false;
+
+            Vector2 mousePixels = MutinyPhysics.UnityToPixel(mouseWorld);
+            float centerX = character.PhysicsBody.State.X;
+            float centerY = character.PhysicsBody.State.Y + 33f;
+            if (Mathf.Abs(mousePixels.x - centerX) > 10f || Mathf.Abs(mousePixels.y - centerY) > 10f)
+                return false;
+
+            MutinyDebugLog.Info("Input",
+                $"cancel weapon button pressed character={character.name} weapon={ActiveWeapon}", this);
+            CancelWeaponSelection();
+            return true;
+        }
+
+        public void CancelCurrentAim()
+        {
+            if (InteractionState != MutinyPlayerInteractionState.Aiming)
+                return;
+
+            HideTrajectory();
+            InteractionState = MutinyPlayerInteractionState.WeaponReady;
+            MutinyCharacter character = GetHumanSelectedCharacter();
+            if (character != null)
+                m_AimOrigin = GetReadyActionOrigin(character);
+            MutinyDebugLog.Info("Input",
+                $"current aim cancelled; weapon retained weapon={ActiveWeapon} instance={(m_EquippedWeapon == null ? "none" : m_EquippedWeapon.name)}", this);
+        }
+
+        internal bool TryCancelWeaponFromOverlayForVerification(MutinyCharacter character, Vector2 pixelPosition)
+        {
+            return TryCancelWeaponFromOverlay(character,
+                MutinyPhysics.PixelToUnity(pixelPosition.x, pixelPosition.y));
+        }
+
+        internal void BeginAimForVerification(MutinyCharacter character)
+        {
+            if (character == GetHumanSelectedCharacter() && CanAim(character))
+            {
+                m_AimOrigin = GetReadyActionOrigin(character);
+                InteractionState = MutinyPlayerInteractionState.Aiming;
+            }
+        }
+
         public void ReturnToCharacterSelection()
         {
             MutinyCharacter selected = GetHumanSelectedCharacter();
@@ -250,6 +432,7 @@ namespace Mutiny.Presentation
                 return;
 
             HideTrajectory();
+            ClearEquippedWeapon();
             ActiveWeapon = null;
             if (selected != null)
                 selected.IsSelected = false;
@@ -267,10 +450,11 @@ namespace Mutiny.Presentation
 
             HideTrajectory();
             ClearHoveredCharacter();
+            ClearEquippedWeapon();
             ActiveWeapon = null;
             character.CanThrow = false;
             character.CanShoot = false;
-            InteractionState = MutinyPlayerInteractionState.WeaponArmed;
+            InteractionState = MutinyPlayerInteractionState.WeaponReady;
             MutinyDebugLog.Info("Input", $"end turn character={character.name}", this);
             TurnManager.NotifyActionStarted();
         }
@@ -291,39 +475,200 @@ namespace Mutiny.Presentation
             MutinyDebugLog.Info("Input", $"character selected team=T{team.TeamNumber} character={clicked.name}", this);
         }
 
+        // Uses the same production selection method while bypassing only the
+        // physical Mouse.current read required by Update.
+        internal bool TrySelectCharacterForVerification(MutinyTeam team, Vector2 pixelPosition)
+        {
+            if (team == null)
+                return false;
+
+            MutinyCharacter before = team.SelectedCharacter;
+            TrySelectCharacter(team, MutinyPhysics.PixelToUnity(pixelPosition.x, pixelPosition.y));
+            return team.SelectedCharacter != null && team.SelectedCharacter != before &&
+                   InteractionState == MutinyPlayerInteractionState.ActionMenu;
+        }
+
         private bool CanAim(MutinyCharacter character)
         {
             if (string.IsNullOrEmpty(ActiveWeapon))
                 return character.CanThrow;
 
+            if (ActiveWeapon.Equals("piecesOfEight", System.StringComparison.OrdinalIgnoreCase))
+                return m_ArmedPiecesOfEight != null && m_ArmedPiecesOfEight.Owner == character &&
+                       m_ArmedPiecesOfEight.CanFireNextCoin;
+
+            if (ActiveWeapon.Equals("voodooDoll", System.StringComparison.OrdinalIgnoreCase))
+                return character.CanShoot && character.HasWeapon(ActiveWeapon) &&
+                       m_ArmedVoodooDoll != null && m_ArmedVoodooDoll.HasTarget;
+
             return character.CanShoot && character.HasWeapon(ActiveWeapon);
+        }
+
+        private bool TrySelectVoodooTarget(MutinyTeam team, MutinyCharacter owner, Vector3 mouseWorld)
+        {
+            if (!IsVoodooTargetSelection() || team == null || owner == null)
+                return false;
+
+            MutinyTeam enemyTeam = FindOpposingTeam(team);
+            MutinyCharacter target = FindCharacterNearPosition(mouseWorld, enemyTeam, CharacterSelectionRadiusPixels);
+            if (target == null)
+                return false;
+
+            if (!m_ArmedVoodooDoll.BindTarget(target))
+                return true;
+
+            ClearHoveredCharacter();
+            MutinyAudioManager.Instance?.PlaySFX("voodoo");
+            MutinyDebugLog.Info("Input", $"voodoo target selected owner={owner.name} target={target.name}", this);
+            return true;
+        }
+
+        internal bool TrySelectVoodooTargetForVerification(
+            MutinyTeam team, MutinyCharacter owner, Vector3 mouseWorld)
+        {
+            return TrySelectVoodooTarget(team, owner, mouseWorld);
+        }
+
+        private bool TryHandleCannonInput(Mouse mouse, MutinyCharacter character, Vector3 mouseWorld)
+        {
+            if (ActiveWeapon == null || !ActiveWeapon.Equals("cannon", System.StringComparison.OrdinalIgnoreCase) ||
+                m_ArmedCannon == null || m_ArmedCannon.Owner != character || m_ArmedCannon.IsFinished)
+                return false;
+
+            Vector2 mousePixels = MutinyPhysics.UnityToPixel(mouseWorld);
+            if (mouse.leftButton.wasPressedThisFrame)
+            {
+                // The source tests pin first, then the 20px cannon-body circle.
+                if (!m_ArmedCannon.TryBeginPinDrag(mousePixels))
+                    m_ArmedCannon.TryBeginBodyDrag(mousePixels);
+                return true;
+            }
+
+            if (mouse.leftButton.isPressed)
+            {
+                if (m_ArmedCannon.IsDraggingPin)
+                    m_ArmedCannon.DragPinTo(mousePixels);
+                else if (m_ArmedCannon.IsDraggingBody)
+                    m_ArmedCannon.DragBodyTo(mousePixels);
+                return true;
+            }
+
+            if (mouse.leftButton.wasReleasedThisFrame)
+            {
+                bool committed = m_ArmedCannon.ReleasePointer(TurnManager);
+                if (committed)
+                {
+                    // Character.weaponExpired removes Cannon only after its visual
+                    // lifecycle completes.  Unity inventory stores counts, so spend
+                    // this selected weapon exactly once when the pin commits.
+                    character.ConsumeWeapon("cannon");
+                    MutinyDebugLog.Info("Input", $"cannon pin committed character={character.name}", this);
+                }
+                return true;
+            }
+
+            return true; // A selected Cannon owns board input while it is placed.
         }
 
         private bool TryActivateClickWeapon(MutinyCharacter character, Vector3 mouseWorld)
         {
-            if (character == null || string.IsNullOrEmpty(ActiveWeapon) ||
-                !character.CanShoot || !character.HasWeapon(ActiveWeapon))
+            if (character == null || string.IsNullOrEmpty(ActiveWeapon))
                 return false;
+
+            if (ActiveWeapon.Equals("woodenCrate", System.StringComparison.OrdinalIgnoreCase))
+            {
+                if (m_ArmedWoodenCrate == null || m_ArmedWoodenCrate.Owner != character)
+                    return false;
+
+                bool firstPlacement = !m_ArmedWoodenCrate.HasPlacedAny;
+                bool placed = m_ArmedWoodenCrate.TryPlaceAt(MutinyPhysics.UnityToPixel(mouseWorld));
+                if (!placed)
+                    return true; // A placeable weapon consumes this stage click even when rejected.
+
+                if (firstPlacement)
+                {
+                    character.ConsumeWeapon(ActiveWeapon);
+                    MutinyDebugLog.Info("Input", $"wooden crate sequence committed character={character.name}", this);
+                }
+
+                if (!m_ArmedWoodenCrate.HasPendingPlacement)
+                {
+                    ActiveWeapon = null;
+                    m_EquippedWeapon = null;
+                    m_ArmedWoodenCrate = null;
+                    MutinyDebugLog.Info("Input", "wooden crate third placement committed", this);
+                }
+                InteractionState = MutinyPlayerInteractionState.WeaponReady;
+                return true;
+            }
+
+            if (ActiveWeapon.Equals("gunpowderBarrel", System.StringComparison.OrdinalIgnoreCase))
+            {
+                if (m_ArmedGunpowderBarrel == null || m_ArmedGunpowderBarrel.Owner != character)
+                    return false;
+                bool first = !m_ArmedGunpowderBarrel.HasPlacedAny;
+                if (!m_ArmedGunpowderBarrel.TryPlaceAt(MutinyPhysics.UnityToPixel(mouseWorld)))
+                    return true;
+                if (first)
+                {
+                    // TryPlaceAt commits the production turn exactly once, matching
+                    // BoxWeapon.place. Input owns only inventory consumption.
+                    character.ConsumeWeapon(ActiveWeapon);
+                    MutinyDebugLog.Info("Input", $"gunpowder barrel sequence committed character={character.name}", this);
+                }
+                if (!m_ArmedGunpowderBarrel.HasPendingPlacement)
+                {
+                    ActiveWeapon = null;
+                    m_EquippedWeapon = null;
+                    m_ArmedGunpowderBarrel = null;
+                    MutinyDebugLog.Info("Input", "gunpowder barrel second placement committed", this);
+                }
+                InteractionState = MutinyPlayerInteractionState.WeaponReady;
+                return true;
+            }
 
             if (ActiveWeapon.Equals("anchor", System.StringComparison.OrdinalIgnoreCase))
             {
-                MutinyWeapon weapon = MutinyWeaponFactory.SpawnWeapon(ActiveWeapon, character);
-                if (weapon is MutinyAnchor anchor)
+                if (m_ArmedAnchor == null || m_ArmedAnchor.Owner != character)
+                    return false;
+
+                if (!m_ArmedAnchor.DropAt(MutinyPhysics.UnityToPixel(mouseWorld).x))
+                    return true;
+
+                character.ConsumeWeapon(ActiveWeapon);
+                TurnManager?.NotifyActionStarted();
+                MutinyDebugLog.Info("Input", $"anchor drop committed character={character.name} x={m_ArmedAnchor.PhysicsBody.State.X:F1}", this);
+                ActiveWeapon = null;
+                m_EquippedWeapon = null;
+                m_ArmedAnchor = null;
+                InteractionState = MutinyPlayerInteractionState.WeaponReady;
+                return true;
+            }
+
+            if (!character.CanShoot || !character.HasWeapon(ActiveWeapon))
+                return false;
+
+            if (ActiveWeapon.Equals("seagull", System.StringComparison.OrdinalIgnoreCase))
+            {
+                if (m_EquippedWeapon is MutinySeagull seagull && seagull.Owner == character)
                 {
-                    anchor.DropAt(MutinyPhysics.UnityToPixel(mouseWorld).x);
+                    // Seagull.place(-300, content._ymouse): this first press picks
+                    // the route height; later presses are consumed by the live bird.
+                    seagull.PlaceAtFlightHeight(MutinyPhysics.UnityToPixel(mouseWorld).y);
                     character.ConsumeWeapon(ActiveWeapon);
                     character.CanShoot = false;
                     character.CanThrow = false;
                     TurnManager.NotifyActionStarted();
+                    m_EquippedWeapon = null;
                     ActiveWeapon = null;
-                    InteractionState = MutinyPlayerInteractionState.WeaponArmed;
+                InteractionState = MutinyPlayerInteractionState.WeaponReady;
+                    MutinyDebugLog.Info("Input", $"seagull path placed y={seagull.FlightY:F1}", this);
                     return true;
                 }
             }
             else if (ActiveWeapon.Equals("tidalWave", System.StringComparison.OrdinalIgnoreCase))
             {
-                MutinyWeapon weapon = MutinyWeaponFactory.SpawnWeapon(ActiveWeapon, character);
-                if (weapon is MutinyTidalWave tidalWave)
+                if (m_EquippedWeapon is MutinyTidalWave tidalWave && tidalWave.Owner == character)
                 {
                     MutinyLevelRoot root = FindAnyObjectByType<MutinyLevelRoot>();
                     float waterPixelY = root != null
@@ -334,13 +679,35 @@ namespace Mutiny.Presentation
                     character.CanShoot = false;
                     character.CanThrow = false;
                     TurnManager.NotifyActionStarted();
+                    m_EquippedWeapon = null;
                     ActiveWeapon = null;
-                    InteractionState = MutinyPlayerInteractionState.WeaponArmed;
+                InteractionState = MutinyPlayerInteractionState.WeaponReady;
                     return true;
                 }
             }
 
             return false;
+        }
+
+        // Verification invokes the same click-weapon production route as Update;
+        // only Mouse.current acquisition is omitted.
+        internal bool TryActivateClickWeaponForVerification(MutinyCharacter character, Vector2 pixelPosition)
+        {
+            return TryActivateClickWeapon(character, MutinyPhysics.PixelToUnity(pixelPosition.x, pixelPosition.y));
+        }
+
+        // Verification invokes the same generic release path as Update; only the
+        // physical Mouse press/hold/release events are omitted.
+        internal bool TryLaunchWeaponForVerification(
+            MutinyCharacter character, Vector2 startPixels, Vector2 releasePixels)
+        {
+            if (character == null || character != GetHumanSelectedCharacter() ||
+                string.IsNullOrEmpty(ActiveWeapon) || !CanLaunchActiveWeapon(character))
+                return false;
+
+            m_AimOrigin = MutinyPhysics.PixelToUnity(startPixels.x, startPixels.y);
+            Launch(character, MutinyPhysics.PixelToUnity(releasePixels.x, releasePixels.y));
+            return true;
         }
 
         private void ShowTrajectory(Vector3 mouseWorld)
@@ -360,7 +727,8 @@ namespace Mutiny.Presentation
                 m_GridWidth,
                 m_GridHeight,
                 MutinyWeaponFactory.GetTwangMaxForce(ActiveWeapon),
-                MutinyWeaponFactory.GetPredictionWeight(ActiveWeapon));
+                MutinyWeaponFactory.GetPredictionWeight(ActiveWeapon),
+                ActiveWeapon);
         }
 
         private void Launch(MutinyCharacter character, Vector3 releaseWorldPosition)
@@ -368,21 +736,71 @@ namespace Mutiny.Presentation
             Vector2 startPixels = MutinyPhysics.UnityToPixel(m_AimOrigin);
             Vector2 dragPixels = MutinyPhysics.UnityToPixel(releaseWorldPosition);
 
+            if (!string.IsNullOrEmpty(ActiveWeapon) &&
+                ActiveWeapon.Equals("piecesOfEight", System.StringComparison.OrdinalIgnoreCase) &&
+                m_ArmedPiecesOfEight != null && m_ArmedPiecesOfEight.Owner == character &&
+                m_ArmedPiecesOfEight.CanFireNextCoin)
+            {
+                bool firstCoin = m_ArmedPiecesOfEight.TimesFired == 0;
+                m_ArmedPiecesOfEight.Twang(startPixels, dragPixels);
+                if (m_ArmedPiecesOfEight.IsFired && firstCoin)
+                    character.ConsumeWeapon(ActiveWeapon);
+                MutinyDebugLog.Info("Input",
+                    $"piecesOfEight launched character={character.name} coin={m_ArmedPiecesOfEight.TimesFired + 1}/{MutinyPiecesOfEight.TotalCoins} first={firstCoin}", this);
+                InteractionState = MutinyPlayerInteractionState.WeaponReady;
+                return;
+            }
+
             if (!string.IsNullOrEmpty(ActiveWeapon) && character.HasWeapon(ActiveWeapon) && character.CanShoot)
             {
-                MutinyWeaponFactory.SpawnAndLaunch(ActiveWeapon, character, startPixels, dragPixels);
+                if (ActiveWeapon.Equals("voodooDoll", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    MutinyVoodooDoll doll = m_ArmedVoodooDoll;
+                    if (doll != null && doll.HasTarget)
+                    {
+                        doll.Twang(startPixels, dragPixels);
+                        if (doll.IsFired)
+                        {
+                            character.ConsumeWeapon(ActiveWeapon);
+                            MutinyDebugLog.Info("Input",
+                                $"voodoo launched character={character.name} target={doll.TargetCharacter.name} start={startPixels} drag={dragPixels}", this);
+                            m_EquippedWeapon = null;
+                            m_ArmedVoodooDoll = null;
+                            ActiveWeapon = null;
+                        }
+                    }
+                InteractionState = MutinyPlayerInteractionState.WeaponReady;
+                    return;
+                }
+
+                string launchedWeaponType = ActiveWeapon;
+                MutinyWeapon weapon = m_EquippedWeapon;
+                if (weapon == null || weapon.Owner != character || weapon.IsFired)
+                {
+                    MutinyDebugLog.Warning("Input",
+                        $"launch rejected because equipped instance is missing weapon={launchedWeaponType}", this);
+                    InteractionState = MutinyPlayerInteractionState.WeaponReady;
+                    return;
+                }
+
+                weapon.Twang(startPixels, dragPixels);
+                if (!weapon.IsFired)
+                    return;
+                character.ConsumeWeapon(launchedWeaponType);
+                MutinyAudioManager.Instance?.PlaySFX("click");
                 MutinyDebugLog.Info("Input",
-                    $"weapon launched character={character.name} weapon={ActiveWeapon} start={startPixels} drag={dragPixels}", this);
+                    $"equipped weapon launched character={character.name} weapon={launchedWeaponType} instance={weapon.name} start={startPixels} drag={dragPixels}", this);
+                m_EquippedWeapon = null;
+                ActiveWeapon = null;
                 character.CanShoot = false;
                 character.CanThrow = false;
-                TurnManager.NotifyActionStarted();
             }
             else if (string.IsNullOrEmpty(ActiveWeapon) && character.CanThrow)
             {
                 TryCommitCharacterThrow(character, startPixels, dragPixels);
             }
 
-            InteractionState = MutinyPlayerInteractionState.WeaponArmed;
+            InteractionState = MutinyPlayerInteractionState.WeaponReady;
         }
 
         internal bool TryCommitCharacterThrow(
@@ -395,7 +813,7 @@ namespace Mutiny.Presentation
             if (body == null)
             {
                 Debug.LogError($"[MutinyPlayerInput] {character.name} has no physics body.", character);
-                InteractionState = MutinyPlayerInteractionState.WeaponArmed;
+                InteractionState = MutinyPlayerInteractionState.WeaponReady;
                 return false;
             }
 
@@ -403,16 +821,16 @@ namespace Mutiny.Presentation
             character.MarkSelfThrown("player input");
             character.CanThrow = false;
             MutinyDebugLog.Info("Input",
-                $"character throw committed character={character.name} start={startPixels} drag={dragPixels}", this);
+                $"character throw committed character={character.name} start={startPixels} drag={dragPixels}; original Character.twang has no direct SFX", this);
             TurnManager.NotifyActionStarted();
-            MutinyAudioManager.Instance?.PlaySFX("click");
-            InteractionState = MutinyPlayerInteractionState.WeaponArmed;
+            InteractionState = MutinyPlayerInteractionState.WeaponReady;
             return true;
         }
 
         private void ResetForCurrentTurn()
         {
             HideTrajectory();
+            ClearEquippedWeapon();
             m_ObservedTeam = TurnManager != null ? TurnManager.CurrentTeam : null;
             m_WasTurnActive = TurnManager != null && TurnManager.CurrentPhase == TurnPhase.TurnActive;
             ClearHoveredCharacter();
@@ -426,7 +844,8 @@ namespace Mutiny.Presentation
 
         private MutinyCharacter GetHumanSelectedCharacter()
         {
-            if (TurnManager == null || TurnManager.CurrentPhase != TurnPhase.TurnActive)
+            if (TurnManager == null ||
+                (TurnManager.CurrentPhase != TurnPhase.TurnActive && !IsAwaitingPiecesOfEight()))
                 return null;
 
             MutinyTeam team = TurnManager.CurrentTeam;
@@ -443,11 +862,24 @@ namespace Mutiny.Presentation
                 TrajectoryRenderer.HideTrajectory();
         }
 
+        private Vector3 GetReadyActionOrigin(MutinyCharacter character)
+        {
+            MutinyWeapon equipped = EquippedWeapon;
+            if (!string.IsNullOrEmpty(ActiveWeapon) && equipped != null && equipped.PhysicsBody != null)
+            {
+                return MutinyPhysics.PixelToUnity(
+                    equipped.PhysicsBody.State.X, equipped.PhysicsBody.State.Y);
+            }
+            return character != null ? character.transform.position : Vector3.zero;
+        }
+
         private void UpdateHoveredCharacter(MutinyTeam team, Vector3 mouseWorld)
         {
-            MutinyCharacter hovered = InteractionState == MutinyPlayerInteractionState.CharacterSelection
-                ? FindCharacterNearPosition(mouseWorld, team, CharacterSelectionRadiusPixels)
-                : null;
+            MutinyCharacter hovered = null;
+            if (InteractionState == MutinyPlayerInteractionState.CharacterSelection)
+                hovered = FindCharacterNearPosition(mouseWorld, team, CharacterSelectionRadiusPixels);
+            else if (IsVoodooTargetSelection())
+                hovered = FindCharacterNearPosition(mouseWorld, FindOpposingTeam(team), CharacterSelectionRadiusPixels);
 
             if (hovered == m_HoveredCharacter)
                 return;
@@ -488,6 +920,96 @@ namespace Mutiny.Presentation
             }
 
             return closest;
+        }
+
+        private bool IsAwaitingPiecesOfEight()
+        {
+            return m_ArmedPiecesOfEight != null && m_ArmedPiecesOfEight.IsAwaitingNextCoin &&
+                   TurnManager != null && TurnManager.CurrentTeam != null &&
+                   TurnManager.CurrentTeam.SelectedCharacter == m_ArmedPiecesOfEight.Owner;
+        }
+
+        private bool IsPiecesOfEightSequenceLocked()
+        {
+            return m_ArmedPiecesOfEight != null && m_ArmedPiecesOfEight.IsAwaitingNextCoin;
+        }
+
+        private bool CanLaunchActiveWeapon(MutinyCharacter character)
+        {
+            if (ActiveWeapon != null && ActiveWeapon.Equals("piecesOfEight", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return m_ArmedPiecesOfEight != null && m_ArmedPiecesOfEight.Owner == character &&
+                       m_ArmedPiecesOfEight.CanFireNextCoin;
+            }
+            return character.CanShoot && character.HasWeapon(ActiveWeapon);
+        }
+
+        private bool IsVoodooTargetSelection()
+        {
+            return InteractionState == MutinyPlayerInteractionState.WeaponReady &&
+                   ActiveWeapon != null &&
+                   ActiveWeapon.Equals("voodooDoll", System.StringComparison.OrdinalIgnoreCase) &&
+                   m_ArmedVoodooDoll != null && !m_ArmedVoodooDoll.IsFired &&
+                   !m_ArmedVoodooDoll.HasTarget;
+        }
+
+        private void ClearEquippedWeapon()
+        {
+            MutinyWeapon equipped = m_EquippedWeapon;
+            if (equipped == null)
+                equipped = m_ArmedPiecesOfEight != null ? m_ArmedPiecesOfEight :
+                    m_ArmedVoodooDoll != null ? m_ArmedVoodooDoll :
+                    m_ArmedWoodenCrate != null ? m_ArmedWoodenCrate :
+                    m_ArmedGunpowderBarrel != null ? m_ArmedGunpowderBarrel :
+                    m_ArmedAnchor != null ? m_ArmedAnchor : m_ArmedCannon;
+
+            bool committed = equipped != null && equipped.IsFired;
+            if (equipped is MutinyWoodenCrate crate)
+                committed |= crate.HasPlacedAny;
+            if (equipped is MutinyGunpowderBarrel barrel)
+                committed |= barrel.HasPlacedAny;
+            if (equipped is MutinyPiecesOfEight pieces)
+                committed |= pieces.TimesFired > 0;
+
+            if (equipped != null && !committed)
+            {
+                MutinyDebugLog.Info("Input",
+                    $"unequipped pending weapon={equipped.WeaponType} instance={equipped.name}", this);
+                if (Application.isPlaying)
+                    Destroy(equipped.gameObject);
+                else
+                    DestroyImmediate(equipped.gameObject);
+            }
+
+            m_EquippedWeapon = null;
+            m_ArmedPiecesOfEight = null;
+            m_ArmedVoodooDoll = null;
+            m_ArmedWoodenCrate = null;
+            m_ArmedGunpowderBarrel = null;
+            m_ArmedAnchor = null;
+            m_ArmedCannon = null;
+        }
+
+        private MutinyTeam FindOpposingTeam(MutinyTeam team)
+        {
+            if (team == null)
+                return null;
+
+            if (TurnManager != null)
+            {
+                if (TurnManager.Team1 == team && TurnManager.Team2 != null)
+                    return TurnManager.Team2;
+                if (TurnManager.Team2 == team && TurnManager.Team1 != null)
+                    return TurnManager.Team1;
+            }
+
+            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>();
+            for (int i = 0; i < teams.Length; i++)
+            {
+                if (teams[i] != null && teams[i] != team && teams[i].TeamNumber != team.TeamNumber)
+                    return teams[i];
+            }
+            return null;
         }
 
         private static float PixelDistance(Vector3 first, Vector3 second)

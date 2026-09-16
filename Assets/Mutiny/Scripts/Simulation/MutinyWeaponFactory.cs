@@ -41,6 +41,8 @@ namespace Mutiny.Simulation
                 weapon = go.AddComponent<MutinyBanana>();
             else if (norm.Equals("cannonball", StringComparison.OrdinalIgnoreCase))
                 weapon = go.AddComponent<MutinyCannonball>();
+            else if (norm.Equals("cannon", StringComparison.OrdinalIgnoreCase))
+                weapon = go.AddComponent<MutinyCannon>();
             else if (norm.Equals("boulder", StringComparison.OrdinalIgnoreCase))
                 weapon = go.AddComponent<MutinyBoulder>();
             else if (norm.Equals("gunpowderBarrel", StringComparison.OrdinalIgnoreCase))
@@ -71,6 +73,7 @@ namespace Mutiny.Simulation
             }
 
             weapon.Initialize(owner);
+            weapon.PrepareForEquip();
             return weapon;
         }
 

@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using Mutiny.Diagnostics;
+using Mutiny.Presentation;
 using UnityEngine;
 
 namespace Mutiny.Simulation
@@ -5,6 +8,10 @@ namespace Mutiny.Simulation
     [DisallowMultipleComponent]
     public sealed class MutinyRumBottle : MutinyWeapon
     {
+        private const int OriginalFrameCount = 12;
+        private readonly List<Sprite> m_Frames = new List<Sprite>(OriginalFrameCount);
+        private int m_CurrentFrame;
+
         protected override void Awake()
         {
             WeaponType = "rumBottle";
@@ -16,29 +23,28 @@ namespace Mutiny.Simulation
 
         private void LoadSprite()
         {
-            Sprite sp = Resources.Load<Sprite>("Art/Weapons/RumBottle/1");
-            if (sp != null && SpriteRenderer != null)
+            for (int frame = 1; frame <= OriginalFrameCount; frame++)
             {
-                SpriteRenderer.sprite = sp;
+                Sprite sprite = Resources.Load<Sprite>($"Art/Weapons/RumBottle/{frame}");
+                if (sprite != null)
+                    m_Frames.Add(sprite);
             }
+
+            if (m_Frames.Count > 0 && SpriteRenderer != null)
+                SpriteRenderer.sprite = m_Frames[0];
+        }
+
+        public override void Initialize(MutinyCharacter owner)
+        {
+            base.Initialize(owner);
+            m_CurrentFrame = 0;
+            PhysicsBody.OnSimulationStep -= AdvanceOriginalPresentationTick;
+            PhysicsBody.OnSimulationStep += AdvanceOriginalPresentationTick;
         }
 
         protected override void Update()
         {
-            if (IsFinished)
-                return;
-
             base.Update();
-            if (IsFinished)
-                return;
-
-            if (IsFired && PhysicsBody != null)
-            {
-                if (PhysicsBody.IsInWater)
-                {
-                    Explode();
-                }
-            }
         }
 
         protected override void OnContact(CollisionSide side)
@@ -47,14 +53,27 @@ namespace Mutiny.Simulation
 
             if (IsFired && !IsFinished)
             {
-                Explode();
+                Explode(side);
             }
         }
 
         public void Explode()
         {
+            Explode(CollisionSide.Wall);
+        }
+
+        private void Explode(CollisionSide side)
+        {
             if (IsFinished)
                 return;
+
+            Vector2 posPx = new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y);
+            bool createFlames = side == CollisionSide.Floor;
+            string[,] terrain = null;
+            int terrainWidth = 0;
+            int terrainHeight = 0;
+            if (createFlames)
+                PhysicsBody.TryGetTerrain(out terrain, out terrainWidth, out terrainHeight);
 
             Finish();
 
@@ -63,11 +82,72 @@ namespace Mutiny.Simulation
                 SpriteRenderer.enabled = false;
             }
 
-            // Flash AS2 exact: new Explosion(x, y, 80, 25, owner)
-            Vector2 posPx = new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y);
-            MutinyExplosion.Spawn(posPx, 80f, 25f, Owner);
+            // RumBottle.contact: new Explosion(x, y, 80, 25, owner); playSound("pop").
+            // The original bottle plays pop immediately in RumBottle.contact;
+            // Explosion.hit happens two timeline frames later and must not duplicate it.
+            MutinyExplosion.Spawn(posPx, 80f, 25f, Owner, playPopOnHit: false);
+            MutinyAudioManager.Instance?.PlaySFX("pop");
+
+            if (createFlames && terrain != null)
+            {
+                Vector2 flameOrigin = FindOriginalFlameOrigin(posPx, terrain, terrainWidth, terrainHeight);
+                MutinySweepingFlame.Spawn(flameOrigin, true, terrain, terrainWidth, terrainHeight);
+                MutinySweepingFlame.Spawn(flameOrigin, false, terrain, terrainWidth, terrainHeight);
+                MutinyDebugLog.Info("RumBottle",
+                    $"floor impact pos=({posPx.x:F1},{posPx.y:F1}) flameOrigin=({flameOrigin.x:F1},{flameOrigin.y:F1})", this);
+            }
+            else
+            {
+                MutinyDebugLog.Info("RumBottle",
+                    $"impact side={side} pos=({posPx.x:F1},{posPx.y:F1}) flames=false", this);
+            }
 
             Destroy(gameObject, 0.1f);
+        }
+
+        private void AdvanceOriginalPresentationTick()
+        {
+            if (IsFinished)
+                return;
+
+            if (m_Frames.Count > 0 && SpriteRenderer != null)
+            {
+                m_CurrentFrame = (m_CurrentFrame + 1) % m_Frames.Count;
+                SpriteRenderer.sprite = m_Frames[m_CurrentFrame];
+            }
+
+            // RumBottle.advance creates one cannonSmokeTrail Debris each 25 Hz
+            // advance while the bottle is airborne.
+            if (IsFired)
+                MutinyRumBottleSmokeTrail.Spawn(new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y));
+        }
+
+        public override void Twang(Vector2 startPx, Vector2 dragPx)
+        {
+            // RumBottle raises its drag gauge to 30, but Weapon.release clamps the
+            // committed velocity to the common 20 px/tick limit.
+            Vector2 launchVelocity = MutinyPhysics.CalculateTwangVelocity(startPx, dragPx, TwangMaxForce);
+            if (launchVelocity.sqrMagnitude > MutinyPhysics.DefaultTwangMaxForce * MutinyPhysics.DefaultTwangMaxForce)
+                launchVelocity = launchVelocity.normalized * MutinyPhysics.DefaultTwangMaxForce;
+            Fire(launchVelocity);
+        }
+
+        private static Vector2 FindOriginalFlameOrigin(
+            Vector2 impact, string[,] terrain, int width, int height)
+        {
+            int column = Mathf.FloorToInt(impact.x / 32f);
+            int row = Mathf.FloorToInt(impact.y / 32f) + 1;
+
+            while (row > 0 && MutinySweepingFlame.IsSolidTile(terrain, width, height, column, row - 1))
+                row--;
+
+            return new Vector2(column * 32f, row * 32f);
+        }
+
+        private void OnDestroy()
+        {
+            if (PhysicsBody != null)
+                PhysicsBody.OnSimulationStep -= AdvanceOriginalPresentationTick;
         }
     }
 }

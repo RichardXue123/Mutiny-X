@@ -2,7 +2,9 @@
 
 范围：15 种可选武器从菜单选中、角色持有、瞄准、释放、飞行或放置、碰撞、特殊阶段、伤害与击退、动画、音效、镜头到回合结算的完整生命周期。
 
-当前状态以用户 2026-09-16 的实际体验判断为基线（证据类型 U）：**Cherry Bomb、Dynamite 为“实现中”，其余 13 种为“未实现”**。现有 C# 类、旧 TODO 的勾选和能生成对象都不能提高状态。
+当前状态以各武器条目记录的最新实际证据为准。现有 C# 类、旧 TODO 的勾选和能生成对象都不能提高状态。
+
+> 每次“复刻/修复武器”必须先执行 [`WEAPON_REPLICATION_WORKFLOW.md`](WEAPON_REPLICATION_WORKFLOW.md)：建立原版来源图、调用路径状态机、25 Hz 顺序、显示契约、声音映射和生产入口用例。只完成代码首版或编译通过时，状态只能是“实现中（静态初版）”。
 
 ## 状态定义
 
@@ -14,7 +16,7 @@
 | 待人工验证 | 生产入口自动用例已经通过，只剩原版与 Unity 的实际画面、操作、声音和节奏对照 |
 | 已完成 | 自动验证、Play Mode 操作和原版对照全部通过；已保存结果，且没有未登记差异 |
 
-状态只能按顺序推进。某一武器的 EFF、ANI、AUD、INT、VER 任一必要项未完成时，整项不能标为“已实现”。
+状态只能按顺序推进。某一武器的 EFF、ANI、AUD、INT、VER 任一必要项未完成时，整项不能标为“已实现”。完成状态还要求满足 `WPN-PROC-01..10`；尤其不得因只检查本体类而忽略父类、调用者、AI、时间轴、显示深度或音频事件。
 
 ## 所有武器必须执行的复刻步骤
 
@@ -62,19 +64,19 @@
 |---|---|---|---|---|
 | WPN-01 | Cherry Bomb | 实现中 | `CherryBomb.as`、`Weapon.as`、`Explosion.as` | `MutinyCherryBomb.cs`、`MutinyExplosion.cs` |
 | WPN-02 | Dynamite | 实现中 | `Dynamite.as`、`Weapon.as`、`Explosion.as` | `MutinyDynamite.cs`、`MutinyExplosion.cs` |
-| WPN-03 | Banana | 未实现 | `Banana.as` | `MutinyBanana.cs` |
-| WPN-04 | Boulder | 未实现 | `Boulder.as` | `MutinyBoulder.cs` |
-| WPN-05 | Cannon | 未实现 | `Cannon.as`、`Cannonball.as` | 当前只有 `MutinyCannonball.cs`；主 Cannon 生产实现待建立 |
-| WPN-06 | Gunpowder Barrel | 未实现 | `BoxWeapon.as`、`GunpowderBarrel.as` | `MutinyGunpowderBarrel.cs` |
+| WPN-03 | Banana | 实现中 | `Banana.as`、`Solid.as`、`Weapon.as`、symbol 921 | `MutinyBanana.cs`、`MutinyPlayerInput.cs` |
+| WPN-04 | Boulder | 实现中 | `Boulder.as`、`Weapon.as`、`Solid.as`、DefineSprite 872 | `MutinyBoulder.cs`、`MutinyPlayerInput.cs`、`MutinyPhysicsBody.cs` |
+| WPN-05 | Cannon | 实现中 | `Cannon.as`、`Cannonball.as`、sprites 850/853/866 | `MutinyCannon.cs`、`MutinyCannonball.cs`、`MutinyPlayerInput.cs` |
+| WPN-06 | Gunpowder Barrel | 实现中 | `BoxWeapon.as`、`GunpowderBarrel.as`、sprite 968 | `MutinyGunpowderBarrel.cs`、`MutinyPlayerInput.cs`、`MutinyPhysicsBody.cs`、`MutinyAIController.cs` |
 | WPN-07 | Mine | 未实现 | `Mine.as` | `MutinyMine.cs` |
-| WPN-08 | Parachute Bomb | 未实现 | `ParachuteBomb.as` | `MutinyParachuteBomb.cs` |
-| WPN-09 | Pieces of Eight | 未实现 | `PiecesOfEight.as` | `MutinyPiecesOfEight.cs` |
-| WPN-10 | Rum Bottle | 未实现 | `RumBottle.as` | `MutinyRumBottle.cs` |
-| WPN-11 | Seagull | 未实现 | `Seagull.as` | `MutinySeagull.cs` |
-| WPN-12 | Tidal Wave | 未实现 | `TidalWave.as` | `MutinyTidalWave.cs` |
-| WPN-13 | Voodoo Doll | 未实现 | `VoodooDoll.as` | `MutinyVoodooDoll.cs` |
-| WPN-14 | Wooden Crate | 未实现 | `BoxWeapon.as`、`WoodenCrate.as` | `MutinyWoodenCrate.cs` |
-| WPN-15 | Anchor | 未实现 | `Anchor.as` | `MutinyAnchor.cs` |
+| WPN-08 | Parachute Bomb | 实现中 | `ParachuteBomb.as`、`Weapon.as`、`Solid.as`、DefineSprite 939 | `MutinyParachuteBomb.cs`、`MutinyPlayerInput.cs` |
+| WPN-09 | Pieces of Eight | 实现中 | `PiecesOfEight.as`、`Weapon.as`、`Character.as`、`Controller.as`、DefineSprite 884 | `MutinyPiecesOfEight.cs`、`MutinyPlayerInput.cs`、`MutinyTurnManager.cs` |
+| WPN-10 | Rum Bottle | 实现中 | `RumBottle.as`、`SweepingFlame.as`、`DefineSprite_905_sweepingFlame` 帧 4/11 | `MutinyRumBottle.cs`、`MutinySweepingFlame.cs`、`MutinyRumBottleSmokeTrail.cs` |
+| WPN-11 | Seagull | 实现中 | `Seagull.as`、`Character.as`、`DefineSprite_982_seagull` | `MutinySeagull.cs`、`MutinySeagullFire.cs`、`MutinyAIController.cs` |
+| WPN-12 | Tidal Wave | 实现中 | `TidalWave.as`、`Character.as`、`DefineSprite_1058_tidalWave` | `MutinyTidalWave.cs`、`MutinyAIController.cs` |
+| WPN-13 | Voodoo Doll | 实现中 | `VoodooDoll.as`、`TileSystem.as`、`Character.as`、sprites 1027/1872 | `MutinyVoodooDoll.cs`、`MutinyPlayerInput.cs`、`MutinyCharacterOverlay.cs`、`MutinyCameraController.cs` |
+| WPN-14 | Wooden Crate | 实现中 | `BoxWeapon.as`、`WoodenCrate.as`、`Solid.as`、`Explosion.as` | `MutinyWoodenCrate.cs`、`MutinyPlayerInput.cs`、`MutinyPhysics.cs`、`MutinyExplosion.cs` |
+| WPN-15 | Anchor | 实现中 | `Anchor.as`、`Solid.as`、DefineSprite 1003 | `MutinyAnchor.cs`、`MutinyPlayerInput.cs`、`MutinyPhysicsBody.cs` |
 
 ## 逐武器工作项
 
@@ -94,37 +96,37 @@
 - [ ] WPN-02-INT：核对释放后镜头跟随、停止后仍保持行动占用以及爆炸后的结算时机。
 - [ ] WPN-02-VER：固定墙撞、地面滚动、立即停稳、入水和爆炸五类场景，与原版逐 tick 对照。
 
-### WPN-03 — Banana — 未实现
+### WPN-03 — Banana — 实现中
 
-- [ ] WPN-03-EFF：提取反弹参数、反弹次数/存续条件、手动引爆资格、伤害、范围和击飞。
-- [ ] WPN-03-ANI：恢复手持实例、飞行翻滚、每次反弹、等待引爆和爆炸动画。
-- [ ] WPN-03-AUD：恢复每次 `banana_bounce`、手动引爆和爆炸声音及其触发 tick。
-- [ ] WPN-03-INT：复刻首次投掷与后续点击引爆的两阶段输入、镜头和回合占用。
-- [ ] WPN-03-VER：覆盖多次反弹、无反弹、手动引爆、自动结束、角色/水面接触。
+- [~] WPN-03-EFF：已按 `Banana.as` 接入 7 px extent、bounce 0.8、friction 0.5、静止判定、AI `<400`（20 px）引爆和 160/80 爆炸；墙、顶、水、箱子与静止边界待 Unity/原版验证。
+- [~] WPN-03-ANI：已使用原版 921 的单帧 sprite 和公共飞行旋转；手持姿势、爆炸画面和排序待画面对照。
+- [~] WPN-03-AUD：已接入每次接触 `banana_bounce` 与引爆 tick 的单次 `pop`；实际声音并发与水面行为待对照。
+- [~] WPN-03-INT：已接入“抛掷后、CanShoot 已消耗时的下一次左键”生产输入；镜头和完整回合占用待对照。
+- [~] WPN-03-VER：工厂发射、生产二次点击、物理反弹和 AI 近距离场景回归已加入；Unity Editor、Play Mode 与原版逐 tick 对照未执行。详见 `BANANA.md`。
 
-### WPN-04 — Boulder — 未实现
+### WPN-04 — Boulder — 实现中
 
-- [ ] WPN-04-EFF：提取 1.5 重量及全部质量、滚动、角色碰撞伤害/冲量、停止和水中行为。
-- [ ] WPN-04-ANI：恢复手持实例、投掷、空中旋转、地面滚动、撞击和停止动画。
-- [ ] WPN-04-AUD：定位投掷、滚动、撞墙、撞角色、落水和停止声音。
-- [ ] WPN-04-INT：核对镜头持续跟随与所有受影响角色静止后的结算。
-- [ ] WPN-04-VER：按不同速度/坡度比较滚动距离、撞人速度变化、伤害和击飞。
+- [~] WPN-04-EFF：已按 `Boulder.as` 接入四向 31 px extent、weight 1.5、friction .25、`hitsBoxes=true`、角色闭区间 32 px 推挤与每 tick `abs(vx)*1.5` HP。人类 `twang` 和 AI `fire` 均保留 20 px/tick clamp 后的原始速度，不再误用只属于不可达 drag-release 的 `.5`；已恢复 `Weapon.advance` 的水面 crossing splash 和地图底部结束。物理斜坡/木箱、多人连续接触和 AI 模拟待运行对照。
+- [~] WPN-04-ANI：已从 DefineSprite 872 拆出 869 可旋转石体和 depth 3 的静止 871 上层，25 Hz `vx*2.5` 只作用 `rotating` child；停稳从 visibility=2 以 .1/tick 调用 whiteOut 到两个子层。`blendMode="layer"` 的混色、白化 additive 前半段和装备 `(x,y-30)` 注册点待画面对照。
+- [ ] WPN-04-AUD：静态 `Boulder.as` 未见独立 release/滚动/碰撞/结束声音；水面继续走通用 `splash`。运行对照前未臆加其他声音。
+- [~] WPN-04-INT：已通过通用菜单选中和拖拽 twang 生产路径、AI `aiPerform` 路径提交库存/两行动；镜头和物理静止后的回合结算待对照。
+- [~] WPN-04-VER：已新增人类 twang 20 px/tick 速度、AI 预测/执行速度、原始子层、Solid 参数、32 px 临界推挤/伤害、水面/底部和静止时序回归；`dotnet build Assembly-CSharp.csproj --no-restore` 通过。Unity Editor、Play Mode、坡度/木箱/水、镜头和原版逐 tick 对照未执行。详见 `BOULDER.md`。
 
-### WPN-05 — Cannon — 未实现
+### WPN-05 — Cannon — 实现中
 
-- [ ] WPN-05-EFF：实现炮体放置范围、炮口角度、Cannonball 参数、命中爆炸、伤害、击退和炮体后坐/存续。
-- [ ] WPN-05-ANI：恢复角色装备/拖出炮体、合法放置提示、炮口旋转、拉动击发点、开火和后坐动画。
-- [ ] WPN-05-AUD：恢复放置、瞄准/拉动、开炮、`cannon explosion`、炮弹命中及入水声音。
-- [ ] WPN-05-INT：实现“放置 → 炮口瞄准 → 释放开火”的专用输入与镜头链；补齐主 Cannon 生产类型。
-- [ ] WPN-05-VER：覆盖最小/最大角、放置边界、炮弹撞地/角色/水和取消阶段。
+- [~] WPN-05-EFF：已建立独立炮体，接入 120 px 放置、整数角、随旋转换算的 pin 阈值、Cannonball 0 weight/box 碰撞、未被通用 release 限制的 30 force、100/50 爆炸及水/地图边界无爆炸；AI `randomThrows`/25 tick `aiPerform` 已接入，边界场景待运行对照。
+- [~] WPN-05-ANI：已接入 Cannon/Cannonball 单帧、每 tick smoke、Cannon 跟随与 20 tick淡出，ball 隐藏后保持到 Cannon 结束；Cannonball sorting order 固定为 later-created 原版 clip 的 next-highest depth（Cannon +1），消除共面闪烁；pin/炮口子层、注册点与 layer blend待画面对照。
+- [~] WPN-05-AUD：已生产接入 fire `cannon explosion`、terrain/box contact `pop`；角色接触与水/边界分支不播放 `pop`，待运行对照。
+- [~] WPN-05-INT：已实现“放置 → 炮尾 pin → 回弹到 -21 后开火”专用输入并修复工厂映射；pin 成功拉栓时扣除一次库存。AI已接入，取消、镜头待对照。
+- [~] WPN-05-VER：已加入 30-force、ball/fade 生命周期和 25-tick AI 的生产对象回归，C# 编译通过；Unity/原版对照未执行。详见 `CANNON.md`。
 
-### WPN-06 — Gunpowder Barrel — 未实现
+### WPN-06 — Gunpowder Barrel — 实现中
 
-- [ ] WPN-06-EFF：复刻一次行动的放置数量、合法位置、实体阻挡、受击引爆、伤害/击退和连锁爆炸。
-- [ ] WPN-06-ANI：恢复手持/放置预览、落位、静态/受击、引爆和残骸动画。
-- [ ] WPN-06-AUD：恢复放置、被击中、引爆、连锁爆炸和入水声音。
-- [ ] WPN-06-INT：复刻 BoxWeapon 多次放置、非法位置拒绝、取消和最后一次放置后的结算。
-- [ ] WPN-06-VER：覆盖两个桶互爆、其他武器触发、角色阻挡、边界和水面。
+- [~] WPN-06-EFF：已按 `BoxWeapon.as`/`GunpowderBarrel.as` 接入一次行动两桶、16/15 extent、tile/chest/活角色/box 放置拒绝、共享 Controller.boxes 碰撞、150/30/null-caster 连锁 Explosion；角色、chest、木箱边界和伤害/击退待运行对照。
+- [~] WPN-06-ANI：已用 sprite 968 的 12 帧资源，静止于第 1 帧并按 `explode` 标签切至第 11 帧、下一 tick 移除；手持注册点和实际视觉层级待画面对照。
+- [~] WPN-06-AUD：原类没有独立放置或入水声音；爆炸沿 `Explosion` 第 3 帧的既有 `pop` 入口。实际时序和并发待原版运行对照。
+- [~] WPN-06-INT：已接入菜单选择、两次生产点击、首次单次库存扣除、非法点击不消耗、AI 候选抽样与 40/10 tick 放置；取消、跨回合和 AI 实战待验证。
+- [~] WPN-06-VER：已加入生产输入、碰撞登记、帧 11 和两桶连锁回归；`dotnet build Assembly-CSharp.csproj --no-restore` 通过。Unity Editor、Play Mode 与原版对照未执行。详见 `GUNPOWDER_BARREL.md`。
 
 ### WPN-07 — Mine — 未实现
 
@@ -134,69 +136,69 @@
 - [ ] WPN-07-INT：核对跨回合存续、镜头、接近触发与回合 inactivity 的关系。
 - [ ] WPN-07-VER：覆盖敌我接近、边界距离、投掷后未武装、跨回合和连锁触发。
 
-### WPN-08 — Parachute Bomb — 未实现
+### WPN-08 — Parachute Bomb — 实现中
 
-- [ ] WPN-08-EFF：复刻投掷参数、开伞条件、开伞前后重量/下降速度、左右风力、落点、伤害、范围和击飞。
-- [ ] WPN-08-ANI：恢复手持、飞行、开伞、降落伞摆动、左右扇子及风向反馈、落地爆炸动画。
-- [ ] WPN-08-AUD：恢复释放、开伞、左右扇风 `fan`、落地/爆炸和入水声音。
-- [ ] WPN-08-INT：复刻投掷后鼠标位于左/右侧触发扇风影响落点的持续输入和镜头跟随。
-- [ ] WPN-08-VER：固定无风、连续左扇、连续右扇、交替扇风和边界落点，逐 tick 比较轨迹。
+- [~] WPN-08-EFF：已按 `ParachuteBomb.as advanceMotion/contact` 接入 11 px 四向 extent、30-force twang、`vy>1` 减 2（下限 1）、`.95` 横向阻尼、严格 `vy>-10` 开伞、碰撞 160/50 爆炸和 y=-300 限制；木箱、地图底部与逐 tick 对照待执行。
+- [~] WPN-08-ANI：已加载 DefineSprite 939 的 30 帧，保持 closed 第 1 帧、opening 第 11 帧、open 第 26 帧及第 30 帧回跳 open；未开伞每 tick 创建 cannonSmokeTrail。持有注册点、光标风扇和爆炸画面对照待执行。
+- [~] WPN-08-AUD：已在第 12、24…个持续扇风 tick 接入 `fan`，contact 同 tick 接入一次 `pop`，水面 crossing 接入 `splash`；Unity/原版音频并发待对照。
+- [~] WPN-08-INT：已通过普通菜单/拖拽生产路径接入人类持有者的持续左右鼠标扇风（鼠标左推右，反之亦然）；镜头跟随和 AI 评分待核对。
+- [~] WPN-08-VER：生产输入、阈值、左右风力、30 帧回环和 terrain 爆炸回归已加入；`dotnet build Assembly-CSharp.csproj --no-restore` 通过。Unity Editor 实际执行、Play Mode、木箱/水/顶端/底部和原版逐 tick 对照未执行。详见 `PARACHUTE_BOMB.md`。
 
-### WPN-09 — Pieces of Eight — 未实现
+### WPN-09 — Pieces of Eight — 实现中
 
-- [ ] WPN-09-EFF：复刻八枚硬币的次数/跨回合状态、每枚投掷参数、单次伤害、范围/击退和最终结束条件。
-- [ ] WPN-09-ANI：恢复角色持币、逐枚投掷、硬币飞行/旋转、命中和剩余阶段显示。
-- [ ] WPN-09-AUD：恢复每枚释放、命中、`pop`、入水和整套结束声音。
-- [ ] WPN-09-INT：实现专用多阶段/多回合输入、剩余次数、取消和行动锁定。
-- [ ] WPN-09-VER：完整重放八次使用，检查库存、回合、伤害累计和中途死亡/入水。
+- [~] WPN-09-EFF：已按 `PiecesOfEight.as` 接入 7 px 四向 extent、`hitsBoxes=true`、terrain/box contact 的 `Explosion(50,25,owner)` 与同 tick `pop`、入水只 splash 并切换下一枚、前 7 枚回到 owner `(x,y+5)`、第 8 枚 finished/hide。实际 physics contact、水面和逐 tick 对照待执行。
+- [~] WPN-09-ANI：已使用 DefineSprite 884 的单帧 `Resources/Art/Weapons/PiecesOfEight/1.png`；持有注册点、飞行旋转、排序和画面对照待执行。
+- [~] WPN-09-AUD：已接入 terrain/box contact 当 tick 的唯一 `pop` 与水面的 `splash`；原版静态代码未见独立投掷、飞行或结束声音，需运行对照确认。
+- [~] WPN-09-INT：已接入生产菜单/拖拽；第一次发射仅扣一件库存，前 7 枚同一对象仍可在 `ActionExecuting` 阶段重瞄，锁定取消/换武器并阻止 inactivity 结算。AI 每枚后 20 tick 等待，使用十样本/70 px 原版评分。Play Mode 和 AI 场景待验证。
+- [~] WPN-09-VER：已新增生产输入的 8 枚连续序列、库存一次扣除、锁定、回合占用、最终结束和 7 px/box 断言；`dotnet build Assembly-CSharp.csproj --no-restore` 通过。Unity Editor、Play Mode 和原版逐 tick 对照未执行。详见 `PIECES_OF_EIGHT.md`。
 
-### WPN-10 — Rum Bottle — 未实现
+### WPN-10 — Rum Bottle — 实现中
 
-- [ ] WPN-10-EFF：复刻投掷重量/距离、较小爆炸范围和伤害，并实现命中平台后生成火焰、火焰范围/持续时间/伤害及地形边界传播。
-- [ ] WPN-10-ANI：恢复手持酒瓶、飞行翻滚、破瓶、小爆炸、平台着火、火焰扫动/熄灭动画。
-- [ ] WPN-10-AUD：恢复投掷、破瓶/`pop`、点火、燃烧循环、烧伤、熄灭和入水声音。
+- [~] WPN-10-EFF：已按 `RumBottle.as contact` 与 `SweepingFlame.as` 接入 80/25 爆炸、仅地面双向点火、顶部 tile 起点、严格 `< 64` 命中、30 HP 和 8 px 地形传播；平台边缘、墙和水的生产场景尚待验证。
+- [~] WPN-10-ANI：已加载 12 帧酒瓶和原版 11 帧火焰，按飞行 tick 生成烟雾、按火焰第 4/11 帧传播/销毁；烟雾原版 19 帧尚待导入 Unity Resources。
+- [~] WPN-10-AUD：已在酒瓶 `contact` 当 tick 立即播放 `pop`，且抑制该瓶在爆炸伤害帧的重复播放；AS2 中未发现独立的点火、燃烧、烧伤或熄灭声音，仍待运行对照确认。
 - [ ] WPN-10-INT：核对火焰存续期间的镜头、inactivity 与回合结算，避免爆炸后立即结束而跳过燃烧。
-- [ ] WPN-10-VER：覆盖平台中心/边缘/墙面/水面命中、角色进入火焰和持续伤害全过程。
+- [~] WPN-10-VER：固定地面场景的生产物理入口回归已加入；Unity Editor、平台边缘/墙/水、角色进入火焰、行动菜单输入及原版逐 tick 对照未执行。详见 `RUM_BOTTLE.md`。
 
-### WPN-11 — Seagull — 未实现
+### WPN-11 — Seagull — 实现中
 
-- [ ] WPN-11-EFF：复刻路径点、飞行速度、投弹/排泄物次数、子弹重量、伤害/击退、离场和结束条件。
-- [ ] WPN-11-ANI：恢复角色选中后的海鸥实例、路径选择、飞行动画、每次投放和离场动画。
-- [ ] WPN-11-AUD：恢复飞行/叫声、`poop1..3` 随机规则、命中和离场声音。
-- [ ] WPN-11-INT：实现“选择路径 → 飞行中重复点击投放”的输入状态机和镜头目标切换。
-- [ ] WPN-11-VER：固定路径和点击 tick，比较每个子对象位置、随机声音重放与结束时机。
+- [~] WPN-11-EFF：已接入 `x=-300`、`vx=10`、零重力飞行、右侧 `+275` 且无子弹才结束，以及 `(x-10,y)` 的 `vx=10/weight=1` 子弹、50/50 接触爆炸和落水销毁；箱体碰撞与实际镜头待验证。
+- [~] WPN-11-ANI：已加载 14 帧海鸥、投放 shot 段和 1 帧 seagullFire；原版 dottedLine 路径预览帧尚未导入 Unity Resources。
+- [~] WPN-11-AUD：每次成功投放立即随机播放 `poop1..3`；AS2 未显示独立飞行、命中或离场声音，待原版运行对照。
+- [~] WPN-11-INT：已接入“第一次点击路径、飞行中后续点击投放”的生产输入与 AI 专用 `aiSimulation/aiPerform` 路径；镜头跟随偏移待完成。
+- [~] WPN-11-VER：路径、子弹、碰撞和水面生产回归已加入；Unity Editor、固定随机 AI、真实菜单及原版逐 tick 对照未执行。详见 `SEAGULL.md`。
 
-### WPN-12 — Tidal Wave — 未实现
+### WPN-12 — Tidal Wave — 实现中
 
-- [ ] WPN-12-EFF：复刻生成位置/方向、波浪速度/宽高、角色推进、伤害、与平台/水面/边界交互及消失条件。
-- [ ] WPN-12-ANI：恢复选择位置/方向提示、波浪生成、推进、命中反馈和消散动画。
-- [ ] WPN-12-AUD：定位并恢复生成、持续浪声、命中、退出和结束声音。
-- [ ] WPN-12-INT：实现点击生成位置和方向判定、镜头横向跟随与全体静止后的结算。
-- [ ] WPN-12-VER：覆盖左右方向、多个角色、平台遮挡、水边和地图边界。
+- [~] WPN-12-EFF：已接入固定 `x=-550/y=water/vx=20`、零重力且不碰 terrain 的波；每 tick 对 `±150 px`、水面上方 300 px 内角色造成 5 HP，严格在 `levelWidth+550` 后结束。角色受击和镜头待场景对照。
+- [~] WPN-12-ANI：已加载 27 原版帧并按关卡 skyColour 选择 1–5、10–14 或 19–23 的五帧循环；像素注册点待画面对照。
+- [~] WPN-12-AUD：静态 AS2 与资源核对未发现专属声效，未添加臆测声音；原版运行对照待执行。
+- [~] WPN-12-INT：已通过原生产点击入口启动，忽略点击位置并固定向右；镜头跟随偏移和回合结算待完成。
+- [~] WPN-12-VER：生产启动、物理伤害窗、动画步进与离场阈值回归已加入；Unity Editor、AI 固定场景、真实菜单和原版逐 tick 对照未执行。详见 `TIDAL_WAVE.md`。
 
-### WPN-13 — Voodoo Doll — 未实现
+### WPN-13 — Voodoo Doll — 实现中
 
-- [ ] WPN-13-EFF：复刻目标资格、伤害/位移转移关系、娃娃投掷参数、目标标记、失效和结束条件。
-- [ ] WPN-13-ANI：恢复先选敌人、目标 overlay、角色手持娃娃、投掷翻滚、命中和目标同步受力动画。
-- [ ] WPN-13-AUD：恢复选目标、投掷、命中、`voodoo`、目标受击和入水声音。
-- [ ] WPN-13-INT：实现“选择敌人 → 返回投掷”的两阶段输入、取消回退、镜头在娃娃与目标间切换。
-- [ ] WPN-13-VER：覆盖目标死亡/落水、娃娃撞墙/地/水、取消和无合法目标。
+- [~] WPN-13-EFF：已按 `VoodooDoll.as` 接入默认 10 px extent、保存释放速度、前 10 tick 娃娃阶段、镜头完成后的 10 tick 延迟与一次目标传速；去除了旧实现持续镜像速度、直接伤害和“娃娃入水使目标溺水”的错误分支。目标在发射后死亡、箱体接触及镜头边界时序待运行对照。
+- [~] WPN-13-ANI：已加载原版娃娃 sprite 1027 和 overlay target sprite 1872，按 `velocityX * 2` 使用公共飞行旋转，并在传速后每 tick 淡出 10%。角色手持姿势与原版逐帧画面对照待完成。
+- [~] WPN-13-AUD：人类选中有效目标、AI `aiPerform` 各播放一次原版 `voodoo`；命中、受击和入水没有在静态 `VoodooDoll.as` 发现独立声音，待原版运行对照确认。
+- [~] WPN-13-INT：已通过生产输入接入“选择武器 → 30 px 内敌人 → 拖拽释放”、严格半径、右键取消不扣库存、目标十字/角框互斥和镜头从娃娃切至目标。真实菜单与鼠标光标待 Unity Play Mode 验收。
+- [~] WPN-13-VER：生产对象回归覆盖资源、30 px 临界、取消、无目标拒绝、两段 10 tick、一次传速、非持续同步和淡出；Unity Editor、真实菜单、目标死亡/落水/箱体与原版逐 tick 对照未执行。详见 `VOODOO_DOLL.md`。
 
-### WPN-14 — Wooden Crate — 未实现
+### WPN-14 — Wooden Crate — 实现中
 
-- [ ] WPN-14-EFF：复刻一次行动的箱子数量、合法放置、实体碰撞、承重/阻挡、受击生命或销毁、入水行为。
-- [ ] WPN-14-ANI：恢复持有/放置预览、落位、受击、破坏和残骸动画。
-- [ ] WPN-14-AUD：恢复放置、角色/武器碰撞、受击、破坏和入水声音。
-- [ ] WPN-14-INT：复刻 BoxWeapon 多次放置、非法位置反馈、取消和完成后的回合结算。
-- [ ] WPN-14-VER：覆盖堆叠、贴墙/角色、平台边缘、武器命中和水面。
+- [~] WPN-14-EFF：已接入三箱、32 px 非对称 16/15 extent、terrain/角色/箱/宝箱放置拒绝、重力/反弹/摩擦、角色与箱子 `hitsBoxes` 阻挡和爆炸 AABB 销毁；入水和非木箱武器的箱体碰撞待原版验证。
+- [~] WPN-14-ANI：已加载原版 DefineSprite 965 的 18 个导出帧，使用 frame 1 静态箱和后续销毁帧序列；`explode` 标签帧界、持有注册点、残骸和画面对照待完成。
+- [ ] WPN-14-AUD：静态 `BoxWeapon.as` 未发现音效调用；放置、碰撞、破坏和入水须经时间轴/运行对照确认，未臆加声音。
+- [~] WPN-14-INT：已接入菜单选中、未放置时右键取消、三次点击和首次成功时单次库存扣除；首次放置进入行动占用但允许后两次放置。非法鼠标光标、AI、结算时序待运行对照。
+- [~] WPN-14-VER：已加入生产选择/点击、非法 terrain、三箱库存、extent/碰撞标志与爆炸 AABB 回归。C# 编译通过；Unity batch-mode 验证在进入方法前以 code 1 退出，具体原因未记录；Play Mode、堆叠/角色/水和原版对照未执行。详见 `WOODEN_CRATE.md`。
 
-### WPN-15 — Anchor — 未实现
+### WPN-15 — Anchor — 实现中
 
-- [ ] WPN-15-EFF：复刻点击横坐标、高空生成高度、下落参数、穿行/碰撞规则、伤害/击退、水面和地图外结束。
-- [ ] WPN-15-ANI：恢复目标列提示、锚生成、链条/下落、命中、入水和消失动画。
-- [ ] WPN-15-AUD：恢复选择、下落、命中 `anchor`、入水和结束声音。
-- [ ] WPN-15-INT：实现点选横坐标、镜头从角色到高空锚再到落点的完整链路。
-- [ ] WPN-15-VER：覆盖直接命中、擦边、多角色、平台穿行、水面和地图边缘。
+- [~] WPN-15-EFF：已按 `Anchor.as place/advance/contact` 接入原始鼠标 x、强制 `y=-200`、每 tick `vx=0/vy=40`、48/96/0 extent、terrain/木箱 floor contact，以及 `abs(dx)<48 && anchor.y-64<character.y<anchor.y` 的每角色 60 HP 压砸。该类自驱动 `Solid` tick，绕过 `Weapon.advance` 的水面/超时和飞行旋转；无 floor 的长期行为和 AI `randomThrows` 评分待原版运行对照。
+- [~] WPN-15-ANI：已加载 DefineSprite 1003 的 12 个原始帧，floor contact 从 frame 1 推进至 frame 12，之后按 30 hold + 10 `Global.whiteOut` tick 隐藏。默认 Sprite material 无法表达原版前半段 additive 白化，材质与画面对照待完成；目标列提示和注册点待对照。
+- [~] WPN-15-AUD：已在每次 floor contact 生产路径调用原版 `anchor` SFX；静态 AS2 未见独立选择、下落、入水或结束声音，仍待运行对照。
+- [~] WPN-15-INT：已接入行动菜单选中、未点击时右键取消、任意场景 x 点击、单次库存扣除、两行动消耗和回合提交。镜头跟随偏移与 AI `aiPerform(details.x)` 的 20 tick 等待尚未接入 AI 决策。
+- [~] WPN-15-VER：已新增生产选择/点击、`y=-200`、物理 floor、严格边界伤害、12 帧、30+10 tick 的回归用例；`dotnet build Assembly-CSharp.csproj --no-restore` 通过。Unity Editor 实际执行、Play Mode、木箱/水/地图边缘和原版逐 tick 对照未执行。详见 `ANCHOR.md`。
 
 ## 原版证据根目录
 
@@ -206,4 +208,3 @@
 - Unity 生产入口：`Assets/Mutiny/Scripts/Simulation/MutinyWeaponFactory.cs`、各 `Mutiny*.cs`、`Presentation/MutinyPlayerInput.cs`
 
 每次推进某种武器时，在本文件对应 EFF/ANI/AUD/INT/VER 项下补充具体来源、Unity 方法、用例和实际结果；`TODO.md` 只保留总状态。
-

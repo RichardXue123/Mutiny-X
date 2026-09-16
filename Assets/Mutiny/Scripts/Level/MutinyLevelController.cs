@@ -1,5 +1,6 @@
 using System;
 using Mutiny.Diagnostics;
+using Mutiny.Simulation;
 using UnityEngine;
 
 namespace Mutiny.Levels
@@ -16,7 +17,15 @@ namespace Mutiny.Levels
         [SerializeField]
         private MutinyLevelRoot m_CurrentLevel;
 
+        // `_root.score` is a one-player session value in the Flash game.  It must
+        // outlive a level rebuild, but it is not a saved unlock setting.
+        private int m_SinglePlayerScore;
+        private int m_LastCompletedLevelScore;
+        private int m_AwardedLevelIndex = -1;
+
         public int CurrentLevelIndex { get; set; } = 1;
+        public int SinglePlayerScore => m_SinglePlayerScore;
+        public int LastCompletedLevelScore => m_LastCompletedLevelScore;
 
         public TextAsset LevelXml
         {
@@ -59,6 +68,8 @@ namespace Mutiny.Levels
         {
             levelNumber = Mathf.Clamp(levelNumber, 1, 18);
             CurrentLevelIndex = levelNumber;
+            m_AwardedLevelIndex = -1;
+            m_LastCompletedLevelScore = 0;
             string padded = levelNumber.ToString("D2");
             TextAsset xml = Resources.Load<TextAsset>($"Data/Levels/level_{padded}");
             if (xml != null)
@@ -82,7 +93,58 @@ namespace Mutiny.Levels
             MutinyDebugLog.Info("Level",
                 $"restart requested level={CurrentLevelIndex} frame={Time.frameCount} currentRoot={(m_CurrentLevel != null ? m_CurrentLevel.name : "none")}",
                 this);
+            ResetSinglePlayerScore();
             LoadLevel(CurrentLevelIndex);
+        }
+
+        /// <summary>
+        /// Mirrors Controller.get1PLevelScore: living health is divided by the
+        /// original crew size, then the player team's completed-turn penalty is
+        /// applied.  A level always supplies its level-number minimum score.
+        /// </summary>
+        public static int CalculateOriginalSinglePlayerLevelScore(MutinyTeam playerTeam, int levelIndex)
+        {
+            int safeLevelIndex = Mathf.Max(1, levelIndex);
+            if (playerTeam == null || playerTeam.Characters == null || playerTeam.Characters.Count == 0)
+                return safeLevelIndex * 10;
+
+            float livingHealth = 0f;
+            for (int i = 0; i < playerTeam.Characters.Count; i++)
+            {
+                MutinyCharacter character = playerTeam.Characters[i];
+                if (character != null && character.IsAlive)
+                    livingHealth += character.Health;
+            }
+
+            int score = Mathf.FloorToInt(
+                livingHealth / playerTeam.Characters.Count * 20f - playerTeam.TotalTurnsTaken * 25f);
+            return Mathf.Max(score, safeLevelIndex * 10);
+        }
+
+        /// <summary>
+        /// Applies the one-player completion award once for the currently loaded
+        /// level.  The guard prevents repeated GameOver observers from adding
+        /// score twice while the popup remains on screen.
+        /// </summary>
+        public int AwardSinglePlayerLevelWin(MutinyTeam playerTeam)
+        {
+            if (m_AwardedLevelIndex == CurrentLevelIndex)
+                return m_LastCompletedLevelScore;
+
+            m_LastCompletedLevelScore = CalculateOriginalSinglePlayerLevelScore(playerTeam, CurrentLevelIndex);
+            m_SinglePlayerScore += m_LastCompletedLevelScore;
+            m_AwardedLevelIndex = CurrentLevelIndex;
+            MutinyDebugLog.Info("Level",
+                $"END-POP-01 level complete level={CurrentLevelIndex} award={m_LastCompletedLevelScore} total={m_SinglePlayerScore}", this);
+            return m_LastCompletedLevelScore;
+        }
+
+        public void ResetSinglePlayerScore()
+        {
+            m_SinglePlayerScore = 0;
+            m_LastCompletedLevelScore = 0;
+            m_AwardedLevelIndex = -1;
+            MutinyDebugLog.Info("Level", "END-POP-06 single-player session score reset", this);
         }
 
         private void ParseLevelIndexFromName(string name)

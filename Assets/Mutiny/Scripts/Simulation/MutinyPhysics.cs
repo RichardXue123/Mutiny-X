@@ -22,6 +22,7 @@ namespace Mutiny.Simulation
         public float BottomExtent; // default 8
 
         public bool HitsTiles;
+        public bool HitsBoxes;
 
         public bool IsAtRest => Mathf.Abs(VelocityX) < 0.001f && Mathf.Abs(VelocityY) < 0.2f;
 
@@ -40,8 +41,21 @@ namespace Mutiny.Simulation
                 RightExtent = 6f,
                 TopExtent = 8f,
                 BottomExtent = 8f,
-                HitsTiles = true
+                HitsTiles = true,
+                HitsBoxes = false
             };
+        }
+    }
+
+    public readonly struct PhysicsBoxObstacle
+    {
+        public readonly MutinyPhysicsBody Body;
+        public readonly PhysicsBodyState State;
+
+        public PhysicsBoxObstacle(MutinyPhysicsBody body, PhysicsBodyState state)
+        {
+            Body = body;
+            State = state;
         }
     }
 
@@ -88,7 +102,13 @@ namespace Mutiny.Simulation
             return new Vector2(vx, vy);
         }
 
-        public static StepResult Step(ref PhysicsBodyState body, string[,] terrainGrid, int gridWidth, int gridHeight)
+        public static StepResult Step(
+            ref PhysicsBodyState body,
+            string[,] terrainGrid,
+            int gridWidth,
+            int gridHeight,
+            IReadOnlyList<PhysicsBoxObstacle> boxes = null,
+            MutinyPhysicsBody self = null)
         {
             var result = new StepResult();
 
@@ -150,6 +170,46 @@ namespace Mutiny.Simulation
                         }
 
                         r += stepY;
+                    }
+                }
+
+                // Solid.advanceMotion scans Controller.boxes after terrain and
+                // keeps the nearer vertical collision from either source.
+                if (body.HitsBoxes && boxes != null)
+                {
+                    for (int i = 0; i < boxes.Count; i++)
+                    {
+                        PhysicsBoxObstacle obstacle = boxes[i];
+                        if (obstacle.Body == null || obstacle.Body == self)
+                            continue;
+                        PhysicsBodyState box = obstacle.State;
+                        if (box.X - box.LeftExtent > body.X + body.RightExtent ||
+                            box.X + box.RightExtent < body.X - body.LeftExtent)
+                            continue;
+
+                        float candidateY;
+                        if (body.VelocityY > 0f)
+                        {
+                            if (box.Y < body.Y || box.Y - box.TopExtent > body.Y + body.VelocityY + body.BottomExtent)
+                                continue;
+                            candidateY = box.Y - box.TopExtent - body.BottomExtent - 0.1f;
+                            if (!hitY || targetY > candidateY)
+                            {
+                                targetY = candidateY;
+                                hitY = true;
+                            }
+                        }
+                        else
+                        {
+                            if (box.Y > body.Y || box.Y + box.BottomExtent < body.Y + body.VelocityY - body.TopExtent)
+                                continue;
+                            candidateY = box.Y + box.BottomExtent + body.TopExtent + 0.1f;
+                            if (!hitY || targetY < candidateY)
+                            {
+                                targetY = candidateY;
+                                hitY = true;
+                            }
+                        }
                     }
                 }
 
@@ -217,6 +277,47 @@ namespace Mutiny.Simulation
                         }
 
                         c += stepX;
+                    }
+                }
+
+                // Equivalent horizontal Controller.boxes scan from Solid.as.
+                if (body.HitsBoxes && boxes != null)
+                {
+                    for (int i = 0; i < boxes.Count; i++)
+                    {
+                        PhysicsBoxObstacle obstacle = boxes[i];
+                        if (obstacle.Body == null || obstacle.Body == self)
+                            continue;
+                        PhysicsBodyState box = obstacle.State;
+                        if (box.Y - box.TopExtent > body.Y + body.BottomExtent ||
+                            box.Y + box.BottomExtent < body.Y - body.TopExtent)
+                            continue;
+
+                        float candidateX;
+                        if (body.VelocityX > 0f)
+                        {
+                            if (box.X < body.X || box.X - box.LeftExtent > body.X + body.VelocityX + body.RightExtent)
+                                continue;
+                            candidateX = box.X - box.LeftExtent - body.RightExtent - 0.1f;
+                            if (!hitX || targetX > candidateX)
+                            {
+                                targetX = candidateX;
+                                hitX = true;
+                                result.HitRightWall = true;
+                            }
+                        }
+                        else
+                        {
+                            if (box.X > body.X || box.X + box.RightExtent < body.X + body.VelocityX - body.LeftExtent)
+                                continue;
+                            candidateX = box.X + box.RightExtent + body.LeftExtent + 0.1f;
+                            if (!hitX || targetX < candidateX)
+                            {
+                                targetX = candidateX;
+                                hitX = true;
+                                result.HitLeftWall = true;
+                            }
+                        }
                     }
                 }
 

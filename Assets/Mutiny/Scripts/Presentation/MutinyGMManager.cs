@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Mutiny.Persistence;
+using Mutiny.Simulation;
 using UnityEngine;
 
 namespace Mutiny.Presentation
@@ -58,8 +59,9 @@ namespace Mutiny.Presentation
             if (m_CircleNormalTex != null)
                 return;
 
-            m_CircleNormalTex = CreateCircleTexture(36, new Color(0.2f, 0.2f, 0.2f, 0.65f), new Color(0.6f, 0.6f, 0.6f, 0.8f));
-            m_CircleHoverTex = CreateCircleTexture(36, new Color(0.35f, 0.35f, 0.35f, 0.85f), new Color(1.0f, 0.85f, 0.3f, 1.0f));
+            const int circleSize = 180;
+            m_CircleNormalTex = CreateCircleTexture(circleSize, new Color(0.2f, 0.2f, 0.2f, 0.70f), new Color(0.6f, 0.6f, 0.6f, 0.85f), 8f);
+            m_CircleHoverTex = CreateCircleTexture(circleSize, new Color(0.35f, 0.35f, 0.35f, 0.90f), new Color(1.0f, 0.85f, 0.3f, 1.0f), 8f);
 
             m_PanelBackgroundTex = CreateSolidTexture(new Color(0.08f, 0.09f, 0.12f, 0.90f));
             m_InputBackgroundTex = CreateSolidTexture(new Color(0.15f, 0.16f, 0.20f, 0.95f));
@@ -68,7 +70,7 @@ namespace Mutiny.Presentation
             m_CircleButtonStyle = new GUIStyle
             {
                 alignment = TextAnchor.MiddleCenter,
-                fontSize = 12,
+                fontSize = 54,
                 fontStyle = FontStyle.Bold
             };
             m_CircleButtonStyle.normal.textColor = Color.white;
@@ -77,7 +79,7 @@ namespace Mutiny.Presentation
             m_PanelHeaderStyle = new GUIStyle
             {
                 alignment = TextAnchor.MiddleLeft,
-                fontSize = 12,
+                fontSize = 22,
                 fontStyle = FontStyle.Bold
             };
             m_PanelHeaderStyle.normal.textColor = new Color(0.95f, 0.85f, 0.45f);
@@ -85,9 +87,9 @@ namespace Mutiny.Presentation
             m_InputFieldStyle = new GUIStyle(GUI.skin.textField)
             {
                 alignment = TextAnchor.MiddleLeft,
-                fontSize = 13,
+                fontSize = 20,
                 fontStyle = FontStyle.Normal,
-                padding = new RectOffset(6, 6, 4, 4)
+                padding = new RectOffset(12, 12, 8, 8)
             };
             m_InputFieldStyle.normal.background = m_InputBackgroundTex;
             m_InputFieldStyle.normal.textColor = Color.white;
@@ -97,7 +99,7 @@ namespace Mutiny.Presentation
             m_ActionButtonStyle = new GUIStyle(GUI.skin.button)
             {
                 alignment = TextAnchor.MiddleCenter,
-                fontSize = 12,
+                fontSize = 20,
                 fontStyle = FontStyle.Bold
             };
             m_ActionButtonStyle.normal.background = m_ButtonBackgroundTex;
@@ -106,7 +108,7 @@ namespace Mutiny.Presentation
             m_StatusLabelStyle = new GUIStyle
             {
                 alignment = TextAnchor.UpperLeft,
-                fontSize = 11,
+                fontSize = 17,
                 wordWrap = true
             };
             m_StatusLabelStyle.normal.textColor = m_StatusColor;
@@ -126,8 +128,8 @@ namespace Mutiny.Presentation
             GUI.matrix = Matrix4x4.identity;
             GUI.color = Color.white;
 
-            // 1. Draw circular floating GM button on the left vertical center
-            float btnSize = 36f;
+            // 1. Draw circular floating GM button on the left vertical center (size scaled 5x from 36 to 180)
+            float btnSize = 180f;
             float btnX = 8f;
             float btnY = (Screen.height - btnSize) * 0.5f;
             Rect buttonRect = new Rect(btnX, btnY, btnSize, btnSize);
@@ -146,7 +148,7 @@ namespace Mutiny.Presentation
             // 2. Draw command window if open
             if (m_IsOpen)
             {
-                DrawCommandPanel(btnX + btnSize + 10f, btnY);
+                DrawCommandPanel(btnX + btnSize + 14f, btnY + btnSize * 0.5f);
             }
 
             // Restore GUI state
@@ -157,43 +159,50 @@ namespace Mutiny.Presentation
 
         private void DrawCommandPanel(float originX, float centerY)
         {
-            float panelWidth = 360f;
-            float panelHeight = 175f;
-            float panelY = Mathf.Clamp(centerY - panelHeight * 0.4f, 15f, Screen.height - panelHeight - 15f);
+            float panelWidth = Mathf.Min(680f, Screen.width - (originX + 15f));
+            float panelHeight = Mathf.Min(360f, Screen.height - 30f);
+            float panelY = Mathf.Clamp(centerY - panelHeight * 0.5f, 15f, Screen.height - panelHeight - 15f);
             Rect panelRect = new Rect(originX, panelY, panelWidth, panelHeight);
 
             // Semi-transparent background
             GUI.DrawTexture(panelRect, m_PanelBackgroundTex);
 
             // Border
-            DrawOutline(panelRect, new Color(0.35f, 0.38f, 0.50f, 0.75f), 1f);
+            DrawOutline(panelRect, new Color(0.40f, 0.45f, 0.60f, 0.85f), 2f);
 
             // Inner content layout
-            float padding = 10f;
+            float padding = 16f;
             float contentWidth = panelWidth - padding * 2;
 
             // Header: Title & Close [X]
-            Rect headerRect = new Rect(panelRect.x + padding, panelRect.y + padding, contentWidth - 28f, 20f);
+            float headerHeight = 32f;
+            Rect headerRect = new Rect(panelRect.x + padding, panelRect.y + padding, contentWidth - 44f, headerHeight);
             GUI.Label(headerRect, "MUTINY GM CONSOLE", m_PanelHeaderStyle);
 
-            Rect closeRect = new Rect(panelRect.xMax - padding - 22f, panelRect.y + padding - 2f, 22f, 22f);
+            Rect closeRect = new Rect(panelRect.xMax - padding - 36f, panelRect.y + padding, 36f, 32f);
             if (GUI.Button(closeRect, "X", m_ActionButtonStyle))
             {
                 m_IsOpen = false;
             }
 
-            // Status / Log Display Area
-            Rect statusRect = new Rect(panelRect.x + padding, headerRect.yMax + 8f, contentWidth, 55f);
+            // Bottom section: Hint, Input row
+            float inputHeight = 46f;
+            float buttonWidth = 92f;
+            float hintHeight = 24f;
+
+            float hintY = panelRect.yMax - padding - hintHeight;
+            float inputY = hintY - inputHeight - 8f;
+
+            // Status / Log Display Area (fills space between header and input)
+            float statusY = headerRect.yMax + 12f;
+            float statusHeight = inputY - statusY - 12f;
+            Rect statusRect = new Rect(panelRect.x + padding, statusY, contentWidth, statusHeight);
             m_StatusLabelStyle.normal.textColor = m_StatusColor;
             GUI.Label(statusRect, m_StatusMessage, m_StatusLabelStyle);
 
             // Input field & Submit button
-            float inputHeight = 28f;
-            float buttonWidth = 56f;
-            float inputY = statusRect.yMax + 10f;
-
-            Rect inputRect = new Rect(panelRect.x + padding, inputY, contentWidth - buttonWidth - 6f, inputHeight);
-            Rect runRect = new Rect(inputRect.xMax + 6f, inputY, buttonWidth, inputHeight);
+            Rect inputRect = new Rect(panelRect.x + padding, inputY, contentWidth - buttonWidth - 10f, inputHeight);
+            Rect runRect = new Rect(inputRect.xMax + 10f, inputY, buttonWidth, inputHeight);
 
             GUI.SetNextControlName(FocusControlName);
             m_InputText = GUI.TextField(inputRect, m_InputText, m_InputFieldStyle);
@@ -218,13 +227,13 @@ namespace Mutiny.Presentation
             }
 
             // Quick command shortcut hint
-            Rect hintRect = new Rect(panelRect.x + padding, inputY + inputHeight + 6f, contentWidth, 18f);
+            Rect hintRect = new Rect(panelRect.x + padding, hintY, contentWidth, hintHeight);
             var hintStyle = new GUIStyle(m_StatusLabelStyle)
             {
-                fontSize = 10,
-                normal = { textColor = new Color(0.6f, 0.65f, 0.75f, 0.8f) }
+                fontSize = 14,
+                normal = { textColor = new Color(0.65f, 0.70f, 0.80f, 0.9f) }
             };
-            GUI.Label(hintRect, "Tip: Type 'UnlockAllLevels' and press Enter.", hintStyle);
+            GUI.Label(hintRect, "Tip: Type 'UnlockWeapons' or 'UnlockAllLevels' and press Enter.", hintStyle);
         }
 
         private void SubmitCommand()
@@ -258,19 +267,138 @@ namespace Mutiny.Presentation
                 m_StatusColor = new Color(1.0f, 0.85f, 0.35f);
                 m_StatusMessage = $"[RESET] Level progress reset to default.\nHighestUnlockedLevel is now {MutinySaveSystem.HighestUnlockedLevel}.";
             }
+            else if (lower == "unlockweapons" || lower == "unlockallweapons" || lower == "infiniteweapons" ||
+                     lower == "allweapons" || lower == "weapons" || lower == "解锁武器" || lower == "无限武器" ||
+                     lower.StartsWith("unlockweapon") || lower.StartsWith("infiniteweapon"))
+            {
+                bool targetAll = lower.Contains("all") && (lower.Contains("team") || lower.Contains("player"));
+                if (targetAll)
+                {
+                    MutinyCharacter[] allChars = FindObjectsByType<MutinyCharacter>();
+                    int unlockedCount = 0;
+                    for (int i = 0; i < allChars.Length; i++)
+                    {
+                        MutinyCharacter c = allChars[i];
+                        if (c.IsAlive && c.TeamIndex == 1)
+                        {
+                            c.UnlockAllWeapons(infinite: true);
+                            unlockedCount++;
+                        }
+                    }
+                    m_StatusColor = new Color(0.35f, 1.0f, 0.45f);
+                    m_StatusMessage = $"[SUCCESS] Unlocked all 15 weapons (infinite ammo) for {unlockedCount} characters on Team 1!";
+                }
+                else
+                {
+                    MutinyCharacter target = FindTargetCharacter(out string detail);
+                    if (target != null)
+                    {
+                        target.UnlockAllWeapons(infinite: true);
+
+                        MutinyTurnManager turnManager = FindAnyObjectByType<MutinyTurnManager>();
+                        if (turnManager != null && turnManager.CurrentTeam != null && turnManager.CurrentTeam.Characters.Contains(target))
+                        {
+                            if (turnManager.CurrentTeam.SelectedCharacter != target)
+                                turnManager.CurrentTeam.SelectCharacter(target);
+                        }
+
+                        m_StatusColor = new Color(0.35f, 1.0f, 0.45f);
+                        m_StatusMessage = $"[SUCCESS] All 15 weapons unlocked (infinite ammo) for {detail}!";
+                    }
+                    else
+                    {
+                        m_StatusColor = new Color(1.0f, 0.45f, 0.45f);
+                        m_StatusMessage = "[ERROR] No alive character found in the scene.\nPlease enter a game level first.";
+                    }
+                }
+            }
             else if (lower == "help" || lower == "?")
             {
                 m_StatusColor = new Color(0.5f, 0.85f, 1.0f);
                 m_StatusMessage = "Available GM Commands:\n" +
-                                  "• UnlockAllLevels  - Unlocks all 1..18 levels\n" +
-                                  "• ResetLevels      - Resets progress to level 1\n" +
-                                  "• Help             - Shows this help message";
+                                  "• UnlockWeapons   - Unlocks all 15 weapons (infinite ammo) for current character\n" +
+                                  "• UnlockAllLevels - Unlocks all 1..18 levels\n" +
+                                  "• ResetLevels     - Resets progress to level 1\n" +
+                                  "• Help            - Shows this help message";
             }
             else
             {
                 m_StatusColor = new Color(1.0f, 0.45f, 0.45f);
                 m_StatusMessage = $"[ERROR] Unknown command: '{cmd}'\nType 'help' to view available commands.";
             }
+        }
+
+        private MutinyCharacter FindTargetCharacter(out string detail)
+        {
+            MutinyTurnManager turnManager = FindAnyObjectByType<MutinyTurnManager>();
+            if (turnManager != null)
+            {
+                if (turnManager.CurrentTeam != null && turnManager.CurrentTeam.SelectedCharacter != null && turnManager.CurrentTeam.SelectedCharacter.IsAlive)
+                {
+                    detail = $"active selected character '{turnManager.CurrentTeam.SelectedCharacter.name}' (Team {turnManager.CurrentTeam.TeamNumber})";
+                    return turnManager.CurrentTeam.SelectedCharacter;
+                }
+
+                if (turnManager.Team1 != null && turnManager.Team1.SelectedCharacter != null && turnManager.Team1.SelectedCharacter.IsAlive)
+                {
+                    detail = $"Team 1 selected character '{turnManager.Team1.SelectedCharacter.name}'";
+                    return turnManager.Team1.SelectedCharacter;
+                }
+
+                if (turnManager.CurrentTeam != null)
+                {
+                    MutinyCharacter firstAlive = turnManager.CurrentTeam.Characters.Find(c => c != null && c.IsAlive);
+                    if (firstAlive != null)
+                    {
+                        detail = $"current team's character '{firstAlive.name}' (Team {turnManager.CurrentTeam.TeamNumber})";
+                        return firstAlive;
+                    }
+                }
+
+                if (turnManager.Team1 != null)
+                {
+                    MutinyCharacter firstAlive = turnManager.Team1.Characters.Find(c => c != null && c.IsAlive);
+                    if (firstAlive != null)
+                    {
+                        detail = $"player character '{firstAlive.name}' (Team 1)";
+                        return firstAlive;
+                    }
+                }
+            }
+
+            MutinyCharacter[] allChars = FindObjectsByType<MutinyCharacter>();
+            for (int i = 0; i < allChars.Length; i++)
+            {
+                MutinyCharacter c = allChars[i];
+                if (c.IsSelected && c.IsAlive)
+                {
+                    detail = $"selected character '{c.name}' (Team {c.TeamIndex})";
+                    return c;
+                }
+            }
+
+            for (int i = 0; i < allChars.Length; i++)
+            {
+                MutinyCharacter c = allChars[i];
+                if (c.TeamIndex == 1 && c.IsAlive)
+                {
+                    detail = $"player character '{c.name}' (Team 1)";
+                    return c;
+                }
+            }
+
+            for (int i = 0; i < allChars.Length; i++)
+            {
+                MutinyCharacter c = allChars[i];
+                if (c.IsAlive)
+                {
+                    detail = $"character '{c.name}' (Team {c.TeamIndex})";
+                    return c;
+                }
+            }
+
+            detail = null;
+            return null;
         }
 
         private static Texture2D CreateSolidTexture(Color color)
@@ -281,13 +409,14 @@ namespace Mutiny.Presentation
             return tex;
         }
 
-        private static Texture2D CreateCircleTexture(int size, Color fillColor, Color borderColor)
+        private static Texture2D CreateCircleTexture(int size, Color fillColor, Color borderColor, float borderThickness = 6f)
         {
             Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
             float center = size * 0.5f;
-            float radius = center - 1.5f;
+            float radius = center - 2.5f;
             float radiusSqr = radius * radius;
-            float innerRadiusSqr = (radius - 2.0f) * (radius - 2.0f);
+            float innerRadius = Mathf.Max(0f, radius - borderThickness);
+            float innerRadiusSqr = innerRadius * innerRadius;
 
             for (int y = 0; y < size; y++)
             {

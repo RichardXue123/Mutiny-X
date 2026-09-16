@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using Mutiny.Diagnostics;
 using UnityEngine;
 
 namespace Mutiny.Simulation
@@ -5,72 +7,156 @@ namespace Mutiny.Simulation
     [DisallowMultipleComponent]
     public sealed class MutinyCannonball : MutinyWeapon
     {
+        public const float ExplosionSize = 100f;
+        public const float ExplosionDamage = 50f;
+
         protected override void Awake()
         {
             WeaponType = "cannonball";
-            Extent = 9f;
+            Extent = 10f;
             base.Awake();
-            LoadSprite();
-        }
-
-        private void LoadSprite()
-        {
-            Sprite sp = Resources.Load<Sprite>("Art/Weapons/Cannonball/1");
-            if (sp != null && SpriteRenderer != null)
-            {
-                SpriteRenderer.sprite = sp;
-            }
+            // Cannon.fire creates this clip after the Cannon clip.  Flash assigns
+            // it the next highest depth, so the ball stays above the cannon while
+            // Cannon.update follows it.  Sharing a Unity sorting order leaves the
+            // two coplanar sprites with unstable draw order and visible flicker.
+            SpriteRenderer.sortingOrder = WeaponSortingOrder + 1;
+            Sprite sprite = Resources.Load<Sprite>("Art/Weapons/Cannonball/1");
+            if (sprite != null)
+                SpriteRenderer.sprite = sprite;
         }
 
         public override void Initialize(MutinyCharacter owner)
         {
             base.Initialize(owner);
             PhysicsBody.State.Weight = 0f;
+            PhysicsBody.State.HitsBoxes = true;
+            // Cannonball.advanceMotion exits at y > water before Weapon.advance's
+            // generic splashCheck can run.
+            PhysicsBody.ApplyWaterPhysics = false;
+            PhysicsBody.OnSimulationStep -= AdvanceOriginalTick;
+            PhysicsBody.OnSimulationStep += AdvanceOriginalTick;
+        }
+
+        public void SetLaunchPosition(Vector2 pixelPosition)
+        {
+            PhysicsBody.State.X = pixelPosition.x;
+            PhysicsBody.State.Y = pixelPosition.y;
+            transform.position = MutinyPhysics.PixelToUnity(pixelPosition.x, pixelPosition.y);
+        }
+
+        // Cannon.fire calls Cannonball.fire directly.  In the original this is
+        // Weapon.fire, which only assigns the supplied velocity; it does not call
+        // Weapon.release, so the cannon's fixed 30 force must not be clamped to 20
+        // and it must not spend the owner's actions for a second time.
+        public override void Fire(Vector2 velocityPx)
+        {
+            if (IsFired)
+            {
+                MutinyDebugLog.Warning("Cannonball", "duplicate fire ignored", this);
+                return;
+            }
+
+            IsFired = true;
+            IsFinished = false;
+            PhysicsBody.IsActive = true;
+            PhysicsBody.SetVelocity(velocityPx.x, velocityPx.y);
+            MutinyDebugLog.Info("Cannonball", $"fired velocity={velocityPx}", this);
         }
 
         protected override void Update()
         {
-            if (IsFinished)
-                return;
-
-            base.Update();
-            if (IsFinished)
-                return;
-
-            if (IsFired && PhysicsBody != null && PhysicsBody.IsInWater)
-            {
-                Finish();
-                Destroy(gameObject, 0.2f);
-            }
+            // Source Cannonball.advance has no Weapon.advance water timeout.
         }
 
         protected override void OnContact(CollisionSide side)
         {
-            base.OnContact(side);
-
             if (IsFired && !IsFinished)
+                Explode(playPop: true);
+        }
+
+        private void AdvanceOriginalTick()
+        {
+            if (!IsFired || IsFinished || PhysicsBody == null)
+                return;
+
+            PhysicsBodyState state = PhysicsBody.State;
+            if (IsOutsideOriginalBounds(state))
             {
-                Explode();
+                FinishWithoutExplosion("original cannonball boundary");
+                return;
+            }
+
+            MutinyRumBottleSmokeTrail.Spawn(new Vector2(state.X, state.Y));
+            ApplyCharacterContact(state);
+        }
+
+        private bool IsOutsideOriginalBounds(PhysicsBodyState state)
+        {
+            if (state.X < -300f || state.Y < -300f)
+                return true;
+            if (PhysicsBody.TryGetTerrain(out _, out int width, out _ ) && state.X > width * MutinyPhysics.PixelsPerUnit + 300f)
+                return true;
+            return !float.IsInfinity(PhysicsBody.WaterPixelY) && state.Y > PhysicsBody.WaterPixelY;
+        }
+
+        private void ApplyCharacterContact(PhysicsBodyState ball)
+        {
+            MutinyTeam[] teams = FindObjectsByType<MutinyTeam>();
+            for (int i = 0; i < teams.Length; i++)
+            {
+                List<MutinyCharacter> characters = teams[i].Characters;
+                if (characters == null)
+                    continue;
+                for (int j = 0; j < characters.Count; j++)
+                {
+                    MutinyCharacter character = characters[j];
+                    if (character == null || !character.IsAlive || character == Owner || character.PhysicsBody == null)
+                        continue;
+                    PhysicsBodyState target = character.PhysicsBody.State;
+                    if (target.X - target.LeftExtent <= ball.X + ball.RightExtent &&
+                        target.X + target.RightExtent >= ball.X - ball.LeftExtent &&
+                        target.Y - target.TopExtent <= ball.Y + ball.BottomExtent &&
+                        target.Y + target.BottomExtent >= ball.Y - ball.TopExtent)
+                    {
+                        // Cannonball.advance's character branch creates the explosion
+                        // without the contact branch's pop sound.
+                        Explode(playPop: false);
+                        return;
+                    }
+                }
             }
         }
 
-        public void Explode()
+        public void Explode(bool playPop = true)
         {
             if (IsFinished)
                 return;
-
-            Finish();
-
+            Vector2 position = new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y);
+            PhysicsBody.SetVelocity(0f, 0f);
             if (SpriteRenderer != null)
-            {
                 SpriteRenderer.enabled = false;
-            }
+            Finish();
+            MutinyExplosion.Spawn(position, ExplosionSize, ExplosionDamage, Owner);
+            if (playPop)
+                Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("pop");
+            MutinyDebugLog.Info("Cannonball", $"exploded x={position.x:F1} y={position.y:F1} pop={playPop}", this);
+        }
 
-            // Flash AS2 exact: new Explosion(this.x, this.y, 100, 50, this.owner)
-            Vector2 posPx = new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y);
-            MutinyExplosion.Spawn(posPx, 100f, 50f, Owner);
+        private void FinishWithoutExplosion(string reason)
+        {
+            if (IsFinished)
+                return;
+            PhysicsBody.SetVelocity(0f, 0f);
+            if (SpriteRenderer != null)
+                SpriteRenderer.enabled = false;
+            Finish();
+            MutinyDebugLog.Info("Cannonball", reason, this);
+        }
 
-            Destroy(gameObject, 0.1f);
+        private void OnDestroy()
+        {
+            if (PhysicsBody != null)
+                PhysicsBody.OnSimulationStep -= AdvanceOriginalTick;
         }
     }
 }

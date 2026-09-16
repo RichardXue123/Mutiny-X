@@ -9,9 +9,11 @@ namespace Mutiny.Presentation
     [RequireComponent(typeof(MutinyCharacter))]
     public sealed class MutinyCharacterOverlay : MonoBehaviour
     {
-        private const int OverlaySortingOrder = 25;
         private const float PixelsPerUnit = MutinyPhysics.PixelsPerUnit;
         private const int HealthSegments = 27;
+        internal const float OriginalIndicatorTopY = -38.05f;
+        internal const float OriginalHealthCenterY = 18f;
+        internal const float OriginalCancelWeaponCenterY = 33f;
 
         private MutinyCharacter m_Character;
         private MutinyTeam m_Team;
@@ -22,15 +24,21 @@ namespace Mutiny.Presentation
         private SpriteRenderer m_HealthFillRenderer;
         private GameObject m_HealthBar;
         private GameObject m_SelectionCorners;
+        private GameObject m_VoodooTarget;
+        private GameObject m_CancelWeapon;
+        private SpriteRenderer m_CancelWeaponRenderer;
         private bool m_LastIndicatorVisible;
         private bool m_LastHealthVisible;
         private int m_LastHealthSegments = -1;
         private string m_IndicatorResource;
+        private string m_CancelWeaponResource;
 
         private static Sprite s_WhitePixel;
 
         public bool IsTurnIndicatorVisible => m_Indicator != null && m_Indicator.activeInHierarchy;
         public bool IsHealthBarVisible => m_HealthBar != null && m_HealthBar.activeInHierarchy;
+        public bool IsVoodooTargetVisible => m_VoodooTarget != null && m_VoodooTarget.activeInHierarchy;
+        public bool IsCancelWeaponVisible => m_CancelWeapon != null && m_CancelWeapon.activeInHierarchy;
         public int CurrentHealthFrame => 1 + Mathf.Max(0, m_LastHealthSegments);
 
         private static Sprite WhitePixel
@@ -72,6 +80,8 @@ namespace Mutiny.Presentation
 
         private void LateUpdate()
         {
+            KeepOverlayUpright();
+
             if (m_Character == null || !m_Character.IsAlive)
             {
                 SetOverlayVisible(false);
@@ -92,23 +102,54 @@ namespace Mutiny.Presentation
             bool hideForCharacterAction = isDragged || isSelfThrown;
             bool showIndicator = isCurrentTeam && !hideForCharacterAction;
             bool showHealth = !hideForCharacterAction;
+            MutinyVoodooDoll armedDoll = FindAnyObjectByType<MutinyPlayerInput>()?.ArmedVoodooDoll;
+            bool isVoodooTargeting = armedDoll != null;
+            bool showVoodooTarget = isVoodooTargeting &&
+                                    (armedDoll.TargetCharacter == m_Character ||
+                                     (armedDoll.TargetCharacter == null && m_Character.IsHovered));
+            MutinyPlayerInput playerInput = FindAnyObjectByType<MutinyPlayerInput>();
+            bool showCancelWeapon = playerInput != null && playerInput.ShouldShowCancelWeapon(m_Character);
             SetActive(m_Indicator, showIndicator, ref m_LastIndicatorVisible, "indicator");
             SetActive(m_HealthBar, showHealth, ref m_LastHealthVisible, "health");
 
+            if (m_VoodooTarget != null && m_VoodooTarget.activeSelf != showVoodooTarget)
+                m_VoodooTarget.SetActive(showVoodooTarget);
+            if (m_CancelWeapon != null && m_CancelWeapon.activeSelf != showCancelWeapon)
+            {
+                m_CancelWeapon.SetActive(showCancelWeapon);
+                MutinyDebugLog.Info("Overlay",
+                    $"cancel weapon visible={showCancelWeapon} character={m_Character.name}", this);
+            }
+
             if (m_SelectionCorners != null)
             {
-                bool showCorners = (m_Character.IsSelected || m_Character.IsHovered) && !hideForCharacterAction;
+                // Character.updateOverlay forces corners off for every character
+                // while the selected player has an unfired Voodoo Doll.
+                bool showCorners = !isVoodooTargeting &&
+                                   (m_Character.IsSelected || m_Character.IsHovered) && !hideForCharacterAction;
                 if (m_SelectionCorners.activeSelf != showCorners)
                     m_SelectionCorners.SetActive(showCorners);
             }
 
             UpdateIndicatorSprite();
+            UpdateCancelWeaponSprite();
             UpdateHealthBar();
         }
 
         public void RefreshVisualStateForVerification()
         {
             LateUpdate();
+        }
+
+        private void KeepOverlayUpright()
+        {
+            if (m_OverlayRoot == null)
+                return;
+
+            // Flash Clip.update() moves mcHolder but applies rotation only to
+            // mc._rotation. characterOverlay is attached to the unrotated
+            // mcHolder, so it follows position without inheriting character spin.
+            m_OverlayRoot.transform.rotation = Quaternion.identity;
         }
 
         public static int CalculateOriginalHealthFrame(float shownHealth, float maxHealth)
@@ -141,28 +182,32 @@ namespace Mutiny.Presentation
 
         private void CreateOverlayUI()
         {
+            int overlaySortingOrder = ResolveOverlaySortingOrder();
             m_OverlayRoot = new GameObject("OriginalCharacterOverlay");
             m_OverlayRoot.transform.SetParent(transform, false);
-            // characterOverlay's exported placement is x=0.5px, y=-2.4px.
-            m_OverlayRoot.transform.localPosition = new Vector3(0.5f / PixelsPerUnit, 2.4f / PixelsPerUnit, 0f);
+            // Character.show() attaches characterOverlay directly to mcHolder at
+            // (0, 0). The (0.5, -2.4) placement in the SWF root is only the
+            // library-preview instance and must not be applied at runtime.
+            m_OverlayRoot.transform.localPosition = Vector3.zero;
 
             m_Indicator = new GameObject("TurnIndicator");
             m_Indicator.transform.SetParent(m_OverlayRoot.transform, false);
-            // characterOverlay.triangle is placed at source y=-761 twips (-38.05px).
-            m_Indicator.transform.localPosition = new Vector3(0f, 38.05f / PixelsPerUnit, 0f);
+            // triangle is placed at y=-761 twips and its artwork begins at that
+            // registration point. The sprite therefore uses a top-centre pivot.
+            m_Indicator.transform.localPosition = new Vector3(0f, -OriginalIndicatorTopY / PixelsPerUnit, 0f);
             m_IndicatorRenderer = m_Indicator.AddComponent<SpriteRenderer>();
-            m_IndicatorRenderer.sortingOrder = OverlaySortingOrder + 2;
+            m_IndicatorRenderer.sortingOrder = overlaySortingOrder + 2;
             m_Indicator.SetActive(false);
 
             m_HealthBar = new GameObject("HealthBar");
             m_HealthBar.transform.SetParent(m_OverlayRoot.transform, false);
-            // characterOverlay.health is placed at source y=360 twips (+18px).
-            m_HealthBar.transform.localPosition = new Vector3(0f, -18f / PixelsPerUnit, 0f);
+            // characterOverlay.health is centred at source y=360 twips (+18px).
+            m_HealthBar.transform.localPosition = new Vector3(0f, -OriginalHealthCenterY / PixelsPerUnit, 0f);
             var barBackground = new GameObject("OriginalFrame");
             barBackground.transform.SetParent(m_HealthBar.transform, false);
             SpriteRenderer backgroundRenderer = barBackground.AddComponent<SpriteRenderer>();
             backgroundRenderer.sprite = LoadSprite("UI/CharacterOverlay/health_background", new Vector2(0.5f, 0.5f));
-            backgroundRenderer.sortingOrder = OverlaySortingOrder;
+            backgroundRenderer.sortingOrder = overlaySortingOrder;
 
             var fill = new GameObject("DiscreteFill");
             fill.transform.SetParent(m_HealthBar.transform, false);
@@ -170,11 +215,49 @@ namespace Mutiny.Presentation
             m_HealthFill = fill.transform;
             m_HealthFillRenderer = fill.AddComponent<SpriteRenderer>();
             m_HealthFillRenderer.sprite = WhitePixel;
-            m_HealthFillRenderer.sortingOrder = OverlaySortingOrder + 1;
+            m_HealthFillRenderer.sortingOrder = overlaySortingOrder + 1;
+
+            m_VoodooTarget = new GameObject("VoodooTarget");
+            m_VoodooTarget.transform.SetParent(m_OverlayRoot.transform, false);
+            // characterOverlay.target matrix is translateX=-20 twips: -1 px.
+            m_VoodooTarget.transform.localPosition = new Vector3(-1f / PixelsPerUnit, 0f, 0f);
+            SpriteRenderer targetRenderer = m_VoodooTarget.AddComponent<SpriteRenderer>();
+            // symbol 1871 spans x=-20..21 px and y=-21..21 px.  Its x
+            // registration is therefore pixel 20 of a 41px export, not 20.5.
+            targetRenderer.sprite = LoadSprite("UI/CharacterOverlay/voodoo_target", new Vector2(20f / 41f, 0.5f));
+            targetRenderer.sortingOrder = overlaySortingOrder + 4;
+            m_VoodooTarget.SetActive(false);
+
+            m_CancelWeapon = new GameObject("CancelWeapon");
+            m_CancelWeapon.transform.SetParent(m_OverlayRoot.transform, false);
+            m_CancelWeapon.transform.localPosition =
+                new Vector3(0f, -OriginalCancelWeaponCenterY / PixelsPerUnit, 0f);
+            m_CancelWeaponRenderer = m_CancelWeapon.AddComponent<SpriteRenderer>();
+            m_CancelWeaponRenderer.sortingOrder = overlaySortingOrder + 5;
+            m_CancelWeapon.SetActive(false);
 
             CreateSelectionCorners();
             UpdateIndicatorSprite();
             UpdateHealthBar();
+        }
+
+        private void UpdateCancelWeaponSprite()
+        {
+            if (m_CancelWeaponRenderer == null)
+                return;
+
+            string resource = m_Character.TeamIndex == 2
+                ? "UI/button_cancel_blue"
+                : "UI/button_cancel_red";
+            if (string.Equals(m_CancelWeaponResource, resource, StringComparison.Ordinal))
+                return;
+
+            Sprite sprite = LoadSprite(resource, new Vector2(0.5f, 0.5f));
+            if (sprite != null)
+            {
+                m_CancelWeaponRenderer.sprite = sprite;
+                m_CancelWeaponResource = resource;
+            }
         }
 
         private void UpdateIndicatorSprite()
@@ -190,7 +273,7 @@ namespace Mutiny.Presentation
             if (string.Equals(m_IndicatorResource, resource, StringComparison.Ordinal))
                 return;
 
-            Sprite sprite = LoadSprite(resource, new Vector2(0.5f, 0.5f));
+            Sprite sprite = LoadSprite(resource, new Vector2(0.5f, 1f));
             if (sprite != null)
             {
                 m_IndicatorRenderer.sprite = sprite;
@@ -252,7 +335,7 @@ namespace Mutiny.Presentation
             line.positionCount = 3;
             line.startWidth = 2f / PixelsPerUnit;
             line.endWidth = 2f / PixelsPerUnit;
-            line.sortingOrder = OverlaySortingOrder + 3;
+            line.sortingOrder = ResolveOverlaySortingOrder() + 3;
             line.material = new Material(Shader.Find("Sprites/Default"));
             line.startColor = Color.white;
             line.endColor = Color.white;
@@ -265,6 +348,17 @@ namespace Mutiny.Presentation
         private static Vector3 ToUnityPixel(Vector2 sourcePixel)
         {
             return new Vector3(sourcePixel.x / PixelsPerUnit, -sourcePixel.y / PixelsPerUnit, 0f);
+        }
+
+        private int ResolveOverlaySortingOrder()
+        {
+            SpriteRenderer characterRenderer = m_Character != null
+                ? m_Character.GetComponent<SpriteRenderer>()
+                : null;
+            int characterOrder = characterRenderer != null
+                ? characterRenderer.sortingOrder
+                : Mutiny.Levels.MutinyLevelBuilder.CharacterSortingOrder;
+            return characterOrder + Mutiny.Levels.MutinyLevelBuilder.CharacterOverlaySortingOffset;
         }
 
         private void SetActive(GameObject target, bool active, ref bool previous, string label)

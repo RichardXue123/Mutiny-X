@@ -11,6 +11,11 @@ namespace Mutiny.Simulation
     [RequireComponent(typeof(MutinyPhysicsBody))]
     public sealed class MutinyCharacter : MonoBehaviour
     {
+        // Character.contact plays hitwall only when the prior contact was more
+        // than five original 25 Hz ticks ago.  There is no separate footstep or
+        // rolling sound in the Flash character path.
+        public const int OriginalContactSoundCooldownTicks = 5;
+
         [Header("Identity")]
         public string CharacterType;
         public int TeamIndex; // 1 = Red / Player, 2 = Blue / Enemy
@@ -28,6 +33,8 @@ namespace Mutiny.Simulation
         [Header("Action State")]
         public bool CanThrow = true;
         public bool CanShoot = true;
+        // Character.weaponLocked blocks replacement/cancellation during PiecesOfEight.
+        [NonSerialized] public bool WeaponLocked = false;
         // Character.thrown in the original only records a deliberate self throw.
         // It must not be inferred from velocity: explosions and collisions also move
         // a character while its overlay remains visible.
@@ -56,12 +63,16 @@ namespace Mutiny.Simulation
         private SpriteRenderer m_SpriteRenderer;
         private Color m_OriginalColor = Color.white;
         private float m_HurtFlashTimer = 0f;
+        private int m_ContactTimeTicks;
+        private int m_ContactSoundCount;
         private bool m_LandDeathPresented;
         private MutinyDeadCharacterEffect m_DeadCharacterEffect;
 
         public bool IsResolvingHealthDisplay =>
             !IsDrowned && !Mathf.Approximately(ShownHealth, Health);
         public bool HasLandDeathPresentation => m_LandDeathPresented;
+        // Kept observable for the production-physics regression test and logs.
+        public int ContactSoundCount => m_ContactSoundCount;
 
         public event Action OnHealthChanged;
         public event Action OnDeath;
@@ -92,6 +103,7 @@ namespace Mutiny.Simulation
                 PhysicsBody.State.TopExtent = 8f;
                 PhysicsBody.State.BottomExtent = 8f;
                 PhysicsBody.State.HitsTiles = true;
+                PhysicsBody.State.HitsBoxes = true;
             }
 
             if (m_SpriteRenderer != null)
@@ -162,8 +174,11 @@ namespace Mutiny.Simulation
             m_DeadCharacterEffect = null;
             CanThrow = true;
             CanShoot = true;
+            WeaponLocked = false;
             IsSelfThrown = false;
             IsSelected = false;
+            m_ContactTimeTicks = 0;
+            m_ContactSoundCount = 0;
 
             ParseWeapons(properties);
 
@@ -220,18 +235,62 @@ namespace Mutiny.Simulation
             }
         }
 
+        public static readonly string[] AllRegisteredWeapons = new string[]
+        {
+            "cherryBomb", "boulder", "dynamite", "piecesOfEight", "rumBottle",
+            "banana", "parachuteBomb", "woodenCrate", "gunpowderBarrel", "seagull",
+            "mine", "cannon", "cannonball", "anchor", "voodooDoll", "tidalWave"
+        };
+
+        public void UnlockAllWeapons(bool infinite = true)
+        {
+            for (int i = 0; i < AllRegisteredWeapons.Length; i++)
+            {
+                string w = AllRegisteredWeapons[i];
+                if (infinite)
+                {
+                    InfiniteWeapons.Add(w);
+                    WeaponInventory[w] = int.MaxValue;
+                }
+                else
+                {
+                    WeaponInventory[w] = 99;
+                }
+            }
+
+            CanShoot = true;
+        }
+
         public bool HasWeapon(string weaponType)
         {
             if (string.IsNullOrEmpty(weaponType))
                 return false;
             if (InfiniteWeapons.Contains(weaponType))
                 return true;
-            return WeaponInventory.TryGetValue(weaponType, out int count) && count > 0;
+            if (weaponType.Equals("cannon", StringComparison.OrdinalIgnoreCase) && InfiniteWeapons.Contains("cannonball"))
+                return true;
+            if (weaponType.Equals("cannonball", StringComparison.OrdinalIgnoreCase) && InfiniteWeapons.Contains("cannon"))
+                return true;
+            if (WeaponInventory.TryGetValue(weaponType, out int count) && count > 0)
+                return true;
+            if (weaponType.Equals("cannon", StringComparison.OrdinalIgnoreCase) && WeaponInventory.TryGetValue("cannonball", out int c1) && c1 > 0)
+                return true;
+            if (weaponType.Equals("cannonball", StringComparison.OrdinalIgnoreCase) && WeaponInventory.TryGetValue("cannon", out int c2) && c2 > 0)
+                return true;
+            return false;
         }
 
         public bool IsInfinite(string weaponType)
         {
-            return InfiniteWeapons.Contains(weaponType);
+            if (string.IsNullOrEmpty(weaponType))
+                return false;
+            if (InfiniteWeapons.Contains(weaponType))
+                return true;
+            if (weaponType.Equals("cannon", StringComparison.OrdinalIgnoreCase) && InfiniteWeapons.Contains("cannonball"))
+                return true;
+            if (weaponType.Equals("cannonball", StringComparison.OrdinalIgnoreCase) && InfiniteWeapons.Contains("cannon"))
+                return true;
+            return false;
         }
 
         public bool HasAnyWeapon()
@@ -248,14 +307,20 @@ namespace Mutiny.Simulation
 
         public int GetAmmunition(string weaponType)
         {
-            if (InfiniteWeapons.Contains(weaponType))
+            if (IsInfinite(weaponType))
                 return -1; // -1 represents infinite ammo
-            return WeaponInventory.TryGetValue(weaponType, out int count) ? count : 0;
+            if (WeaponInventory.TryGetValue(weaponType, out int count))
+                return count;
+            if (weaponType.Equals("cannon", StringComparison.OrdinalIgnoreCase) && WeaponInventory.TryGetValue("cannonball", out int c1))
+                return c1;
+            if (weaponType.Equals("cannonball", StringComparison.OrdinalIgnoreCase) && WeaponInventory.TryGetValue("cannon", out int c2))
+                return c2;
+            return 0;
         }
 
         public bool ConsumeWeapon(string weaponType)
         {
-            if (InfiniteWeapons.Contains(weaponType))
+            if (IsInfinite(weaponType))
                 return true;
 
             if (WeaponInventory.TryGetValue(weaponType, out int count) && count > 0)
@@ -263,12 +328,22 @@ namespace Mutiny.Simulation
                 WeaponInventory[weaponType] = count - 1;
                 return true;
             }
+            if (weaponType.Equals("cannon", StringComparison.OrdinalIgnoreCase) && WeaponInventory.TryGetValue("cannonball", out int c1) && c1 > 0)
+            {
+                WeaponInventory["cannonball"] = c1 - 1;
+                return true;
+            }
+            if (weaponType.Equals("cannonball", StringComparison.OrdinalIgnoreCase) && WeaponInventory.TryGetValue("cannon", out int c2) && c2 > 0)
+            {
+                WeaponInventory["cannon"] = c2 - 1;
+                return true;
+            }
             return false;
         }
 
         public void AddWeapon(string weaponType, int count = 1)
         {
-            if (string.IsNullOrEmpty(weaponType) || count <= 0 || InfiniteWeapons.Contains(weaponType))
+            if (string.IsNullOrEmpty(weaponType) || count <= 0 || IsInfinite(weaponType))
                 return;
 
             WeaponInventory.TryGetValue(weaponType, out int existing);
@@ -284,8 +359,6 @@ namespace Mutiny.Simulation
             Health = Mathf.Max(0f, Health - roundedDamage);
             OnHealthChanged?.Invoke();
             GetComponent<MutinyCharacterAnimator>()?.PlayHit();
-
-            Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("hitwall");
 
             if (m_SpriteRenderer != null)
             {
@@ -398,6 +471,7 @@ namespace Mutiny.Simulation
             {
                 CanThrow = true;
                 CanShoot = true;
+                WeaponLocked = false;
                 ClearSelfThrown("start turn");
             }
         }
@@ -436,6 +510,27 @@ namespace Mutiny.Simulation
             }
         }
 
+        private void HandleOriginalPhysicalContact()
+        {
+            // Character.advance calls contact during advanceMotion, then increments
+            // contactTime at the end of the same tick.  A contact immediately after
+            // five quiet ticks sees contactTime == 6 and is therefore audible.
+            if (m_ContactTimeTicks > OriginalContactSoundCooldownTicks)
+            {
+                Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("hitwall");
+                m_ContactSoundCount++;
+                MutinyDebugLog.Info("CharacterAudio",
+                    $"hitwall contact name={name} ticksSinceContact={m_ContactTimeTicks}", this);
+            }
+
+            m_ContactTimeTicks = 0;
+        }
+
+        private void AdvanceOriginalContactTimerTick()
+        {
+            m_ContactTimeTicks++;
+        }
+
         private void BindPhysicsEvents()
         {
             if (PhysicsBody == null)
@@ -447,12 +542,20 @@ namespace Mutiny.Simulation
             PhysicsBody.OnEnterWater += Drown;
             PhysicsBody.OnFloorLanded -= HandleFloorContact;
             PhysicsBody.OnFloorLanded += HandleFloorContact;
+            PhysicsBody.OnFloorLanded -= HandleOriginalPhysicalContact;
+            PhysicsBody.OnFloorLanded += HandleOriginalPhysicalContact;
+            PhysicsBody.OnCeilingHit -= HandleOriginalPhysicalContact;
+            PhysicsBody.OnCeilingHit += HandleOriginalPhysicalContact;
+            PhysicsBody.OnWallHit -= HandleOriginalPhysicalContact;
+            PhysicsBody.OnWallHit += HandleOriginalPhysicalContact;
             PhysicsBody.OnAfterMotionStep -= AdvanceOriginalRotationTick;
             PhysicsBody.OnAfterMotionStep += AdvanceOriginalRotationTick;
             PhysicsBody.OnWaterMotionAdjusted -= AdvanceOriginalWaterRotationTick;
             PhysicsBody.OnWaterMotionAdjusted += AdvanceOriginalWaterRotationTick;
             PhysicsBody.OnSimulationStep -= AdvanceOriginalHealthTick;
             PhysicsBody.OnSimulationStep += AdvanceOriginalHealthTick;
+            PhysicsBody.OnSimulationStep -= AdvanceOriginalContactTimerTick;
+            PhysicsBody.OnSimulationStep += AdvanceOriginalContactTimerTick;
         }
 
         private void OnDestroy()
@@ -461,9 +564,13 @@ namespace Mutiny.Simulation
             {
                 PhysicsBody.OnEnterWater -= Drown;
                 PhysicsBody.OnFloorLanded -= HandleFloorContact;
+                PhysicsBody.OnFloorLanded -= HandleOriginalPhysicalContact;
+                PhysicsBody.OnCeilingHit -= HandleOriginalPhysicalContact;
+                PhysicsBody.OnWallHit -= HandleOriginalPhysicalContact;
                 PhysicsBody.OnAfterMotionStep -= AdvanceOriginalRotationTick;
                 PhysicsBody.OnWaterMotionAdjusted -= AdvanceOriginalWaterRotationTick;
                 PhysicsBody.OnSimulationStep -= AdvanceOriginalHealthTick;
+                PhysicsBody.OnSimulationStep -= AdvanceOriginalContactTimerTick;
             }
         }
     }

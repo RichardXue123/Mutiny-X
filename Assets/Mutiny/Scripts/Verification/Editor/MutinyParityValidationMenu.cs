@@ -72,5 +72,17 @@ namespace Mutiny.Verification.Editor
                 Debug.LogError("[Mutiny Parity] Battle HUD verification failed:\n" +
                                string.Join("\n", result.Failures));
         }
+
+        [MenuItem("Mutiny/Parity/Validate Weapon Ready And Cancel")]
+        public static void ValidateWeaponReadyAndCancel()
+        {
+            MutinyLevel1VerificationResult result =
+                MutinyTurnActionUiVerificationTest.RunWeaponReadyAndCancel();
+            if (result.Passed)
+                Debug.Log($"[Mutiny Parity] Weapon ready/cancel verification passed: {result.PassedAssertions}/{result.TotalAssertions} assertions.");
+            else
+                Debug.LogError("[Mutiny Parity] Weapon ready/cancel verification failed:\n" +
+                               string.Join("\n", result.Failures));
+        }
     }
 }

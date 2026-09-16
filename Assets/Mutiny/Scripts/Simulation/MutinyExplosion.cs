@@ -8,7 +8,7 @@ namespace Mutiny.Simulation
     [DisallowMultipleComponent]
     public sealed class MutinyExplosion : MonoBehaviour
     {
-        public const int ExplosionSortingOrder = 25;
+        public const int ExplosionSortingOrder = 200;
 
         [Header("Explosion Properties (Flash units)")]
         public float PixelX;
@@ -17,6 +17,9 @@ namespace Mutiny.Simulation
         public float MaxDamage = 40f;
         public float Radius;
         public MutinyCharacter Caster;
+        // Most original callers play their own sound at the action that creates an
+        // explosion. RumBottle does so on contact, before Explosion.hit on frame 3.
+        public bool PlayPopOnHit = true;
 
         [Header("Animation")]
         public Sprite[] AnimationFrames;
@@ -27,7 +30,12 @@ namespace Mutiny.Simulation
         private float m_FrameTimer = 0f;
         private bool m_HitApplied = false;
 
-        public static MutinyExplosion Spawn(Vector2 pixelPos, float size = 80f, float maxDamage = 40f, MutinyCharacter caster = null)
+        public static MutinyExplosion Spawn(
+            Vector2 pixelPos,
+            float size = 80f,
+            float maxDamage = 40f,
+            MutinyCharacter caster = null,
+            bool playPopOnHit = true)
         {
             GameObject go = new GameObject("Explosion");
             Vector3 unityPos = MutinyPhysics.PixelToUnity(pixelPos.x, pixelPos.y);
@@ -44,6 +52,7 @@ namespace Mutiny.Simulation
             explosion.MaxDamage = maxDamage;
             explosion.Radius = (size * 0.5f) + 20f; // Exact Flash formula: size/2 + 20
             explosion.Caster = caster;
+            explosion.PlayPopOnHit = playPopOnHit;
 
             return explosion;
         }
@@ -130,7 +139,7 @@ namespace Mutiny.Simulation
         public void ApplyHit()
         {
             var audioMgr = FindAnyObjectByType<Mutiny.Presentation.MutinyAudioManager>();
-            if (audioMgr != null)
+            if (PlayPopOnHit && audioMgr != null)
             {
                 audioMgr.PlaySFX("pop");
             }
@@ -184,6 +193,40 @@ namespace Mutiny.Simulation
                     if (Caster != null)
                         Caster.Evilness += ratio;
                 }
+            }
+
+            // Flash Explosion.hit checks every Controller.boxes entry against the
+            // nearest point on its asymmetric AABB. Wooden crates remove themselves
+            // from that registry when their `explode` timeline starts.
+            var crates = FindObjectsByType<MutinyWoodenCrate>();
+            for (int i = 0; i < crates.Length; i++)
+            {
+                MutinyWoodenCrate crate = crates[i];
+                if (crate == null || !crate.HasPlacedAny || crate.PhysicsBody == null)
+                    continue;
+
+                PhysicsBodyState box = crate.PhysicsBody.State;
+                float nearestX = Mathf.Clamp(PixelX, box.X - box.LeftExtent, box.X + box.RightExtent);
+                float nearestY = Mathf.Clamp(PixelY, box.Y - box.TopExtent, box.Y + box.BottomExtent);
+                float dx = PixelX - nearestX;
+                float dy = PixelY - nearestY;
+                if (dx * dx + dy * dy <= Radius * Radius)
+                    crate.Explode();
+            }
+
+            var barrels = FindObjectsByType<MutinyGunpowderBarrel>();
+            for (int i = 0; i < barrels.Length; i++)
+            {
+                MutinyGunpowderBarrel barrel = barrels[i];
+                if (barrel == null || !barrel.HasPlacedAny || barrel.PhysicsBody == null)
+                    continue;
+                PhysicsBodyState box = barrel.PhysicsBody.State;
+                float nearestX = Mathf.Clamp(PixelX, box.X - box.LeftExtent, box.X + box.RightExtent);
+                float nearestY = Mathf.Clamp(PixelY, box.Y - box.TopExtent, box.Y + box.BottomExtent);
+                float dx = PixelX - nearestX;
+                float dy = PixelY - nearestY;
+                if (dx * dx + dy * dy <= Radius * Radius)
+                    barrel.Explode();
             }
         }
     }

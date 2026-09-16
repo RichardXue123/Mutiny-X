@@ -261,7 +261,28 @@ namespace Mutiny.Simulation
             var activeWeapons = FindObjectsByType<MutinyWeapon>();
             for (int i = 0; i < activeWeapons.Length; i++)
             {
+                if (activeWeapons[i] is MutinyGunpowderBarrel barrel &&
+                    barrel.IsAiPlacementActive && barrel.HasPendingPlacement)
+                {
+                    blocker = "gunpowderBarrel:ai-placement";
+                    return false;
+                }
+
+                if (activeWeapons[i] is MutinyPiecesOfEight coins &&
+                    coins.IsAwaitingNextCoin && coins.Owner != null && coins.Owner.IsAlive)
+                {
+                    // Character.advance keeps Controller.inactivity at zero while the
+                    // same unfinished piecesOfEight instance waits for coin 2..8.
+                    blocker = $"piecesOfEight:awaiting {coins.TimesFired}/{MutinyPiecesOfEight.TotalCoins}";
+                    return false;
+                }
+            }
+
+            for (int i = 0; i < activeWeapons.Length; i++)
+            {
                 var w = activeWeapons[i];
+                if (w is MutinyMine mine && mine.IsStored && !mine.IsActive)
+                    continue; // Mine.limitedToTurn=false: an armed idle mine persists across turns.
                 if (w != null && w.IsFired && !w.IsFinished)
                 {
                     blocker = $"weapon:{w.WeaponType}/{w.name} fired={w.IsFired} finished={w.IsFinished}";
@@ -340,6 +361,8 @@ namespace Mutiny.Simulation
                     if (controller != null)
                     {
                         Mutiny.Persistence.MutinySaveSystem.UnlockLevel(controller.CurrentLevelIndex + 1);
+                        if (Team2 != null && Team2.IsAiControlled)
+                            controller.AwardSinglePlayerLevelWin(Team1);
                     }
                 }
                 else
@@ -348,6 +371,8 @@ namespace Mutiny.Simulation
                     Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("fan");
                 }
 
+                MutinyDebugLog.Info("Turn",
+                    $"END-POP result={GameResult} team1Alive={Team1.AliveCount} team2Alive={Team2.AliveCount} level={FindAnyObjectByType<MutinyLevelController>()?.CurrentLevelIndex}", this);
                 OnGameOver?.Invoke(GameResult);
                 return;
             }

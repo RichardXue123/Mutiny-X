@@ -1,119 +1,100 @@
+using Mutiny.Diagnostics;
+using Mutiny.Presentation;
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 namespace Mutiny.Simulation
 {
     [DisallowMultipleComponent]
     public sealed class MutinyBanana : MutinyWeapon
     {
-        private int m_FramesSinceFire;
+        public const float ExtentPixels = 7f;
+        public const float Bounce = 0.8f;
+        public const float Friction = 0.5f;
+        public const float AiImmediateDetonationDistanceSquared = 400f;
+        public const float AiRecedingDetonationLimitSquared = 2500f;
+
+        // Banana.as initializes this to Infinity and never assigns it in this SWF.
+        // Keep the comparison in the production flow rather than inventing a
+        // distance-history behaviour the original did not execute.
+        private float m_LastNearestDistanceSquared = float.PositiveInfinity;
+        private bool m_PlayerDetonationRequested;
 
         protected override void Awake()
         {
             WeaponType = "banana";
-            Extent = 7f;
+            Extent = ExtentPixels;
             TwangMaxForce = 30f;
             base.Awake();
-            LoadSprite();
-        }
-
-        private void LoadSprite()
-        {
-            Sprite sp = Resources.Load<Sprite>("Art/Weapons/Banana/1");
-            if (sp != null && SpriteRenderer != null)
-            {
-                SpriteRenderer.sprite = sp;
-            }
+            Sprite sprite = Resources.Load<Sprite>("Art/Weapons/Banana/1");
+            if (sprite != null && SpriteRenderer != null)
+                SpriteRenderer.sprite = sprite;
         }
 
         public override void Initialize(MutinyCharacter owner)
         {
             base.Initialize(owner);
-
-            // Flash AS2 exact: bounce = 0.8, friction = 0.5
-            PhysicsBody.State.Bounce = 0.8f;
-            PhysicsBody.State.Friction = 0.5f;
-            m_FramesSinceFire = 0;
+            PhysicsBody.State.Bounce = Bounce;
+            PhysicsBody.State.Friction = Friction;
+            m_LastNearestDistanceSquared = float.PositiveInfinity;
+            m_PlayerDetonationRequested = false;
+            PhysicsBody.OnSimulationStep -= AdvanceOriginalTick;
+            PhysicsBody.OnSimulationStep += AdvanceOriginalTick;
         }
 
-        protected override void Update()
+        public override void Twang(Vector2 startPx, Vector2 dragPx)
         {
-            if (IsFinished)
-                return;
+            // Banana exposes a 30-force pull gauge, then Weapon.release clamps the
+            // committed throw to the shared 20 px/tick cap.
+            Vector2 launchVelocity = MutinyPhysics.CalculateTwangVelocity(startPx, dragPx, TwangMaxForce);
+            if (launchVelocity.sqrMagnitude > MutinyPhysics.DefaultTwangMaxForce * MutinyPhysics.DefaultTwangMaxForce)
+                launchVelocity = launchVelocity.normalized * MutinyPhysics.DefaultTwangMaxForce;
+            Fire(launchVelocity);
+        }
 
-            base.Update();
-            if (IsFinished)
-                return;
+        public static bool TryRequestPlayerDetonation(MutinyTeam inputTeam)
+        {
+            MutinyBanana banana = FindPlayerDetonatableBanana(inputTeam);
+            if (banana == null)
+                return false;
 
-            if (IsFired && PhysicsBody != null)
-            {
-                m_FramesSinceFire++;
+            banana.m_PlayerDetonationRequested = true;
+            MutinyDebugLog.Info("Banana", $"player detonation requested owner={banana.Owner.name}", banana);
+            return true;
+        }
 
-                // Water invalidation: submerged banana duds and finishes
-                if (PhysicsBody.IsInWater)
-                {
-                    float waterY = PhysicsBody.WaterPixelY;
-                    if (m_WaterTimer >= 0.35f || (!float.IsInfinity(waterY) && PhysicsBody.State.Y > waterY + 20f))
-                    {
-                        Finish();
-                        Destroy(gameObject, 0.3f);
-                        return;
-                    }
-                }
+        /// <summary>
+        /// Tests whether a human team's already-thrown banana owns the next global
+        /// tile-system click. This query is intentionally side-effect free so the
+        /// input phase gate can admit the click before it requests detonation.
+        /// </summary>
+        public static bool HasPlayerDetonatableBanana(MutinyTeam inputTeam)
+        {
+            return FindPlayerDetonatableBanana(inputTeam) != null;
+        }
 
-                bool shouldExplode = PhysicsBody.State.VelocityX == 0f &&
-                                     Mathf.Abs(PhysicsBody.State.VelocityY) < 0.5f;
+        public bool RequestDetonationForVerification()
+        {
+            if (!IsFired || IsFinished || IsAiOwner())
+                return false;
 
-                MutinyTurnManager turnManager = FindAnyObjectByType<MutinyTurnManager>();
-                bool humanOwned = turnManager != null && turnManager.Team1 != null &&
-                                  turnManager.Team1.Characters.Contains(Owner) &&
-                                  !turnManager.Team1.IsAiControlled;
+            m_PlayerDetonationRequested = true;
+            return true;
+        }
 
-                // The original clears the launch mouse press in fire(), then lets the
-                // player detonate the moving banana with the next left click.
-                if (!shouldExplode && humanOwned && m_FramesSinceFire > 1 &&
-                    Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
-                {
-                    shouldExplode = true;
-                }
-
-                // Original AI detonates once a character is within 20 px.
-                if (!shouldExplode && !humanOwned)
-                {
-                    MutinyCharacter[] characters = FindObjectsByType<MutinyCharacter>();
-                    Vector2 bananaPosition = new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y);
-                    for (int i = 0; i < characters.Length; i++)
-                    {
-                        MutinyCharacter character = characters[i];
-                        if (character == null || !character.IsAlive)
-                            continue;
-
-                        Vector2 characterPosition = new Vector2(
-                            character.PhysicsBody.State.X,
-                            character.PhysicsBody.State.Y);
-                        if ((characterPosition - bananaPosition).sqrMagnitude < 400f)
-                        {
-                            shouldExplode = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (shouldExplode)
-                {
-                    Explode();
-                }
-            }
+        public void AdvanceOriginalTickForVerification()
+        {
+            AdvanceOriginalTick();
         }
 
         protected override void OnContact(CollisionSide side)
         {
             base.OnContact(side);
-
-            if (!IsFired || IsFinished)
-                return;
-
-            Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("banana_bounce");
+            if (IsFired && !IsFinished)
+            {
+                // Banana.contact plays this for floor, wall and ceiling collisions.
+                MutinyAudioManager.Instance?.PlaySFX("banana_bounce");
+                MutinyDebugLog.Info("Banana", $"bounce side={side}", this);
+            }
         }
 
         public void Explode()
@@ -122,17 +103,111 @@ namespace Mutiny.Simulation
                 return;
 
             Finish();
-
             if (SpriteRenderer != null)
-            {
                 SpriteRenderer.enabled = false;
+
+            Vector2 position = new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y);
+            // Banana.advanceMotion creates the explosion and plays pop in the same
+            // tick; Explosion.hit must not play a second pop two animation frames on.
+            MutinyExplosion.Spawn(position, 160f, 80f, Owner, playPopOnHit: false);
+            MutinyAudioManager.Instance?.PlaySFX("pop");
+            MutinyDebugLog.Info("Banana", $"exploded pos=({position.x:F1},{position.y:F1})", this);
+            Destroy(gameObject, 0.1f);
+        }
+
+        private void AdvanceOriginalTick()
+        {
+            if (!IsFired || IsFinished || PhysicsBody == null)
+                return;
+
+            PhysicsBodyState state = PhysicsBody.State;
+            bool shouldExplode = state.VelocityX == 0f && Mathf.Abs(state.VelocityY) < 0.5f;
+            string reason = shouldExplode ? "at-rest" : null;
+
+            if (!shouldExplode)
+            {
+                if (IsAiOwner())
+                {
+                    float nearestDistanceSquared = FindOriginalNearestCharacterDistanceSquared(state);
+                    if ((nearestDistanceSquared > m_LastNearestDistanceSquared &&
+                         nearestDistanceSquared < AiRecedingDetonationLimitSquared) ||
+                        nearestDistanceSquared < AiImmediateDetonationDistanceSquared)
+                    {
+                        shouldExplode = true;
+                        reason = nearestDistanceSquared < AiImmediateDetonationDistanceSquared
+                            ? "ai-near-character"
+                            : "ai-receding";
+                    }
+                }
+                else if (m_PlayerDetonationRequested)
+                {
+                    shouldExplode = true;
+                    reason = "player-click";
+                }
             }
 
-            // Flash AS2 exact formula: new Explosion(x, y, 160, 80, owner)
-            Vector2 posPx = new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y);
-            MutinyExplosion.Spawn(posPx, 160f, 80f, Owner);
+            m_PlayerDetonationRequested = false;
+            if (shouldExplode)
+            {
+                MutinyDebugLog.Info("Banana", $"detonation condition={reason}", this);
+                Explode();
+            }
+        }
 
-            Destroy(gameObject, 0.1f);
+        private bool IsAiOwner()
+        {
+            if (Owner == null)
+                return false;
+
+            MutinyTeam[] teams = Object.FindObjectsByType<MutinyTeam>();
+            for (int i = 0; i < teams.Length; i++)
+            {
+                if (teams[i] != null && teams[i].Characters.Contains(Owner))
+                    return teams[i].IsAiControlled;
+            }
+            return false;
+        }
+
+        private static float FindOriginalNearestCharacterDistanceSquared(PhysicsBodyState bananaState)
+        {
+            float nearest = float.PositiveInfinity;
+            MutinyCharacter[] characters = Object.FindObjectsByType<MutinyCharacter>();
+            for (int i = 0; i < characters.Length; i++)
+            {
+                MutinyCharacter character = characters[i];
+                if (character == null || character.PhysicsBody == null)
+                    continue;
+
+                PhysicsBodyState state = character.PhysicsBody.State;
+                float dx = state.X - bananaState.X;
+                float dy = state.Y - bananaState.Y;
+                float distanceSquared = dx * dx + dy * dy;
+                if (distanceSquared < nearest)
+                    nearest = distanceSquared;
+            }
+            return nearest;
+        }
+
+        private static MutinyBanana FindPlayerDetonatableBanana(MutinyTeam inputTeam)
+        {
+            if (inputTeam == null || inputTeam.IsAiControlled)
+                return null;
+
+            MutinyBanana[] bananas = Object.FindObjectsByType<MutinyBanana>();
+            for (int i = 0; i < bananas.Length; i++)
+            {
+                MutinyBanana banana = bananas[i];
+                if (banana != null && banana.IsFired && !banana.IsFinished && banana.Owner != null &&
+                    inputTeam.Characters.Contains(banana.Owner))
+                    return banana;
+            }
+            return null;
+        }
+
+        private void OnDestroy()
+        {
+            if (PhysicsBody != null)
+                PhysicsBody.OnSimulationStep -= AdvanceOriginalTick;
         }
     }
 }

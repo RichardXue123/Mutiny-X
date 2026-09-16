@@ -91,6 +91,8 @@ namespace Mutiny.Presentation
             MutinyWeapon[] weapons = FindObjectsByType<MutinyWeapon>();
             for (int i = 0; i < weapons.Length; i++)
             {
+                if (weapons[i] is MutinyVoodooDoll doll && doll.CameraFocusTarget != null)
+                    return doll.CameraFocusTarget;
                 if (weapons[i] != null && weapons[i].IsFired && !weapons[i].IsFinished)
                     return weapons[i].transform;
             }
@@ -103,6 +105,18 @@ namespace Mutiny.Presentation
                 return selected.transform;
 
             return null;
+        }
+
+        public bool HasReachedVoodooTarget(MutinyCharacter target)
+        {
+            if (target == null || m_Camera == null || m_LevelRoot == null)
+                return true;
+
+            Vector3 desired = target.transform.position;
+            desired.y += OriginalTrackingVerticalOffsetPixels / MutinyPhysics.PixelsPerUnit;
+            desired.z = transform.position.z;
+            desired = ClampPosition(desired);
+            return Vector2.Distance(transform.position, desired) < 0.01f;
         }
 
         private MutinyCharacter FindTurnPanCharacter(MutinyTeam team)

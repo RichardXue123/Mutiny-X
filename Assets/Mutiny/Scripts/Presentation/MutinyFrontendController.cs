@@ -235,10 +235,32 @@ namespace Mutiny.Presentation
                 return;
             }
 
+            // LevelSelectButton.doPress clears `_root.score` before entering a
+            // new one-player game.  Advancing inside an active game does not.
+            m_LevelController.ResetSinglePlayerScore();
             m_LevelController.LoadLevel(level);
             if (m_LevelController.CurrentLevel != null)
                 m_LevelController.CurrentLevel.gameObject.SetActive(true);
             MutinyAudioManager.Instance?.PlayMusic("game_music");
+        }
+
+        /// <summary>
+        /// Production counterpart of QuitGameButton's level_select_1p callback.
+        /// The level root is hidden before this front-end draws the level selector.
+        /// </summary>
+        public bool ReturnToSinglePlayerLevelSelect()
+        {
+            if (!m_Flow.ReturnToSinglePlayerLevelSelect())
+                return false;
+
+            if (m_LevelController == null)
+                m_LevelController = FindAnyObjectByType<MutinyLevelController>();
+            if (m_LevelController != null && m_LevelController.CurrentLevel != null)
+                m_LevelController.CurrentLevel.gameObject.SetActive(false);
+
+            MutinyAudioManager.Instance?.PlayMusic("menu_music");
+            Debug.Log("[MutinyFrontend] HUD-CORNER-04 back to menu -> level select 1p", this);
+            return true;
         }
 
         private static void DrawTexture(Rect rect, Texture2D texture)

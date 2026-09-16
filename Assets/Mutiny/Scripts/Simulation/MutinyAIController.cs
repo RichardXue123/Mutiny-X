@@ -23,6 +23,10 @@ namespace Mutiny.Simulation
         public Vector2 TargetPosition;
         public MutinyCharacter TargetCharacter;
         public float Score;
+        public float SeagullFlightY;
+        public int CannonRotationDegrees;
+        public float[] SeagullShotXs;
+        public Vector2[] BoxPossibilities;
     }
 
     public enum MutinyAITurnGate
@@ -300,6 +304,27 @@ namespace Mutiny.Simulation
                     continue;
                 }
 
+                if (string.Equals(weaponType, "seagull", StringComparison.OrdinalIgnoreCase))
+                {
+                    EvaluateSeagull(shooter, enemies, allies, terrainGrid, gridW, gridH, waterPixelY,
+                        ref bestMove, ref candidateCount);
+                    continue;
+                }
+
+                if (string.Equals(weaponType, "gunpowderBarrel", StringComparison.OrdinalIgnoreCase))
+                {
+                    EvaluateGunpowderBarrel(shooter, enemies, allies, terrainGrid, gridW, gridH,
+                        ref bestMove, ref candidateCount);
+                    continue;
+                }
+
+                if (string.Equals(weaponType, "cannon", StringComparison.OrdinalIgnoreCase))
+                {
+                    EvaluateCannon(shooter, enemies, allies, terrainGrid, gridW, gridH, waterPixelY,
+                        samples, ref bestMove, ref candidateCount);
+                    continue;
+                }
+
                 // These weapons have original aiPerform data beyond vx/vy.  Do not
                 // substitute a normal projectile until their runtime path is exact.
                 if (IsDeferredSpecialWeapon(weaponType))
@@ -327,6 +352,234 @@ namespace Mutiny.Simulation
                     }, ref candidateCount);
                 }
             }
+        }
+
+        private void EvaluateGunpowderBarrel(
+            MutinyCharacter shooter,
+            List<MutinyCharacter> enemies,
+            List<MutinyCharacter> allies,
+            string[,] terrainGrid,
+            int gridW,
+            int gridH,
+            ref AIMove bestMove,
+            ref int candidateCount)
+        {
+            // BoxWeapon.aiSimulation: sample ten locations around living enemies.
+            // A candidate is admitted only when the same production CanPlace test
+            // accepts it; Character.aiThink needs at least three candidates.
+            if (terrainGrid == null || gridW <= 0 || gridH <= 0)
+                return;
+
+            float allyAverageX = 0f;
+            int allyCount = 0;
+            for (int i = 0; i < allies.Count; i++)
+            {
+                if (allies[i] != null && allies[i].IsAlive && allies[i].PhysicsBody != null)
+                {
+                    allyAverageX += PositionOf(allies[i]).x;
+                    allyCount++;
+                }
+            }
+            if (allyCount == 0)
+                return;
+            allyAverageX /= allyCount;
+
+            var livingEnemies = new List<MutinyCharacter>();
+            for (int i = 0; i < enemies.Count; i++)
+                if (enemies[i] != null && enemies[i].IsAlive && enemies[i].PhysicsBody != null)
+                    livingEnemies.Add(enemies[i]);
+            if (livingEnemies.Count == 0)
+                return;
+
+            MutinyGunpowderBarrel probe = MutinyWeaponFactory.SpawnWeapon("gunpowderBarrel", shooter) as MutinyGunpowderBarrel;
+            if (probe == null)
+                return;
+            try
+            {
+                probe.PhysicsBody.SetTerrain(terrainGrid, gridW, gridH);
+                var possibilities = new List<Vector2>(10);
+                for (int sample = 0; sample < 10; sample++)
+                {
+                    MutinyCharacter enemy = livingEnemies[UnityEngine.Random.Range(0, livingEnemies.Count)];
+                    Vector2 target = PositionOf(enemy);
+                    float sign = Mathf.Approximately(allyAverageX, target.x) ? 0f : Mathf.Sign(allyAverageX - target.x);
+                    float offsetX = sign * UnityEngine.Random.Range(16, 64);
+                    float offsetY = UnityEngine.Random.Range(-50, 50);
+                    Vector2 candidate = new Vector2(target.x + offsetX, target.y + offsetY);
+                    if (probe.CanPlace(candidate))
+                        possibilities.Add(candidate);
+                }
+
+                if (possibilities.Count >= 3)
+                {
+                    ConsiderCandidate(ref bestMove, new AIMove
+                    {
+                        MoveType = AIMoveType.ShootWeapon,
+                        Character = shooter,
+                        WeaponType = "gunpowderBarrel",
+                        Score = UnityEngine.Random.value,
+                        BoxPossibilities = possibilities.ToArray()
+                    }, ref candidateCount);
+                }
+            }
+            finally
+            {
+                Destroy(probe.gameObject);
+            }
+        }
+
+        private void EvaluateCannon(
+            MutinyCharacter shooter,
+            List<MutinyCharacter> enemies,
+            List<MutinyCharacter> allies,
+            string[,] terrainGrid,
+            int gridW,
+            int gridH,
+            float waterPixelY,
+            int samples,
+            ref AIMove bestMove,
+            ref int candidateCount)
+        {
+            // Cannon.randomThrows: choose a point within dragRange / 2 about
+            // owner+(0,-100), then simulate a 30-force weight-zero cannonball.
+            // Cannon.aiPerform later applies that exact placement, angle and vector.
+            Vector2 owner = PositionOf(shooter);
+            int count = Mathf.Max(0, samples);
+            for (int i = 0; i < count; i++)
+            {
+                int angle = UnityEngine.Random.Range(0, 360);
+                float distance = UnityEngine.Random.value * 65f; // Weapon.dragRange / 2
+                float angleRadians = angle * Mathf.Deg2Rad;
+                Vector2 placement = owner + new Vector2(
+                    Mathf.Cos(angleRadians) * distance,
+                    MutinyCannon.PlacementOffsetY + Mathf.Sin(angleRadians) * distance);
+                Vector2 velocity = new Vector2(Mathf.Cos(angleRadians), Mathf.Sin(angleRadians)) * MutinyCannon.FireStrength;
+
+                PhysicsBodyState ball = PhysicsBodyState.CreateDefault(placement.x, placement.y);
+                ball.Weight = 0f;
+                ball.HitsBoxes = true;
+                ball.LeftExtent = ball.RightExtent = ball.TopExtent = ball.BottomExtent = 10f;
+                ball.VelocityX = velocity.x;
+                ball.VelocityY = velocity.y;
+                Vector2 impact = SimulateWeaponImpact(ball, "cannonball", terrainGrid, gridW, gridH, waterPixelY);
+                float score = ScoreGenericWeaponCandidate("cannon", impact, enemies, allies);
+                ConsiderCandidate(ref bestMove, new AIMove
+                {
+                    MoveType = AIMoveType.ShootWeapon,
+                    Character = shooter,
+                    WeaponType = "cannon",
+                    LaunchVelocity = velocity,
+                    TargetPosition = placement,
+                    CannonRotationDegrees = angle,
+                    Score = score
+                }, ref candidateCount);
+            }
+        }
+
+        private void EvaluateSeagull(
+            MutinyCharacter shooter,
+            List<MutinyCharacter> enemies,
+            List<MutinyCharacter> allies,
+            string[,] terrainGrid,
+            int gridW,
+            int gridH,
+            float waterPixelY,
+            ref AIMove bestMove,
+            ref int candidateCount)
+        {
+            // Seagull.aiSimulation: fly 100..199 px above the highest living
+            // enemy, sample ten sorted x positions, then keep only positive shots.
+            float highestEnemyY = float.PositiveInfinity;
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                MutinyCharacter enemy = enemies[i];
+                if (enemy != null && enemy.IsAlive && enemy.PhysicsBody != null)
+                    highestEnemyY = Mathf.Min(highestEnemyY, enemy.PhysicsBody.State.Y);
+            }
+            if (float.IsInfinity(highestEnemyY))
+                return;
+
+            float flightY = highestEnemyY - 100f - UnityEngine.Random.Range(0, 100);
+            int levelWidthPixels = gridW * (int)MutinyPhysics.PixelsPerUnit;
+            var candidates = new List<float>(10);
+            for (int i = 0; i < 10; i++)
+                candidates.Add(UnityEngine.Random.Range(0, levelWidthPixels));
+            candidates.Sort();
+
+            var acceptedShots = new List<float>();
+            float success = 0f;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                Vector2 impact = SimulateSeagullShotImpact(
+                    candidates[i] + MutinySeagull.OriginalShotXOffset,
+                    flightY,
+                    terrainGrid,
+                    gridW,
+                    gridH,
+                    waterPixelY);
+                float shotScore = ScoreSeagullShot(impact, enemies, 1f) +
+                                  ScoreSeagullShot(impact, allies, -1.5f);
+                if (shotScore > 0f)
+                {
+                    acceptedShots.Add(candidates[i]);
+                    success += shotScore;
+                }
+            }
+
+            // Character.as only creates an AI move when aiSimulation returned
+            // more than one accepted firing coordinate.
+            if (acceptedShots.Count <= 1)
+                return;
+
+            ConsiderCandidate(ref bestMove, new AIMove
+            {
+                MoveType = AIMoveType.ShootWeapon,
+                Character = shooter,
+                WeaponType = "seagull",
+                Score = success,
+                SeagullFlightY = flightY,
+                SeagullShotXs = acceptedShots.ToArray()
+            }, ref candidateCount);
+        }
+
+        private static Vector2 SimulateSeagullShotImpact(
+            float startX,
+            float startY,
+            string[,] terrainGrid,
+            int gridW,
+            int gridH,
+            float waterPixelY)
+        {
+            PhysicsBodyState body = PhysicsBodyState.CreateDefault(startX, startY);
+            body.LeftExtent = body.RightExtent = body.TopExtent = body.BottomExtent = MutinySeagullFire.OriginalExtent;
+            body.Weight = MutinySeagullFire.OriginalWeight;
+            body.VelocityX = MutinySeagull.OriginalFlightSpeed;
+            body.VelocityY = 0f;
+
+            for (int tick = 0; tick < 512 && body.Y < waterPixelY; tick++)
+            {
+                StepResult result = MutinyPhysics.Step(ref body, terrainGrid, gridW, gridH);
+                if (result.HitFloor || result.HitCeiling || result.HitLeftWall || result.HitRightWall)
+                    break;
+            }
+            return new Vector2(body.X, body.Y);
+        }
+
+        private static float ScoreSeagullShot(Vector2 impact, List<MutinyCharacter> characters, float multiplier)
+        {
+            float score = 0f;
+            for (int i = 0; i < characters.Count; i++)
+            {
+                MutinyCharacter character = characters[i];
+                if (character == null || !character.IsAlive || character.PhysicsBody == null)
+                    continue;
+
+                Vector2 target = PositionOf(character);
+                float distance = Vector2.Distance(impact, target);
+                if (distance < 40f)
+                    score += multiplier * (1f - distance / 40f);
+            }
+            return score;
         }
 
         private void EvaluateCharacterSelfThrow(
@@ -403,11 +656,9 @@ namespace Mutiny.Simulation
 
         private static bool IsDeferredSpecialWeapon(string weaponType)
         {
-            return string.Equals(weaponType, "seagull", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(weaponType, "woodenCrate", StringComparison.OrdinalIgnoreCase) ||
+            return string.Equals(weaponType, "woodenCrate", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(weaponType, "gunpowderBarrel", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(weaponType, "anchor", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(weaponType, "cannon", StringComparison.OrdinalIgnoreCase);
+                   string.Equals(weaponType, "anchor", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool MutinyWeaponFactoryCanFire(string weaponType)
@@ -445,9 +696,9 @@ namespace Mutiny.Simulation
             }
             else if (string.Equals(weaponType, "boulder", StringComparison.OrdinalIgnoreCase))
             {
-                // MutinyBoulder.Fire halves the released velocity after Weapon.Fire.
-                body.VelocityX *= 0.5f;
-                body.VelocityY *= 0.5f;
+                // AI reaches Boulder through Weapon.aiPerform -> Weapon.fire, not
+                // Boulder.release.  Candidate velocity is therefore the launch
+                // velocity used by the actual weapon without a .5 conversion.
                 body.Weight = 1.5f;
                 body.Friction = 0.25f;
                 body.LeftExtent = body.RightExtent = body.TopExtent = body.BottomExtent = 31f;
@@ -462,6 +713,14 @@ namespace Mutiny.Simulation
                 body.LeftExtent = body.RightExtent = body.TopExtent = body.BottomExtent = 7f;
             }
             return body;
+        }
+
+        // Test seam for the production AI evaluator.  It exposes the exact body
+        // construction used by candidate scoring without duplicating its formula.
+        internal static PhysicsBodyState CreateWeaponSimulationForVerification(
+            Vector2 start, string weaponType, Vector2 velocity)
+        {
+            return CreateWeaponSimulation(start, weaponType, velocity);
         }
 
         private static float ScoreGenericWeaponCandidate(
@@ -745,13 +1004,40 @@ namespace Mutiny.Simulation
                         ch.ConsumeWeapon(move.WeaponType);
                     }
                 }
+                else if (string.Equals(move.WeaponType, "seagull", StringComparison.OrdinalIgnoreCase))
+                {
+                    MutinyWeapon birdWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    if (birdWeapon is MutinySeagull seagull)
+                    {
+                        seagull.PlaceForAi(move.SeagullFlightY, move.SeagullShotXs);
+                        ch.ConsumeWeapon(move.WeaponType);
+                    }
+                }
+                else if (string.Equals(move.WeaponType, "gunpowderBarrel", StringComparison.OrdinalIgnoreCase))
+                {
+                    MutinyWeapon barrelWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    if (barrelWeapon is MutinyGunpowderBarrel barrel && barrel.BeginAiPlacement(move.BoxPossibilities))
+                    {
+                        ch.ConsumeWeapon(move.WeaponType);
+                        MutinyDebugLog.Info("AI", $"gunpowder barrel AI sequence armed candidates={move.BoxPossibilities.Length}", this);
+                    }
+                }
+                else if (string.Equals(move.WeaponType, "cannon", StringComparison.OrdinalIgnoreCase))
+                {
+                    MutinyWeapon cannonWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    if (cannonWeapon is MutinyCannon cannon)
+                    {
+                        cannon.BeginAiFire(move.TargetPosition, move.CannonRotationDegrees, move.LaunchVelocity);
+                        ch.ConsumeWeapon(move.WeaponType);
+                    }
+                }
                 else if (string.Equals(move.WeaponType, "voodooDoll", StringComparison.OrdinalIgnoreCase))
                 {
                     MutinyWeapon dollWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
                     if (dollWeapon is MutinyVoodooDoll doll)
                     {
                         doll.BindTarget(move.TargetCharacter);
-                        doll.Fire(move.LaunchVelocity);
+                        doll.FireForAi(move.LaunchVelocity);
                         ch.ConsumeWeapon(move.WeaponType);
                     }
                 }
@@ -769,7 +1055,7 @@ namespace Mutiny.Simulation
             else if (move.MoveType == AIMoveType.SelfThrow)
             {
                 MutinyDebugLog.Info("AI",
-                    $"jumping character={ch.name} velocity={move.LaunchVelocity}; preserves CanShoot for phase 2", this);
+                    $"jumping character={ch.name} velocity={move.LaunchVelocity}; preserves CanShoot for phase 2; original Character.twang has no direct SFX", this);
                 ch.PhysicsBody.SetVelocity(move.LaunchVelocity.x, move.LaunchVelocity.y);
                 ch.MarkSelfThrown("AI");
                 ch.CanThrow = false;
@@ -778,7 +1064,6 @@ namespace Mutiny.Simulation
                 {
                     m_TurnManager.NotifyActionStarted();
                 }
-                Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("click");
             }
             else
             {
@@ -788,6 +1073,12 @@ namespace Mutiny.Simulation
                     m_TurnManager.PassTurn();
                 }
             }
+        }
+
+        // Test seam for the same execution method used by the turn coroutine.
+        internal void ExecuteMoveForVerification(AIMove move)
+        {
+            ExecuteMove(move);
         }
 
         private void BindTurnManager()

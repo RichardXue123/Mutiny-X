@@ -44,7 +44,8 @@ namespace Mutiny.Presentation
             int gridW,
             int gridH,
             float maxForce = 20f,
-            float weightPerTick = MutinyPhysics.Gravity)
+            float weightPerTick = MutinyPhysics.Gravity,
+            string weaponType = null)
         {
             DrawPullLine(startPosPx, dragPosPx, maxForce);
 
@@ -56,7 +57,7 @@ namespace Mutiny.Presentation
             Vector2 predictionVelocity = launchVelocity;
             for (int i = 0; i < OriginalPredictionSteps; i++)
             {
-                predictionVelocity.y += weightPerTick;
+                predictionVelocity = PredictVelocityTick(weaponType, predictionVelocity, weightPerTick);
                 predictionPosition += predictionVelocity;
                 pixelPoints.Add(predictionPosition);
             }
@@ -64,6 +65,25 @@ namespace Mutiny.Presentation
             DrawDashedPath(pixelPoints);
         }
 
+        // Solid.drawTwangLine invokes the selected Solid.twangPrediction once before
+        // every point. Keep special weapon prediction here so the input preview uses
+        // the same original per-tick rules as the production projectile.
+        public static Vector2 PredictVelocityTick(string weaponType, Vector2 velocity, float weightPerTick)
+        {
+            if (string.Equals(weaponType, "parachuteBomb", System.StringComparison.OrdinalIgnoreCase))
+            {
+                if (velocity.y > 1f)
+                {
+                    velocity.y -= 2f;
+                    if (velocity.y < 1f)
+                        velocity.y = 1f;
+                }
+                velocity.x *= MutinyParachuteBomb.HorizontalDragPerTick;
+            }
+
+            velocity.y += weightPerTick;
+            return velocity;
+        }
         private void DrawPullLine(Vector2 startPixels, Vector2 dragPixels, float maxForce)
         {
             Vector2 pull = dragPixels - startPixels;
