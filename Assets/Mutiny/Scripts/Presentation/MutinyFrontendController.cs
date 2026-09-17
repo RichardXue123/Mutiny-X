@@ -219,8 +219,12 @@ namespace Mutiny.Presentation
 
         private static Vector2 GetCanvasMousePosition()
         {
-            Vector3 canvasMouse = GUI.matrix.inverse.MultiplyPoint3x4(Event.current.mousePosition);
-            return new Vector2(canvasMouse.x, canvasMouse.y);
+            // IMGUI transforms Event.current.mousePosition into the active GUI.matrix
+            // coordinate space before controls and custom drawing are evaluated. Applying
+            // GUI.matrix.inverse here transformed the pointer a second time, so the
+            // original Flash-style up/over hit tests almost never matched the drawn
+            // button when the 550x400 canvas was scaled or letterboxed.
+            return Event.current != null ? Event.current.mousePosition : Vector2.zero;
         }
 
         private void StartLevel(int level)
