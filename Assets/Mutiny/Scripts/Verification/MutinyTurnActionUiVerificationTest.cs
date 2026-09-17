@@ -50,7 +50,7 @@ namespace Mutiny.Verification
             VerifyOriginalRotation(result);
             VerifyCharacterCollisionAudio(result);
             VerifyCharacterThrowAudio(result);
-            VerifyAirDropsDisabled(result);
+            VerifyAirDrops(result);
             VerifyLandDeath(result);
             VerifyCharacterTimeline(result);
             VerifyFrontendFlow(result);
@@ -131,14 +131,14 @@ namespace Mutiny.Verification
                     character.AddWeapon(weaponType);
                     bool selected = input.SelectWeapon(weaponType);
                     MutinyWeapon equipped = input.EquippedWeapon;
-                    float expectedY = ownerState.Y + (weaponType == "boulder" ? -30f : (weaponType == "piecesOfEight" ? 5f : -10f));
-                    bool isHiddenReadyWeapon = string.Equals(weaponType, "tidalWave", System.StringComparison.OrdinalIgnoreCase);
-                    bool rendererStateValid = isHiddenReadyWeapon ? !equipped.SpriteRenderer.enabled : equipped.SpriteRenderer.enabled;
+                    Vector2 expectedOffset = MutinyWeapon.GetOriginalEquipOffsetPixels(weaponType);
+                    float expectedY = ownerState.Y + expectedOffset.y;
+                    bool rendererStateValid = equipped.SpriteRenderer.enabled == equipped.IsBodyVisibleWhileReady;
                     allWeaponsEquipped &= selected && equipped != null && equipped.Owner == character &&
                                           equipped.SpriteRenderer != null && rendererStateValid &&
-                                          Mathf.Approximately(equipped.PhysicsBody.State.X, ownerState.X) &&
+                                          Mathf.Approximately(equipped.PhysicsBody.State.X, ownerState.X + expectedOffset.x) &&
                                           Mathf.Approximately(equipped.PhysicsBody.State.Y, expectedY) &&
-                                          !equipped.PhysicsBody.IsActive;
+                                          equipped.PhysicsBody.IsActive == equipped.AdvancesMotionWhileReady;
 
                     if (equipped != null && equipped.SpriteRenderer != null && equipped.SpriteRenderer.sprite != null)
                     {
@@ -150,7 +150,28 @@ namespace Mutiny.Verification
                     input.CancelWeaponSelection();
                 }
                 result.Assert(allWeaponsEquipped && allWeaponPivotsMatch,
-                    "WRDY-T01 every menu weapon creates its production instance at the original equipment point with exact Flash registration pivot (and hidden on character for placeable tidalWave)");
+                    "WRDY-T01 every menu weapon starts at Character.equip's original coordinate, uses its Flash registration pivot, and matches both pre-fire motion and constructor show() visibility");
+
+                character.AddWeapon("banana");
+                input.SelectWeapon("banana");
+                MutinyBanana readyBanana = input.EquippedWeapon as MutinyBanana;
+                float bananaInitialY = ownerState.Y - 10f;
+                readyBanana.PhysicsBody.SetTerrain(new string[8, 8], 8, 8);
+                readyBanana.PhysicsBody.AdvanceSimulationTick();
+                result.Assert(readyBanana.PhysicsBody.IsActive &&
+                              Mathf.Approximately(readyBanana.PhysicsBody.State.Y, bananaInitialY + 1f),
+                    "WRDY-T01A an unfired Banana runs the first original gravity tick instead of hovering at its initial -10px equipment coordinate");
+                input.CancelWeaponSelection();
+
+                character.AddWeapon("piecesOfEight");
+                input.SelectWeapon("piecesOfEight");
+                MutinyPiecesOfEight readyPieces = input.EquippedWeapon as MutinyPiecesOfEight;
+                readyPieces.PhysicsBody.SetTerrain(new string[8, 8], 8, 8);
+                readyPieces.PhysicsBody.AdvanceSimulationTick();
+                result.Assert(Mathf.Approximately(readyPieces.PhysicsBody.State.X, ownerState.X) &&
+                              Mathf.Approximately(readyPieces.PhysicsBody.State.Y, ownerState.Y + 6f),
+                    "WRDY-T01B PiecesOfEight resets to owner +5px before motion, then applies the same tick's +1 gravity exactly like PiecesOfEight.advance");
+                input.CancelWeaponSelection();
 
                 int ammoBeforeCancel = character.GetAmmunition("cherryBomb");
                 result.Assert(input.SelectWeapon("cherryBomb"),
@@ -1077,6 +1098,13 @@ namespace Mutiny.Verification
 
         private static void VerifyFrontendFlow(MutinyLevel1VerificationResult result)
         {
+            result.Assert(Mathf.Approximately(MutinyBitmapFont.GetPirateGlyphTopOffset('A'), 0f) &&
+                          Mathf.Approximately(MutinyBitmapFont.GetPirateGlyphTopOffset('K'), 0f) &&
+                          Mathf.Approximately(MutinyBitmapFont.GetPirateGlyphTopOffset('R'), -1f) &&
+                          Mathf.Approximately(MutinyBitmapFont.GetPirateGlyphTopOffset('P'), -1f) &&
+                          Mathf.Approximately(MutinyBitmapFont.GetPirateGlyphTopOffset('N'), -2f),
+                "FRONT-08 production PirateFont layout preserves original K/R/P/N symbol registration points");
+
             var flow = new MutinyFrontendFlow();
             result.Assert(flow.CurrentPage == MutinyFrontendPage.Title,
                 "FRONT-01 production front-end route starts at the title page");
@@ -1129,6 +1157,7 @@ namespace Mutiny.Verification
             try
             {
                 characterObject = new GameObject("CharacterTimelineVerification");
+                SpriteRenderer renderer = characterObject.AddComponent<SpriteRenderer>();
                 MutinyCharacter character = characterObject.AddComponent<MutinyCharacter>();
                 character.CharacterType = "redPirate";
                 MutinyCharacterAnimator animator = characterObject.AddComponent<MutinyCharacterAnimator>();
@@ -1139,10 +1168,17 @@ namespace Mutiny.Verification
                 result.Assert(animator.CurrentFrame == 1,
                     "CHAR-TL-01 production animator starts the original static label at frame 1");
 
+                Sprite sprite1 = renderer.sprite;
+                result.Assert(sprite1 != null,
+                    "CHAR-IDLE-04 frame 1 sprite is assigned to SpriteRenderer");
+
                 for (int tick = 0; tick < 3; tick++)
                     animator.AdvanceOriginalTick();
                 result.Assert(animator.CurrentFrame == 4,
                     "CHAR-IDLE-01 static pose advances at the original three-tick boundary 1-3 to 4");
+                Sprite sprite4 = renderer.sprite;
+                result.Assert(sprite4 != null && sprite4 != sprite1,
+                    "CHAR-IDLE-04 frame 4 sprite switches to squish/down bounce pose");
                 result.Assert(animator.EnsureInitialized() && animator.CurrentFrame == 4,
                     "CHAR-IDLE-03 repeated lifecycle initialization does not reset a runtime-built animator");
 
@@ -1155,6 +1191,9 @@ namespace Mutiny.Verification
                     animator.AdvanceOriginalTick();
                 result.Assert(animator.CurrentFrame == 10,
                     "CHAR-IDLE-01 static pose advances at the original three-tick boundary 7-9 to 10");
+                Sprite sprite10 = renderer.sprite;
+                result.Assert(sprite10 != null && sprite10 != sprite4 && sprite10 != sprite1,
+                    "CHAR-IDLE-04 frame 10 sprite switches to stretch/up bounce pose");
 
                 for (int tick = 0; tick < 2; tick++)
                     animator.AdvanceOriginalTick();
@@ -1162,7 +1201,7 @@ namespace Mutiny.Verification
                     "CHAR-TL-01 production animator reaches the last visible static frame 12");
 
                 animator.AdvanceOriginalTick();
-                result.Assert(animator.CurrentFrame == 1,
+                result.Assert(animator.CurrentFrame == 1 && renderer.sprite == sprite1,
                     "CHAR-TL-01 frame 13 gotoAndPlay loops directly to static without displaying transparent frames 13-14");
 
                 animator.PlayHit();
@@ -1177,6 +1216,28 @@ namespace Mutiny.Verification
                 animator.AdvanceOriginalTick();
                 result.Assert(animator.CurrentFrame == 1,
                     "CHAR-TL-03 frame 35 gotoAndPlay returns directly to static frame 1");
+
+                string[] allCharacterTypes = new string[]
+                {
+                    "redPirate", "bluePirate", "cabinBoy", "skeletonPirate", "rainbowBeard",
+                    "femalePirate", "blindPirate", "soldier", "bossGuy", "bossGuyZombie",
+                    "soldierCaptain", "blindPirateCaptain", "femalePirateCaptain", "rainbowBeardCaptain",
+                    "oldPirateCaptain", "cabinBoyCaptain", "tribeChief", "skeletonPirateCaptain",
+                    "squid", "bluePirateCaptain", "redPirateCaptain", "oldPirate", "tribe",
+                    "monkey", "crab", "shark", "parrot"
+                };
+                bool allCharactersLoaded = true;
+                for (int i = 0; i < allCharacterTypes.Length; i++)
+                {
+                    Sprite[] frames = MutinyCharacterAnimator.LoadFrames(allCharacterTypes[i]);
+                    if (frames == null || frames.Length != 35)
+                    {
+                        allCharactersLoaded = false;
+                        break;
+                    }
+                }
+                result.Assert(allCharactersLoaded,
+                    "CHAR-IDLE-05 all 27 character types successfully load 35 animation frames deterministically");
             }
             finally
             {
@@ -1386,31 +1447,143 @@ namespace Mutiny.Verification
             }
         }
 
-        private static void VerifyAirDropsDisabled(MutinyLevel1VerificationResult result)
+        private static void VerifyAirDrops(MutinyLevel1VerificationResult result)
         {
             GameObject managerObject = null;
             GameObject chestObject = null;
+            GameObject rootObject = null;
+            GameObject objectsObject = null;
+            GameObject characterObject = null;
+            GameObject turnManagerObject = null;
+            GameObject cameraObject = null;
+            GameObject playerInputObject = null;
 
             try
             {
-                managerObject = new GameObject("AirDropDisabledVerification_Manager");
+                rootObject = new GameObject("AirDropVerification_Root");
+                MutinyLevelRoot root = rootObject.AddComponent<MutinyLevelRoot>();
+                objectsObject = new GameObject("Objects");
+                objectsObject.transform.SetParent(rootObject.transform, false);
+                root.ObjectsHolder = objectsObject.transform;
+
+                var level = new MutinyLevelData
+                {
+                    Name = "AirDropVerification",
+                    Width = 2,
+                    Height = 2,
+                    Terrain = new string[2, 2],
+                    Background = new string[2, 2]
+                };
+                level.Terrain[1, 0] = "solid";
+                level.Terrain[1, 1] = "solid";
+                level.Background[0, 1] = "antichest";
+                var potentialWeapons = new MutinyLevelObject { Type = "potentialWeapons" };
+                potentialWeapons.Properties["banana"] = "2";
+                potentialWeapons.Properties["dynamite"] = "1";
+                potentialWeapons.Properties["luck"] = "99";
+                potentialWeapons.Properties["maxChests"] = "9";
+                level.Objects.Add(potentialWeapons);
+
+                managerObject = new GameObject("AirDropVerification_Manager");
                 MutinyTreasureChestManager manager =
                     managerObject.AddComponent<MutinyTreasureChestManager>();
-                manager.TryDropNew();
-                result.Assert(!MutinyTreasureChestManager.SystemEnabled && manager.Chests.Count == 0,
-                    "AIRDBG-01 production drop entry creates no chest while the debug switch is disabled");
+                manager.Initialize(level, root);
+                bool dropped = manager.TryDropNew();
+                result.Assert(MutinyTreasureChestManager.SystemEnabled &&
+                              manager.ValidDropColumns.Count == 1 && manager.ValidDropColumns[0] == 0 &&
+                              manager.PotentialWeapons.Count == 3 && dropped && manager.Chests.Count == 1,
+                    "AIR-01 production drop entry uses antichest columns and the XML weighted pool; luck/maxChests do not add a second probability or override original max=3");
 
-                chestObject = new GameObject("AirDropDisabledVerification_Chest");
+                turnManagerObject = new GameObject("AirDropVerification_TurnManager");
+                MutinyTurnManager turnManager = turnManagerObject.AddComponent<MutinyTurnManager>();
+                cameraObject = new GameObject("AirDropVerification_Camera");
+                cameraObject.AddComponent<Camera>();
+                MutinyCameraController camCtrl = cameraObject.AddComponent<MutinyCameraController>();
+                camCtrl.TurnManager = turnManager;
+
+                playerInputObject = new GameObject("AirDropVerification_PlayerInput");
+                MutinyPlayerInput playerInput = playerInputObject.AddComponent<MutinyPlayerInput>();
+                playerInput.TurnManager = turnManager;
+
+                chestObject = new GameObject("AirDropVerification_Chest");
                 MutinyTreasureChest chest = chestObject.AddComponent<MutinyTreasureChest>();
-                chest.Initialize(manager, 32f, 64f, new List<string> { "banana" });
+                chest.Initialize(manager, 100000f, 96f, new List<string> { "banana" });
                 chest.AdvanceOriginalTick();
-                result.Assert(chest.IsFinished && !chest.IsFalling && chest.TimeTaken == 0,
-                    "AIRDBG-02 suppressed chest tick cannot reach touch, inventory or icon_collect logic");
+                bool fallingRestBlocked = !turnManager.CheckAllBodiesAtRest();
+                bool cameraTracksFallingChest = camCtrl.IsTrackingAirDrop;
+                turnManager.CurrentPhase = TurnPhase.TurnActive;
+                turnManager.AdvanceSimulationTick();
+                bool preActionPhaseRemainsActive = turnManager.CurrentPhase == TurnPhase.TurnActive;
+                bool playerCanActWhileFalling = playerInput.CanProcessCurrentTurnInputForVerification();
+                result.Assert(chest.IsFalling && chest.CurrentVisualFrame == 11 && chest.TimeTaken == 1 &&
+                              fallingRestBlocked && cameraTracksFallingChest &&
+                              preActionPhaseRemainsActive && playerCanActWhileFalling,
+                    "AIR-02 production tick moves through 10..19 loop, tracks camera at 50px/tick, and keeps TurnActive open so player/AI can act before touchdown");
+
+                turnManager.NotifyActionStarted();
+                turnManager.AdvanceSimulationTick();
+                bool postActionPhaseIsExecuting = turnManager.CurrentPhase == TurnPhase.ActionExecuting;
+                result.Assert(postActionPhaseIsExecuting,
+                    "AIR-02B committing an action while chest is falling enters ActionExecuting and blocks turn settling until touchdown");
+
+                int guard = 0;
+                while (chest.IsFalling && guard++ < 200)
+                    chest.AdvanceOriginalTick();
+                bool landedRestClean = turnManager.CheckAllBodiesAtRest();
+                bool cameraReleasedAfterLanding = !camCtrl.IsTrackingAirDrop;
+                result.Assert(!chest.IsFalling && Mathf.Approximately(chest.PixelY, 81f) &&
+                              chest.CurrentVisualFrame == 20 && landedRestClean && cameraReleasedAfterLanding,
+                    "AIR-03 chest stops at floorY-15, releases camera tracking, and starts touchdown frame 20 with the Flash registration pivot");
+
+                characterObject = new GameObject("AirDropVerification_PassiveCharacter");
+                MutinyCharacter character = characterObject.AddComponent<MutinyCharacter>();
+                character.TeamIndex = 1;
+                PhysicsBodyState characterState = PhysicsBodyState.CreateDefault(100000f, 81f);
+                characterState.VelocityX = 6f;
+                characterState.VelocityY = -2f;
+                character.PhysicsBody.State = characterState;
+
+                chest.AdvanceOriginalTick();
+                bool collectingRestBlocked = !turnManager.CheckAllBodiesAtRest();
+                result.Assert(chest.CollectingCharacter == character && chest.CurrentVisualFrame == 35 && collectingRestBlocked,
+                    "AIR-04 a moving character overlapping the landed chest opens it, and active collection keeps turn settling active");
+
+                for (int tick = 0; tick < 10; tick++)
+                    chest.AdvanceOriginalTick();
+                result.Assert(character.HasWeapon("banana") && chest.RemainingContents == 0 &&
+                              chest.CurrentVisualFrame == 44,
+                    "AIR-05 first weapon is granted after 10 ticks and starts weapon_out frame 44");
+
+                for (int tick = 0; tick < 3; tick++)
+                    chest.AdvanceOriginalTick();
+                Transform releasedIcon = chest.transform.Find("ReleasedWeaponIcon");
+                result.Assert(chest.CurrentVisualFrame == 47 && releasedIcon != null &&
+                              releasedIcon.GetComponent<SpriteRenderer>().enabled,
+                    "AIR-06 weapon_out advances frame-by-frame and presents the actual released weapon icon");
+
+                for (int tick = 0; tick < 37; tick++)
+                    chest.AdvanceOriginalTick();
+                result.Assert(chest.IsFinished && chest.CurrentVisualFrame == 81,
+                    "AIR-07 empty chest waits the original 40 ticks, then starts fade_out frame 81");
+
+                MutinyTreasureChest activeChest = manager.Chests.Count > 0 ? manager.Chests[0] : null;
+                result.Assert(activeChest != null &&
+                              Mathf.Approximately(MutinyAIController.ScoreChestMoveLanding(
+                                  new Vector2(activeChest.PixelX + 39.99f, activeChest.FloorPixelY), activeChest), 0.5f) &&
+                              Mathf.Approximately(MutinyAIController.ScoreChestMoveLanding(
+                                  new Vector2(activeChest.PixelX + 40f, activeChest.FloorPixelY), activeChest), 0f),
+                    "AIR-08 AI adds +0.5 only inside the original strict 40 px chest radius");
             }
             finally
             {
+                DestroyNow(playerInputObject);
+                DestroyNow(characterObject);
+                DestroyNow(cameraObject);
+                DestroyNow(turnManagerObject);
                 DestroyNow(chestObject);
                 DestroyNow(managerObject);
+                DestroyNow(objectsObject);
+                DestroyNow(rootObject);
             }
         }
 
@@ -1434,11 +1607,15 @@ namespace Mutiny.Verification
                 characterBody.State = state;
                 characterBody.SetTerrain(null, 0, 0);
                 characterBody.AdvanceSimulationTick();
-                result.Assert(Mathf.Approximately(
-                        Mathf.DeltaAngle(0f, character.transform.eulerAngles.z), -12f),
+                result.Assert(Mathf.Approximately(character.LogicalRotationDegrees, -12f),
                     "ROT-01 production physics tick rotates character by -velocityX * 3 once");
+                result.Assert(Mathf.Approximately(character.SampleOriginalRotation(0f), 0f) &&
+                              Mathf.Approximately(character.SampleOriginalRotation(0.5f), -6f) &&
+                              Mathf.Approximately(character.SampleOriginalRotation(1f), -12f) &&
+                              Mathf.Approximately(character.LogicalRotationDegrees, -12f),
+                    "ROT-07 render sampling smoothly presents one exact 25 Hz logical step without integrating another rotation");
 
-                character.transform.rotation = Quaternion.Euler(0f, 0f, 270f);
+                character.ResetOriginalRotation(270f);
                 string[,] floor = new string[3, 3];
                 floor[1, 1] = "solid";
                 state = PhysicsBodyState.CreateDefault(48f, 20f);
@@ -1447,8 +1624,8 @@ namespace Mutiny.Verification
                 characterBody.State = state;
                 characterBody.SetTerrain(floor, 3, 3);
                 StepResult floorResult = characterBody.AdvanceSimulationTick();
-                result.Assert(floorResult.HitFloor && Mathf.Approximately(
-                        Mathf.DeltaAngle(0f, character.transform.eulerAngles.z), -45f),
+                result.Assert(floorResult.HitFloor &&
+                              Mathf.Approximately(character.LogicalRotationDegrees, -45f),
                     "ROT-02 production floor contact normalizes 270 degrees and halves it to -45");
 
                 result.Assert(
@@ -1456,7 +1633,39 @@ namespace Mutiny.Verification
                     Mathf.Approximately(MutinyRotationRules.SettleCharacterFloorAngle(1f), 0f),
                     "ROT-02 floor correction uses the original strict one-degree snap threshold");
 
-                character.transform.rotation = Quaternion.identity;
+                character.ResetOriginalRotation(0f);
+                state = PhysicsBodyState.CreateDefault(48f, 20f);
+                state.Weight = 0f;
+                state.Friction = 2f;
+                state.VelocityX = 6f;
+                state.VelocityY = 4f;
+                characterBody.State = state;
+                characterBody.SetTerrain(floor, 3, 3);
+                characterBody.AdvanceSimulationTick();
+                float characterVx1 = characterBody.State.VelocityX;
+
+                state = characterBody.State;
+                state.Y = 20f;
+                state.VelocityY = 4f;
+                characterBody.State = state;
+                characterBody.AdvanceSimulationTick();
+                float characterVx2 = characterBody.State.VelocityX;
+
+                state = characterBody.State;
+                state.Y = 20f;
+                state.VelocityY = 4f;
+                characterBody.State = state;
+                characterBody.AdvanceSimulationTick();
+                float characterVx3 = characterBody.State.VelocityX;
+                result.Assert(Mathf.Approximately(characterVx1, 4f) &&
+                              Mathf.Approximately(characterVx2, 2f) &&
+                              Mathf.Approximately(characterVx3, 0f) &&
+                              Mathf.Approximately(MutinyRotationRules.CharacterMotionDelta(characterVx1), -12f) &&
+                              Mathf.Approximately(MutinyRotationRules.CharacterMotionDelta(characterVx2), -6f) &&
+                              Mathf.Approximately(MutinyRotationRules.CharacterMotionDelta(characterVx3), 0f),
+                    "ROT-08 production Character floor contacts reduce vx by 2 and therefore its source angular step from 12 to 6 to 0 degrees");
+
+                character.ResetOriginalRotation(0f);
                 characterBody.WaterPixelY = 0f;
                 state = PhysicsBodyState.CreateDefault(48f, 1f);
                 state.Weight = 0f;
@@ -1465,8 +1674,8 @@ namespace Mutiny.Verification
                 characterBody.State = state;
                 characterBody.SetTerrain(null, 0, 0);
                 characterBody.AdvanceSimulationTick();
-                result.Assert(characterBody.IsInWater && Mathf.Approximately(
-                        Mathf.DeltaAngle(0f, character.transform.eulerAngles.z), -37f),
+                result.Assert(characterBody.IsInWater &&
+                              Mathf.Approximately(character.LogicalRotationDegrees, -37f),
                     "ROT-03 character applies normal spin, water drag, Y clamp and character-only water spin in order");
                 splashObject = GameObject.Find("WaterSplash");
 
@@ -1488,9 +1697,37 @@ namespace Mutiny.Verification
                 dynamite.PhysicsBody.State = state;
                 dynamite.Fire(new Vector2(4f, 0f));
                 dynamite.PhysicsBody.AdvanceSimulationTick();
-                result.Assert(Mathf.Approximately(
-                        Mathf.DeltaAngle(0f, dynamite.transform.eulerAngles.z), -8f),
+                result.Assert(Mathf.Approximately(dynamite.LogicalRotationDegrees, -8f),
                     "ROT-04 fired Dynamite rotates once at 25 Hz by its original multiplier");
+                result.Assert(Mathf.Approximately(dynamite.SampleOriginalRotation(0.5f), -4f),
+                    "ROT-07 Dynamite render sampling interpolates the production logical angle instead of adding per-render-frame spin");
+
+                dynamite.ResetOriginalRotation(0f);
+                dynamite.PhysicsBody.SetTerrain(floor, 3, 3);
+                state = PhysicsBodyState.CreateDefault(48f, 20f);
+                state.Weight = 0f;
+                state.Friction = 1.7f;
+                state.LeftExtent = state.RightExtent = state.TopExtent = state.BottomExtent = 11f;
+                state.VelocityX = 6f;
+                state.VelocityY = 4f;
+                dynamite.PhysicsBody.State = state;
+                StepResult dynamiteFloor1 = dynamite.PhysicsBody.AdvanceSimulationTick();
+                float firstDynamiteAngle = dynamite.LogicalRotationDegrees;
+                float firstDynamiteVelocity = dynamite.PhysicsBody.State.VelocityX;
+
+                state = dynamite.PhysicsBody.State;
+                state.Y = 20f;
+                state.VelocityY = 4f;
+                dynamite.PhysicsBody.State = state;
+                StepResult dynamiteFloor2 = dynamite.PhysicsBody.AdvanceSimulationTick();
+                float secondDynamiteDelta = Mathf.DeltaAngle(
+                    firstDynamiteAngle, dynamite.LogicalRotationDegrees);
+                result.Assert(dynamiteFloor1.HitFloor && dynamiteFloor2.HitFloor &&
+                              Mathf.Approximately(firstDynamiteAngle, -12f) &&
+                              Mathf.Approximately(firstDynamiteVelocity, 4.3f) &&
+                              Mathf.Approximately(secondDynamiteDelta, -8.6f) &&
+                              Mathf.Approximately(dynamite.PhysicsBody.State.VelocityX, 2.6f),
+                    "ROT-08 production Dynamite rotation decays from 12 to 8.6 degrees per tick as original floor friction reduces velocityX");
 
                 cherryBombObject = new GameObject("RotationVerification_CherryBomb");
                 MutinyCherryBomb cherryBomb = cherryBombObject.AddComponent<MutinyCherryBomb>();
@@ -1501,8 +1738,7 @@ namespace Mutiny.Verification
                 cherryBomb.PhysicsBody.State = state;
                 cherryBomb.Fire(new Vector2(4f, 0f));
                 cherryBomb.PhysicsBody.AdvanceSimulationTick();
-                result.Assert(Mathf.Approximately(
-                        Mathf.DeltaAngle(0f, cherryBomb.transform.eulerAngles.z), 0f),
+                result.Assert(Mathf.Approximately(cherryBomb.LogicalRotationDegrees, 0f),
                     "ROT-05 CherryBomb keeps its timeline animation without invented transform spin");
             }
             finally

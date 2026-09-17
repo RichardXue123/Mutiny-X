@@ -65,6 +65,11 @@ namespace Mutiny.Simulation
 
         public void Initialize(string characterType)
         {
+            if (m_Renderer == null)
+                m_Renderer = GetComponent<SpriteRenderer>();
+            if (m_Character == null)
+                m_Character = GetComponent<MutinyCharacter>();
+
             m_Frames = LoadFrames(characterType);
             m_Frame = IdleFirstFrame;
             m_HitRequested = false;
@@ -85,7 +90,10 @@ namespace Mutiny.Simulation
 
         private void Update()
         {
-            if (m_Frames == null || m_Frames.Length == 0 || m_Character == null || !m_Character.IsAlive)
+            if (m_Character == null)
+                m_Character = GetComponent<MutinyCharacter>();
+
+            if (m_Frames == null || m_Frames.Length == 0 || (m_Character != null && !m_Character.IsAlive))
                 return;
 
             m_TickAccumulator += Time.deltaTime;
@@ -100,7 +108,7 @@ namespace Mutiny.Simulation
         {
             if (m_HitRequested)
             {
-                bool moving = m_Character.PhysicsBody != null && !m_Character.PhysicsBody.IsAtRest;
+                bool moving = m_Character != null && m_Character.PhysicsBody != null && !m_Character.PhysicsBody.IsAtRest;
                 if (moving)
                 {
                     // Character.advance repeatedly jumps to the "hit" label while the
@@ -135,6 +143,8 @@ namespace Mutiny.Simulation
 
         private void ApplyFrame()
         {
+            if (m_Renderer == null)
+                m_Renderer = GetComponent<SpriteRenderer>();
             int index = m_Frame - 1;
             if (m_Renderer != null && m_Frames != null && index >= 0 && index < m_Frames.Length && m_Frames[index] != null)
                 m_Renderer.sprite = m_Frames[index];
@@ -179,29 +189,46 @@ namespace Mutiny.Simulation
             return new Vector2(0.5f, 0.5f);
         }
 
-        private static Sprite[] LoadFrames(string characterType)
+        public const int OriginalCharacterFrameCount = 35;
+
+        public static Sprite[] LoadFrames(string characterType)
         {
             if (string.IsNullOrEmpty(characterType))
                 return Array.Empty<Sprite>();
-            if (s_FrameCache.TryGetValue(characterType, out Sprite[] cached))
+            if (s_FrameCache.TryGetValue(characterType, out Sprite[] cached) && cached != null && cached.Length > 0)
                 return cached;
 
-            Texture2D[] textures = Resources.LoadAll<Texture2D>($"Art/Characters/Animations/{characterType}");
-            Array.Sort(textures, (a, b) => ParseFrame(a.name).CompareTo(ParseFrame(b.name)));
             Vector2 pivot = GetCharacterPivot(characterType);
-            var frames = new Sprite[textures.Length];
-            for (int i = 0; i < textures.Length; i++)
+            var frameList = new List<Sprite>(OriginalCharacterFrameCount);
+            for (int frame = 1; frame <= OriginalCharacterFrameCount; frame++)
             {
-                Texture2D texture = textures[i];
-                texture.filterMode = FilterMode.Point;
-                frames[i] = Sprite.Create(
-                    texture,
-                    new Rect(0f, 0f, texture.width, texture.height),
-                    pivot,
-                    MutinyPhysics.PixelsPerUnit);
-                frames[i].name = $"{characterType}_{i + 1:D2}";
+                Texture2D texture = Resources.Load<Texture2D>($"Art/Characters/Animations/{characterType}/{frame}");
+                if (texture != null)
+                {
+                    texture.filterMode = FilterMode.Point;
+                    Sprite sprite = Sprite.Create(
+                        texture,
+                        new Rect(0f, 0f, texture.width, texture.height),
+                        pivot,
+                        MutinyPhysics.PixelsPerUnit);
+                    sprite.name = $"{characterType}_{frame:D2}";
+                    frameList.Add(sprite);
+                }
+                else
+                {
+                    Sprite sprite = Resources.Load<Sprite>($"Art/Characters/Animations/{characterType}/{frame}");
+                    if (sprite != null)
+                    {
+                        frameList.Add(sprite);
+                    }
+                }
             }
-            s_FrameCache[characterType] = frames;
+
+            Sprite[] frames = frameList.ToArray();
+            if (frames.Length > 0)
+            {
+                s_FrameCache[characterType] = frames;
+            }
             return frames;
         }
 
@@ -306,22 +333,32 @@ namespace Mutiny.Simulation
 
         private static void EnsureFramesLoaded()
         {
-            if (s_Frames != null)
+            if (s_Frames != null && s_Frames.Length > 0)
                 return;
 
-            Texture2D[] textures = Resources.LoadAll<Texture2D>("Art/Characters/DeadCharacter");
-            Array.Sort(textures, (a, b) => ParseFrame(a.name).CompareTo(ParseFrame(b.name)));
-            s_Frames = new Sprite[textures.Length];
-            for (int i = 0; i < textures.Length; i++)
+            var frameList = new List<Sprite>(OriginalFrameCount);
+            for (int frame = 1; frame <= OriginalFrameCount; frame++)
             {
-                Texture2D texture = textures[i];
-                s_Frames[i] = Sprite.Create(
-                    texture,
-                    new Rect(0f, 0f, texture.width, texture.height),
-                    OriginalPivot,
-                    MutinyPhysics.PixelsPerUnit);
-                s_Frames[i].name = $"deadCharacter_{i + 1:D2}";
+                Texture2D texture = Resources.Load<Texture2D>($"Art/Characters/DeadCharacter/{frame}");
+                if (texture != null)
+                {
+                    texture.filterMode = FilterMode.Point;
+                    Sprite sprite = Sprite.Create(
+                        texture,
+                        new Rect(0f, 0f, texture.width, texture.height),
+                        OriginalPivot,
+                        MutinyPhysics.PixelsPerUnit);
+                    sprite.name = $"deadCharacter_{frame:D2}";
+                    frameList.Add(sprite);
+                }
+                else
+                {
+                    Sprite sprite = Resources.Load<Sprite>($"Art/Characters/DeadCharacter/{frame}");
+                    if (sprite != null)
+                        frameList.Add(sprite);
+                }
             }
+            s_Frames = frameList.ToArray();
         }
 
         private static int ParseFrame(string name)

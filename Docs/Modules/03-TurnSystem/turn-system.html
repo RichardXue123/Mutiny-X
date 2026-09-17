@@ -234,7 +234,7 @@
                     <ul>
                         <li><strong>行动资格刷新：</strong>所有存活角色的 <code>CanThrow = true; CanShoot = true;</code> 恢复。</li>
                         <li><strong>原版特有“空手赠弹”规则：</strong>如果某个海盗在战斗中耗尽了所有战术武器，系统会在回合开始时<strong>自动为其赠送 1 发基础加农炮弹 (<code>cannonball</code>)</strong>，防止死锁卡关。</li>
-                        <li><strong>空投宝箱：</strong>调用 <code>MutinyTreasureChestManager.TryDropNew()</code> 计算概率掉落空投补给。</li>
+                        <li><strong>空投宝箱：</strong>调用 <code>MutinyTreasureChestManager.TryDropNew()</code>，从关卡有效列中只随机一次；若该列被占用则本回合不生成，因此原版没有额外的百分比掷骰。</li>
                     </ul>
                 </div>
             </div>

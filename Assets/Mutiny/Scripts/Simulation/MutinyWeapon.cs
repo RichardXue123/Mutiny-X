@@ -33,6 +33,24 @@ namespace Mutiny.Simulation
         public event Action OnFired;
         public event Action OnFinished;
 
+        /// <summary>
+        /// The Flash Character.equip position is only the initial position. Most
+        /// Weapon subclasses continue to run Solid.advanceMotion before they are
+        /// fired, so gravity and each weapon's extents determine the visible ready
+        /// position on the terrain. Special click/place weapons which override
+        /// advance without calling advanceMotion opt out below.
+        /// </summary>
+        public virtual bool AdvancesMotionWhileReady => true;
+
+        /// <summary>
+        /// Constructors which omit Clip.show have no weapon body on the character;
+        /// their cursor/placement guide is the only ready-stage presentation.
+        /// </summary>
+        public virtual bool IsBodyVisibleWhileReady => true;
+
+        /// <summary>Matches Controller.twanging == this for pre-fire overrides.</summary>
+        public bool IsBeingAimed { get; private set; }
+
         protected virtual void Awake()
         {
             SpriteRenderer = GetComponent<SpriteRenderer>();
@@ -48,15 +66,23 @@ namespace Mutiny.Simulation
         protected float m_LifetimeTimer = 0f;
         protected float m_WaterTimer = 0f;
         protected bool m_HasSpawnedWaterSplash = false;
+        private readonly MutinyRotationState m_RotationState = new MutinyRotationState();
+        private bool m_HasLoggedRotationVelocity;
+        private float m_LastLoggedRotationVelocityX;
+
+        public float LogicalRotationDegrees => m_RotationState.LogicalAngle;
 
         public virtual void Initialize(MutinyCharacter owner)
         {
             Owner = owner;
             IsFired = false;
             IsFinished = false;
+            IsBeingAimed = false;
             m_LifetimeTimer = 0f;
             m_WaterTimer = 0f;
             m_HasSpawnedWaterSplash = false;
+            m_RotationState.Reset(RotationTransform != null ? RotationTransform.localEulerAngles.z : 0f);
+            m_HasLoggedRotationVelocity = false;
 
             if (Owner != null)
             {
@@ -97,19 +123,38 @@ namespace Mutiny.Simulation
             if (Owner == null || PhysicsBody == null)
                 return;
 
-            float yOffset = string.Equals(WeaponType, "boulder", StringComparison.OrdinalIgnoreCase)
-                ? -30f
-                : -10f;
+            Vector2 equipOffset = GetOriginalEquipOffsetPixels(WeaponType);
             Vector2 ownerPixels = Owner.PhysicsBody != null
                 ? new Vector2(Owner.PhysicsBody.State.X, Owner.PhysicsBody.State.Y)
                 : MutinyPhysics.UnityToPixel(Owner.transform.position);
-            PhysicsBody.State.X = ownerPixels.x;
-            PhysicsBody.State.Y = ownerPixels.y + yOffset;
+            PhysicsBody.State.X = ownerPixels.x + equipOffset.x;
+            PhysicsBody.State.Y = ownerPixels.y + equipOffset.y;
             PhysicsBody.SetVelocity(0f, 0f);
-            PhysicsBody.IsActive = false;
+            // Character.advance calls equippedWeapon.advance every tick in the
+            // original. Keeping ordinary weapon motion active is what lets a
+            // banana (7 px extent), rum bottle (14 px), boulder (31 px), etc.
+            // settle at their own visibly different heights instead of hovering
+            // forever at the shared creation coordinate.
+            PhysicsBody.IsActive = AdvancesMotionWhileReady;
             transform.position = MutinyPhysics.PixelToUnity(PhysicsBody.State.X, PhysicsBody.State.Y);
+            if (SpriteRenderer != null)
+                SpriteRenderer.enabled = IsBodyVisibleWhileReady;
             MutinyDebugLog.Info("Weapon",
-                $"equipped type={WeaponType} owner={Owner.name} pos=({PhysicsBody.State.X:F1},{PhysicsBody.State.Y:F1})", this);
+                $"equipped type={WeaponType} owner={Owner.name} pos=({PhysicsBody.State.X:F1},{PhysicsBody.State.Y:F1}) readyMotion={AdvancesMotionWhileReady} bodyVisible={IsBodyVisibleWhileReady}", this);
+        }
+
+        public static Vector2 GetOriginalEquipOffsetPixels(string weaponType)
+        {
+            // Character.as::equip uses (x, y - 10) for every weapon and applies
+            // one additional 20 px upward offset only to Boulder.
+            return string.Equals(weaponType, "boulder", StringComparison.OrdinalIgnoreCase)
+                ? new Vector2(0f, -30f)
+                : new Vector2(0f, -10f);
+        }
+
+        public void SetAimingState(bool aiming)
+        {
+            IsBeingAimed = aiming && !IsFired && !IsFinished;
         }
 
         public virtual void Fire(Vector2 velocityPx)
@@ -122,6 +167,7 @@ namespace Mutiny.Simulation
 
             IsFired = true;
             IsFinished = false;
+            IsBeingAimed = false;
             PhysicsBody.IsActive = true;
             m_LifetimeTimer = 0f;
             m_WaterTimer = 0f;
@@ -243,8 +289,42 @@ namespace Mutiny.Simulation
 
             float delta = MutinyRotationRules.WeaponMotionDelta(
                 WeaponType, PhysicsBody.State.VelocityX);
-            if (!Mathf.Approximately(delta, 0f))
-                RotationTransform?.Rotate(0f, 0f, delta);
+            m_RotationState.AddDelta(PhysicsBody.SimulationTickCount, delta);
+            if (MutinyRotationRules.WeaponRotationMultiplier(WeaponType) > 0f &&
+                (!m_HasLoggedRotationVelocity ||
+                 !Mathf.Approximately(m_LastLoggedRotationVelocityX, PhysicsBody.State.VelocityX)))
+            {
+                MutinyDebugLog.Info("Rotation",
+                    $"weapon angular step tick={PhysicsBody.SimulationTickCount} type={WeaponType} vx={PhysicsBody.State.VelocityX:F2} delta={delta:F2} target={m_RotationState.LogicalAngle:F2}", this);
+                m_LastLoggedRotationVelocityX = PhysicsBody.State.VelocityX;
+                m_HasLoggedRotationVelocity = true;
+            }
+        }
+
+        protected virtual void LateUpdate()
+        {
+            // Only the five source subclasses with an explicit rotation formula
+            // own this presentation channel. Cannon aiming and other weapon-specific
+            // transforms must remain untouched by the common rotation presenter.
+            if (PhysicsBody == null || RotationTransform == null ||
+                MutinyRotationRules.WeaponRotationMultiplier(WeaponType) <= 0f)
+                return;
+
+            RotationTransform.localRotation = Quaternion.Euler(
+                0f, 0f, m_RotationState.Sample(PhysicsBody.SimulationInterpolationAlpha));
+        }
+
+        internal float SampleOriginalRotation(float alpha)
+        {
+            return m_RotationState.Sample(alpha);
+        }
+
+        internal void ResetOriginalRotation(float angle)
+        {
+            m_RotationState.Reset(angle);
+            m_HasLoggedRotationVelocity = false;
+            if (RotationTransform != null)
+                RotationTransform.localRotation = Quaternion.Euler(0f, 0f, m_RotationState.LogicalAngle);
         }
 
         public virtual void Finish()

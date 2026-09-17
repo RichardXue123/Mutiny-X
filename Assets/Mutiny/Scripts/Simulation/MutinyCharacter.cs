@@ -67,12 +67,16 @@ namespace Mutiny.Simulation
         private int m_ContactSoundCount;
         private bool m_LandDeathPresented;
         private MutinyDeadCharacterEffect m_DeadCharacterEffect;
+        private readonly MutinyRotationState m_RotationState = new MutinyRotationState();
+        private bool m_HasLoggedRotationVelocity;
+        private float m_LastLoggedRotationVelocityX;
 
         public bool IsResolvingHealthDisplay =>
             !IsDrowned && !Mathf.Approximately(ShownHealth, Health);
         public bool HasLandDeathPresentation => m_LandDeathPresented;
         // Kept observable for the production-physics regression test and logs.
         public int ContactSoundCount => m_ContactSoundCount;
+        public float LogicalRotationDegrees => m_RotationState.LogicalAngle;
 
         public event Action OnHealthChanged;
         public event Action OnDeath;
@@ -83,6 +87,8 @@ namespace Mutiny.Simulation
             PhysicsBody = GetComponent<MutinyPhysicsBody>();
             if (PhysicsBody == null)
                 PhysicsBody = gameObject.AddComponent<MutinyPhysicsBody>();
+            m_RotationState.Reset(transform.localEulerAngles.z);
+            m_HasLoggedRotationVelocity = false;
             BindPhysicsEvents();
         }
 
@@ -159,6 +165,15 @@ namespace Mutiny.Simulation
             }
         }
 
+        private void LateUpdate()
+        {
+            if (PhysicsBody == null)
+                return;
+
+            transform.localRotation = Quaternion.Euler(
+                0f, 0f, m_RotationState.Sample(PhysicsBody.SimulationInterpolationAlpha));
+        }
+
         public void Initialize(string charType, int team, int gx, int gy, Dictionary<string, string> properties)
         {
             CharacterType = charType;
@@ -179,6 +194,8 @@ namespace Mutiny.Simulation
             IsSelected = false;
             m_ContactTimeTicks = 0;
             m_ContactSoundCount = 0;
+            m_RotationState.Reset(transform.localEulerAngles.z);
+            m_HasLoggedRotationVelocity = false;
 
             ParseWeapons(properties);
 
@@ -482,8 +499,15 @@ namespace Mutiny.Simulation
                 return;
 
             float delta = MutinyRotationRules.CharacterMotionDelta(PhysicsBody.State.VelocityX);
-            if (!Mathf.Approximately(delta, 0f))
-                transform.Rotate(0f, 0f, delta);
+            m_RotationState.AddDelta(PhysicsBody.SimulationTickCount, delta);
+            if (!m_HasLoggedRotationVelocity ||
+                !Mathf.Approximately(m_LastLoggedRotationVelocityX, PhysicsBody.State.VelocityX))
+            {
+                MutinyDebugLog.Info("Rotation",
+                    $"character angular step tick={PhysicsBody.SimulationTickCount} name={name} vx={PhysicsBody.State.VelocityX:F2} delta={delta:F2} target={m_RotationState.LogicalAngle:F2}", this);
+                m_LastLoggedRotationVelocityX = PhysicsBody.State.VelocityX;
+                m_HasLoggedRotationVelocity = true;
+            }
         }
 
         private void AdvanceOriginalWaterRotationTick()
@@ -493,21 +517,34 @@ namespace Mutiny.Simulation
 
             float delta = MutinyRotationRules.CharacterWaterDelta(
                 PhysicsBody.State.VelocityX, PhysicsBody.State.VelocityY);
-            if (!Mathf.Approximately(delta, 0f))
-                transform.Rotate(0f, 0f, delta);
+            m_RotationState.AddDelta(PhysicsBody.SimulationTickCount, delta);
         }
 
         private void HandleFloorContact()
         {
-            float before = Mathf.DeltaAngle(0f, transform.eulerAngles.z);
+            float before = m_RotationState.LogicalAngle;
             float after = MutinyRotationRules.SettleCharacterFloorAngle(before);
-            transform.rotation = Quaternion.Euler(0f, 0f, after);
+            m_RotationState.SetAngle(PhysicsBody.SimulationTickCount, after);
+
+            MutinyDebugLog.Info("Rotation",
+                $"character floor damping tick={PhysicsBody.SimulationTickCount} name={name} angle={before:F2}->{after:F2} vx={PhysicsBody.State.VelocityX:F2}", this);
 
             if (!Mathf.Approximately(before, 0f) && Mathf.Approximately(after, 0f))
             {
                 MutinyDebugLog.Info("Animation",
                     $"character rotation settled name={name} from={before:F2} to=0", this);
             }
+        }
+
+        internal void ResetOriginalRotation(float angle)
+        {
+            m_RotationState.Reset(angle);
+            transform.localRotation = Quaternion.Euler(0f, 0f, m_RotationState.LogicalAngle);
+        }
+
+        internal float SampleOriginalRotation(float alpha)
+        {
+            return m_RotationState.Sample(alpha);
         }
 
         private void HandleOriginalPhysicalContact()

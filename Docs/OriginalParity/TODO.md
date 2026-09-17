@@ -2,7 +2,7 @@
 
 ## 当前新增：单机前端最小流程
 
-- [~] P8-05 / FRONT-01..07：已接入标题页 → 人数选择 → 15 关单人选关 → 现有关卡的生产流程；使用原版 Logo、面板、按钮底图及 15 帧敌方海盗预览，锁定黑影、问号、两位编号、Back 和逐关解锁逻辑已实现。C# 编译通过；Unity Play Mode 的视觉、悬停和实际点击验收待用户执行。规格见 `Specs/FRONTEND_SINGLE_PLAYER_FLOW.md`。
+- [~] P8-05 / FRONT-01..08：已接入标题页 → 人数选择 → 15 关单人选关 → 现有关卡的生产流程；使用原版 Logo、面板、按钮底图及 15 帧敌方海盗预览，锁定黑影、问号、两位编号、Back 和逐关解锁逻辑已实现。PirateFont 已恢复原版逐字形注册点，修复 R/K 被整体上移 4 px；C# 编译与 Unity Play Mode 视觉验收状态见 `VALIDATION.md`。规格见 `Specs/FRONTEND_SINGLE_PLAYER_FLOW.md`。
 
 当前工作：**P4 十五种武器按效果、动画/装备实例、音效和完整生命周期逐项 1:1 复刻**。每次武器修改先按 `Specs/WEAPON_REPLICATION_WORKFLOW.md` 建立来源图、状态机、显示/声音契约和生产入口用例；逐武器范围与状态见 `Specs/WEAPON_REPLICATION_PLAN.md`。
 
@@ -54,7 +54,7 @@
 - [ ] P3-04 核对 terrain、角色、箱子、水面和地图外碰撞分支。
 - [ ] P3-05 核对爆炸半径、距离衰减、击退、连锁反应、镜头震动和残骸。
 - [ ] P3-06 核对所有武器的发射、飞行、命中、爆炸、特殊阶段和结束音效。
-- [~] P3-07 还原选中武器后的统一待抛射阶段、角色装备点实例、下方阵营色取消叉号，以及拉力中右键只取消本次拉力的授权扩展；静态规则和 Unity 生产入口已接入，专项回归已加入且 C# 编译通过，Play Mode 与原版运行对照待执行。见 `Specs/WEAPON_READY_AND_CANCEL.md`。
+- [~] P3-07 还原选中武器后的统一待抛射阶段、角色装备点实例、下方阵营色取消叉号，以及拉力中右键只取消本次拉力的授权扩展；BUG-WRDY-POS-001 已恢复原版“初始 `(x,y-10)`/Boulder `(x,y-30)` 后继续执行各武器未发射 `advance`”的行为，香蕉等普通武器会按各自 extent/weight/碰撞移动，金币执行 `owner.y+5` 后同 tick 重力，Box/Anchor/TidalWave 保持其专用待命路径；Anchor/Box/Seagull/TidalWave 依据构造函数未调用 `show()` 而只在提交后显示本体。资源注册点逐 linkage 校验。专项生产回归已加入，C# 编译与 Unity Play Mode/原版运行对照状态见 `Specs/WEAPON_READY_AND_CANCEL.md`。
 - [x] P3-08 建立武器专项复刻工作流：每种武器必须追踪本体/父类/调用者/AI/物理/时间轴/声音，先列状态机与 25 Hz 顺序，再以生产入口和原版对照验收；见 `Specs/WEAPON_REPLICATION_WORKFLOW.md`。
 
 ## P4 十五种武器
@@ -80,23 +80,24 @@
 - [x] P5-01 建立全部 27 个 XML 角色 type 到 SWF character symbol 的映射。
 - [~] P5-02 导出并重组嵌套 MovieClip 时间轴，保留帧标签、原点、帧率和循环范围。角色父时间轴已按第 13/35 帧 `gotoAndPlay("static")` 动作修正可见边界，见 `Specs/CHARACTER_TIMELINE.md`；内部嵌套时间轴仍待逐角色核对。
 - [~] P5-03 为每个角色分别实现 idle；不得以同一张预览图或统一摆动代替。27 个角色的四段三 tick 弹动节奏已接入初始烘焙场景和 Restart 重建路径；透明第 13/14 帧造成的闪烁已修复，自动验证与 Play Mode 验收状态见 `Specs/CHARACTER_TIMELINE.md`。
-- [~] P5-04 为每个角色分别实现 selected/drag/throw/airborne/land。角色飞行旋转与落地逐次回正已按原版 25 Hz 时序实现，见 `Specs/ROTATION_ANIMATION.md`；各角色姿势时间轴仍待完成。
-- [~] P5-05 为每个角色分别实现 hit、墙面碰撞、爆炸击飞、低血量和死亡。受击/碰撞后的整体旋转、落水附加旋转，以及陆地死亡的 24 帧骨头动画、脚底偏移和 `die` 音效已按原版实现；BUG-CHAR-AUD-001 已将错误的“扣血即 hitwall”改为原版统一物理接触路径：地面/墙/天花板仅在距上次接触 `>5` tick 时播放 `hitwall`，主动移动/滚动无独立声音。见 `Specs/ROTATION_ANIMATION.md`、`Specs/LAND_DEATH.md` 与 `Specs/CHARACTER_COLLISION_AUDIO.md`；逐角色受击时间轴和 Play Mode/原版听感对照仍待完成。
+- [~] P5-04 为每个角色分别实现 selected/drag/throw/airborne/land。角色飞行旋转与落地逐次回正已按原版 25 Hz 时序实现；BUG-ROT-002 将权威逻辑角与 Unity 渲染角分离，在相邻 tick 之间插值，保留 `vx*3`、角色 2 px/tick 摩擦和同 tick 落地回正，使旋转快→慢过程连续可见。见 `Specs/ROTATION_ANIMATION.md`；各角色姿势时间轴及 Play Mode/原版对照仍待完成。
+- [~] P5-05 为每个角色分别实现 hit、墙面碰撞、爆炸击飞、低血量和死亡。受击/碰撞后的整体旋转、落水附加旋转，以及陆地死亡的 24 帧骨头动画、脚底偏移和 `die` 音效已按原版实现；被动旋转同样使用 BUG-ROT-002 的逻辑角/渲染角路径。BUG-CHAR-AUD-001 已将错误的“扣血即 hitwall”改为原版统一物理接触路径：地面/墙/天花板仅在距上次接触 `>5` tick 时播放 `hitwall`，主动移动/滚动无独立声音。见 `Specs/ROTATION_ANIMATION.md`、`Specs/LAND_DEATH.md` 与 `Specs/CHARACTER_COLLISION_AUDIO.md`；逐角色受击时间轴和 Play Mode/原版听感对照仍待完成。
 - [ ] P5-06 还原角色方向、随机 idle 变体、帧事件和表情差异。
 - [~] P5-07 还原 character overlay：队伍箭头、生命条帧、白角框、目标标记和取消标记。P1/P2/CPU 原版位图、回合/死亡可见性与 27 段血条已实现；仅玩家拖拽或主动自身跳跃隐藏覆盖层，爆炸/碰撞被动位移保持显示。BUG-CHAR-OVR-002 已恢复标识和血条注册点；BUG-CHAR-OVR-003 已使覆盖层跟随角色位置但不继承炸飞、碰撞、落水旋转；BUG-CHAR-LAYER-001 已将重合角色按原始 XML 创建顺序分配稳定显示层，overlay 随所属角色层派生。代码断言已加入，待用户 Unity/原版截图对照。对话框目标和 voodoo target 子层仍待完成，见 `Specs/CHARACTER_OVERLAY.md`、`Specs/CHARACTER_LAYERING.md`。
 - [ ] P5-08 逐角色核对声音映射；船长等变体不得通过简单删除名称后缀猜测。
 
 ## P6 空投和拾取
 
-临时调试状态：按用户授权关闭整个空投系统，生成、推进、拾取、镜头跟随和声音均不执行；见 `Specs/AIR_DROP_DEBUG_DISABLE.md`。以下原版一致性条目保持原状态，不能因临时禁用计为完成。
+空投系统已于 2026-09-17 按用户要求恢复。原版触发、关卡权重/位置、90 帧显示、三段声音、被动位移拾取、镜头和 AI 评分见 `Specs/AIR_DROP.md`；C# 编译通过，Unity Play Mode/原版运行对照待执行。历史停用记录见 `Specs/AIR_DROP_DEBUG_DISABLE.md`。
 
 - [~] P6-01 还原空投触发时机和最大同时存在数 3。
 - [~] P6-02 从有效列随机选 x，找到首个实体地面，并执行角色/箱子/已有空投避让。
 - [~] P6-03 从 XML 权重池有放回抽取 1–3 件内容。
-- [~] P6-04 从 y=-300 px 以每 tick 3 px 下落，在地面上方 15 px 停止并播放落地动画。
-- [~] P6-05 存活且未被拖拽角色进入范围后打开；10 tick 给第一件、之后每 40 tick 给一件。
-- [~] P6-06 拾取逐件增加角色库存，播放 `icon_collect`，结束后淡出。
+- [~] P6-04 从 y=-300 px 以每 tick 3 px 下落；10–19 降落伞循环，在地面上方 15 px 停止并播放 20–34 落地动画。
+- [~] P6-05 存活且未被鼠标主动拖拽的角色进入范围后打开；跳跃/爆炸/碰撞造成的被动移动可以拾取；10 tick 给第一件、之后每 40 tick 给一件。
+- [~] P6-06 拾取逐件增加角色库存，按实际武器及队伍色播放 44–80 弹出动画和 `icon_collect`，结束后播放 81–90 并淡出。
 - [~] P6-07 下落和拾取阶段正确重置 inactivity，避免回合提前结束。
+- [~] P6-08 AI 移动落点距未结束空投严格小于 40 px 时增加 0.5 评分；生产评分入口已接入，实战选择待 Play Mode/原版对照。
 
 ## P7 镜头
 
@@ -124,7 +125,7 @@
 - [ ] P9-02 建立 AS2 `playSound` 调用到 Unity 事件的完整映射表。
 - [~] P9-03 还原菜单/游戏音乐切换、循环、暂停和音量。`MusicController.turnOffMusic` 的 Stop（非 Pause）和重新开启当前 menu/game 曲目的路径已接入；Music/SFX 保存开关和 hover 状态见 `Specs/CORNER_LEVEL_CONTROLS.md`。Unity Play Mode 音频对照待执行。
 - [~] P9-04 还原角色选择、受击、墙撞、死亡、落水和环境碰撞音效。CHAR-AUD-01..04 已静态确认并接入角色物理碰撞 `hitwall` 节流；BUG-CHAR-THROW-AUD-001 已移除玩家/AI Throw Self 起始时错误播放的空投箱 `click`，实际空投箱 `click`/`icon_collect` 路径保留。选择与逐角色声音映射、Unity/原版听感对照待完成。见 `Specs/CHARACTER_COLLISION_AUDIO.md`、`Specs/CHARACTER_THROW_AUDIO.md`。
-- [ ] P9-05 还原每种武器各阶段音效、空投出现/拾取及 UI 点击音效。
+- [~] P9-05 还原每种武器各阶段音效、空投出现/拾取及 UI 点击音效。空投的 `chest_appear`（生成）、`click`（首次触碰开箱）、`icon_collect`（每件实际入库）已恢复并记录在 `Specs/AIR_DROP.md`；武器与其余 UI 声音仍按各模块验收。
 - [ ] P9-06 核对同类音效的随机变体、并发、音量和触发 tick。
 
 ## P10 验证和发布

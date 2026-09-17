@@ -262,6 +262,7 @@ namespace Mutiny.Presentation
                 {
                     InteractionState = MutinyPlayerInteractionState.Aiming;
                     m_AimOrigin = readyOrigin;
+                    m_EquippedWeapon?.SetAimingState(true);
                     MutinyDebugLog.Info("Input",
                         $"aim started character={selectedCharacter.name} weapon={ActiveWeapon ?? "character"} origin={MutinyPhysics.UnityToPixel(m_AimOrigin)}", this);
                 }
@@ -447,6 +448,7 @@ namespace Mutiny.Presentation
 
             HideTrajectory();
             InteractionState = MutinyPlayerInteractionState.WeaponReady;
+            m_EquippedWeapon?.SetAimingState(false);
             MutinyCharacter character = GetHumanSelectedCharacter();
             if (character != null)
                 m_AimOrigin = GetReadyActionOrigin(character);
@@ -466,6 +468,7 @@ namespace Mutiny.Presentation
             {
                 m_AimOrigin = GetReadyActionOrigin(character);
                 InteractionState = MutinyPlayerInteractionState.Aiming;
+                m_EquippedWeapon?.SetAimingState(true);
             }
         }
 
@@ -786,6 +789,7 @@ namespace Mutiny.Presentation
                 m_ArmedPiecesOfEight.CanFireNextCoin)
             {
                 bool firstCoin = m_ArmedPiecesOfEight.TimesFired == 0;
+                m_ArmedPiecesOfEight.SetAimingState(false);
                 m_ArmedPiecesOfEight.Twang(startPixels, dragPixels);
                 if (m_ArmedPiecesOfEight.IsFired && firstCoin)
                     character.ConsumeWeapon(ActiveWeapon);
@@ -802,6 +806,7 @@ namespace Mutiny.Presentation
                     MutinyVoodooDoll doll = m_ArmedVoodooDoll;
                     if (doll != null && doll.HasTarget)
                     {
+                        doll.SetAimingState(false);
                         doll.Twang(startPixels, dragPixels);
                         if (doll.IsFired)
                         {
@@ -827,6 +832,7 @@ namespace Mutiny.Presentation
                     return;
                 }
 
+                weapon.SetAimingState(false);
                 weapon.Twang(startPixels, dragPixels);
                 if (!weapon.IsFired)
                     return;

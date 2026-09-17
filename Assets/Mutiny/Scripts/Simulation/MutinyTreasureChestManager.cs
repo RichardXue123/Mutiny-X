@@ -9,9 +9,9 @@ namespace Mutiny.Simulation
     [DisallowMultipleComponent]
     public sealed class MutinyTreasureChestManager : MonoBehaviour
     {
-        // Temporary user-authorized debug switch. Keep the original implementation
-        // below intact so P6 parity work can resume from one explicit switch.
-        public static bool SystemEnabled => false;
+        // AIR-01: restored after the temporary AIRDBG disable.  Keep this property as
+        // the single production gate so camera/HUD code observes the same state.
+        public static bool SystemEnabled => true;
         public const int MaximumChestCount = 3;
 
         private readonly List<string> m_PotentialWeapons = new List<string>();
@@ -20,31 +20,24 @@ namespace Mutiny.Simulation
         private MutinyLevelData m_LevelData;
         private MutinyLevelRoot m_LevelRoot;
         private float m_TickAccumulator;
-        private bool m_DisabledStateApplied;
 
         public IReadOnlyList<MutinyTreasureChest> Chests => m_Chests;
+        public IReadOnlyList<string> PotentialWeapons => m_PotentialWeapons;
+        public IReadOnlyList<int> ValidDropColumns => m_ValidDropColumns;
+        public MutinyLevelRoot LevelRoot => m_LevelRoot;
 
         public void Initialize(MutinyLevelData levelData, MutinyLevelRoot levelRoot)
         {
             m_LevelData = levelData;
             m_LevelRoot = levelRoot;
-            if (!SystemEnabled)
-            {
-                DisableExistingChests();
-                return;
-            }
             BuildPotentialWeaponList();
             BuildValidDropColumns();
+            MutinyDebugLog.Info("Chest",
+                $"airdrop initialized level={m_LevelData?.Name ?? "unknown"} validColumns={m_ValidDropColumns.Count} weightedWeapons={m_PotentialWeapons.Count} max={MaximumChestCount}", this);
         }
 
         private void Update()
         {
-            if (!SystemEnabled)
-            {
-                DisableExistingChests();
-                return;
-            }
-
             m_TickAccumulator += Time.deltaTime;
             while (m_TickAccumulator >= MutinyPhysics.TimeStep)
             {
@@ -59,22 +52,35 @@ namespace Mutiny.Simulation
             }
         }
 
-        public void TryDropNew()
+        public bool TryDropNew()
         {
             if (!SystemEnabled || m_LevelData == null || m_LevelRoot == null ||
                 m_Chests.Count >= MaximumChestCount ||
                 m_ValidDropColumns.Count == 0 || m_PotentialWeapons.Count == 0)
-                return;
+            {
+                MutinyDebugLog.Info("Chest",
+                    $"drop skipped ready={m_LevelData != null && m_LevelRoot != null} active={m_Chests.Count}/{MaximumChestCount} validColumns={m_ValidDropColumns.Count} weightedWeapons={m_PotentialWeapons.Count}", this);
+                return false;
+            }
 
             int column = m_ValidDropColumns[UnityEngine.Random.Range(0, m_ValidDropColumns.Count)];
             int floorRow = FindFirstSolidRow(column);
             if (floorRow < 0)
-                return;
+            {
+                MutinyDebugLog.Info("Chest", $"drop attempt rejected column={column} reason=no-solid-floor", this);
+                return false;
+            }
 
             float x = column * 32f + 16f;
             float floorY = floorRow * 32f;
-            if (!IsDropPositionClear(x, floorY))
-                return;
+            if (!IsDropPositionClear(x, floorY, out string blockedBy))
+            {
+                // The Flash game samples exactly one valid column per turn and gives
+                // up when it is occupied.  Do not retry another column here.
+                MutinyDebugLog.Info("Chest",
+                    $"drop attempt rejected column={column} x={x:0} floorY={floorY:0} reason={blockedBy}", this);
+                return false;
+            }
 
             int contentCount = 1 + UnityEngine.Random.Range(0, 3);
             var contents = new List<string>(contentCount);
@@ -88,23 +94,7 @@ namespace Mutiny.Simulation
             m_Chests.Add(chest);
             MutinyDebugLog.Info("Chest",
                 $"dropped name={chestObject.name} column={column} floorY={floorY:0} contents={string.Join(",", contents)}", chest);
-        }
-
-        private void DisableExistingChests()
-        {
-            if (m_DisabledStateApplied)
-                return;
-
-            m_DisabledStateApplied = true;
-            MutinyTreasureChest[] existing = FindObjectsByType<MutinyTreasureChest>();
-            for (int i = 0; i < existing.Length; i++)
-            {
-                if (existing[i] != null)
-                    Destroy(existing[i].gameObject);
-            }
-            m_Chests.Clear();
-            MutinyDebugLog.Info("Chest",
-                $"airdrop system disabled for debugging; removedExisting={existing.Length}", this);
+            return true;
         }
 
         public void Unregister(MutinyTreasureChest chest)
@@ -164,7 +154,7 @@ namespace Mutiny.Simulation
             return -1;
         }
 
-        private bool IsDropPositionClear(float x, float floorY)
+        private bool IsDropPositionClear(float x, float floorY, out string blockedBy)
         {
             for (int i = 0; i < m_LevelRoot.Characters.Count; i++)
             {
@@ -173,13 +163,19 @@ namespace Mutiny.Simulation
                     continue;
                 PhysicsBodyState state = character.PhysicsBody.State;
                 if (state.X >= x - 32f && state.X <= x + 32f && state.Y <= floorY + 32f)
+                {
+                    blockedBy = $"character:{character.name}";
                     return false;
+                }
             }
 
             for (int i = 0; i < m_Chests.Count; i++)
             {
                 if (m_Chests[i] != null && Mathf.Approximately(m_Chests[i].PixelX, x))
+                {
+                    blockedBy = $"chest:{m_Chests[i].name}";
                     return false;
+                }
             }
 
             MutinyWeapon[] weapons = FindObjectsByType<MutinyWeapon>();
@@ -188,8 +184,12 @@ namespace Mutiny.Simulation
                 if ((weapons[i] is MutinyWoodenCrate || weapons[i] is MutinyGunpowderBarrel) &&
                     weapons[i].PhysicsBody != null &&
                     Mathf.Abs(weapons[i].PhysicsBody.State.X - x) < 32f)
+                {
+                    blockedBy = $"box:{weapons[i].name}";
                     return false;
+                }
             }
+            blockedBy = null;
             return true;
         }
 

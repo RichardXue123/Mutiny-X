@@ -1,6 +1,6 @@
 # 武器待抛射、取消与装备显示规格
 
-状态：静态证据确认；Unity 生产入口已实现且 C# 编译通过；专项回归已加入，Unity 执行、Play Mode 与原版运行对照待执行。
+状态：静态证据确认；BUG-WRDY-POS-001 的 Unity 生产入口已实现，`dotnet build Assembly-CSharp.csproj --no-restore` 于 2026-09-17 通过（0 error）；专项回归已加入，Unity 执行、Play Mode 与原版运行对照待执行。
 
 ## 范围与状态
 
@@ -18,9 +18,20 @@
 - 前置：当前存活角色可使用所选武器，库存大于零。
 - 输入：在武器选择面板点击一种武器。
 - 状态变化：`Character.equip(index)` 创建该武器的真实实例并设为 `equippedWeapon`；面板通过 `weaponSelected=true` 隐藏。
-- 可观察结果：武器实例位于角色源坐标 `(x, y-10px)`；巨石额外上移 `20px`，即 `(x, y-30px)`。速度为零，尚不消耗库存。
+- 可观察结果：创建当下，武器逻辑原点位于角色源坐标 `(x, y-10px)`；巨石额外上移 `20px`，即 `(x, y-30px)`。速度为零，尚不消耗库存。
 - 原版证据：`Character.as::equip` 创建 15 种武器、设置 owner/type/零速度并定位；`WeaponSelectButton.as::onRelease` 调用 `equip` 后设置 `weaponSelected=true`。
 - Unity 入口：`MutinyPlayerInput.SelectWeapon`、`MutinyWeapon.PrepareForEquip`。
+
+### WRDY-S01A：初始装备坐标不是持续锁定点
+
+- 前置：武器已经由 WRDY-S01 创建，尚未发射。
+- 状态变化：`Character.advance` 每个 25 Hz tick 调用 `equippedWeapon.advance()`。普通 `Weapon.advance()` 即使在 `fired=false` 时也先调用 `advanceMotion()`，因此仍会施加 weight、地形/箱体碰撞、bounce 和 friction。
+- 可观察结果：香蕉并不会一直悬在 `owner.y-10`。它以自身 7 px extent、weight 1、bounce 0.8、friction 0.5 从初始点继续运动；酒瓶、地雷、鞭炮、降落伞炸弹、巫毒娃娃和巨石也由各自 extent/weight/bounce 决定随后看到的位置。不同武器的画面偏移还包含 linkage symbol 自身注册点，不能用一套居中 pivot 或按观感手填偏移替代。
+- 专用覆盖：`PiecesOfEight.advance` 在未发射且未拉力时先重置到 `(owner.x, owner.y+5)`，再执行同 tick 的通用运动，所以无碰撞时该 tick 显示逻辑原点为 `owner.y+6`；`BoxWeapon`、`Anchor`、未启动的 `TidalWave` 不在待命阶段调用 `advanceMotion`；`Cannon`、`Seagull` 调用通用运动但 weight 为 0。
+- 可见性：构造函数调用 `show()` 的普通抛射武器会显示本体；`Anchor`、`BoxWeapon`、`Seagull`、`TidalWave` 构造函数没有 `show()`，待命阶段不在角色身上显示本体，只显示各自的放置/指针表现，提交后各自的 `place/show/startWave` 才显示本体。
+- 资源证据：`Docs/ReverseEngineering/Art/sprite-origins.csv`；香蕉 linkage `banana` = symbol 921，27×15，注册点距左/上 `(13,7)`，Unity pivot 为 `(13/27,8/15)`。其余武器逐 symbol 使用同一换算 `pivot=(originX/width,(height-originY)/height)`。
+- 原版证据：`Character.as::advance/equip`、`Weapon.as::advance`、`Solid.as::advanceMotion`；各武器构造函数与 `PiecesOfEight.as::advance`、`BoxWeapon.as::advanceMotion`、`Anchor.as::advance`、`TidalWave.as::advance`。
+- Unity 入口：`MutinyWeapon.PrepareForEquip/AdvancesMotionWhileReady/IsBodyVisibleWhileReady`、`MutinyPhysicsBody.AdvanceSimulationTick`、`MutinyPiecesOfEight.PrepareUnfiredOwnerHold`。
 
 ### WRDY-S02：角色下方取消叉号
 
@@ -61,7 +72,9 @@
 
 | ID | 操作 | 断言 | 当前结果 |
 | --- | --- | --- | --- |
-| WRDY-T01 | 逐一选择所有已登记武器 | 每次都立即存在且仅保留一个未发射实例；位置符合 WRDY-S01 | 生产回归已加入，待 Unity 执行与 Play Mode |
+| WRDY-T01 | 逐一选择所有已登记武器 | 每次都立即存在且仅保留一个未发射实例；创建坐标符合 WRDY-S01，注册点符合对应 linkage，待命物理开关符合各 AS2 `advance` 路径 | 生产回归已加入，待 Unity 执行与 Play Mode |
+| WRDY-T01A | 选择香蕉后推进一个生产物理 tick | 从 `owner.y-10` 变为 `owner.y-9`，证明待命期执行 weight 1，而非冻结悬空 | 生产回归已加入，待 Unity 执行与 Play Mode |
+| WRDY-T01B | 选择金币后推进一个生产物理 tick | 先回到 `owner.y+5`，再受同 tick 重力到 `owner.y+6` | 生产回归已加入，待 Unity 执行与 Play Mode |
 | WRDY-T02 | 选择武器后观察/点击叉号 | 待抛射时显示、拉力时隐藏；点击回到武器菜单且库存不变 | 生产回归已加入，待 Unity 执行与 Play Mode |
 | WRDY-T03 | 左键拉力后右键 | 同一实例保留，状态回到 `WeaponReady`，预测线消失 | 生产回归已加入，待 Unity 执行与 Play Mode |
 | WRDY-T04 | 再次拉力并松开 | 发射的是装备实例，不产生第二实例；提交时才扣库存 | 生产回归已加入，待 Unity 执行与 Play Mode |
@@ -69,4 +82,17 @@
 ## 已知待核对项
 
 - Unity 的叉号悬停帧需要用原版第 10 帧资源做像素对照；缺失时不能以颜色插值宣称完全一致。
-- 放置型、点选型和多阶段武器沿用各自专用提交规则，但进入各自专用阶段前也必须先显示真实装备实例。
+- 放置型、点选型和多阶段武器沿用各自专用提交规则；选择时创建真实实例，但是否显示本体必须服从各构造函数的 `show()` 路径，不能把“已实例化”误写成“一定可见”。
+
+## 缺陷记录
+
+### BUG-WRDY-POS-001：待抛射武器被错误冻结在初始装备坐标
+
+- 基线/用户报告：2026-09-17；香蕉待命画面偏高，且不同武器相对角色的偏移与原版不一致。
+- 前置与操作：本方角色站立并选中香蕉或其他普通抛射武器，等待至少一个 25 Hz 模拟 tick，尚不发射。
+- 原版期望：`Character.equip` 先写入统一初始坐标；之后 `Character.advance → equippedWeapon.advance → advanceMotion` 继续运行。可见位置由 weapon extent、weight、bounce、terrain contact 与 symbol 注册点共同形成。
+- Unity 修复前：`MutinyWeapon.PrepareForEquip` 对所有武器设置 `PhysicsBody.IsActive=false`，因此香蕉永久停留在 `owner.y-10`；金币还在创建阶段提前跳到 `owner.y+5`，没有执行同 tick 重力。
+- 最早分歧：选中后的第一个 25 Hz tick。
+- 根因：把原版的一次性创建坐标误建模为持续固定的“装备点”，并把金币后续 tick 的专用复位误用于创建当下。
+- 修复：普通武器待命期恢复生产物理；按 AS2 override 关闭 Box/Anchor/TidalWave 的待命运动；金币在 `OnBeforeSimulationStep` 执行未发射复位；按构造函数 `show()` 恢复本体可见性；继续使用原版 linkage 注册点。
+- 回归：WRDY-T01、WRDY-T01A、WRDY-T01B。C# 编译通过；Unity 验证未执行。

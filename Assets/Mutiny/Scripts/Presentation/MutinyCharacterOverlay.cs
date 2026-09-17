@@ -5,6 +5,7 @@ using UnityEngine;
 
 namespace Mutiny.Presentation
 {
+    [DefaultExecutionOrder(100)]
     [DisallowMultipleComponent]
     [RequireComponent(typeof(MutinyCharacter))]
     public sealed class MutinyCharacterOverlay : MonoBehaviour

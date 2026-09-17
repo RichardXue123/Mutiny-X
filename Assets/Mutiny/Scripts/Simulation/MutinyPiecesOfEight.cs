@@ -67,13 +67,13 @@ namespace Mutiny.Simulation
             m_OverWater = true;
             m_AiWaitTicks = 0;
             m_AiTickAccumulator = 0f;
-            HoldAtOwner();
+            PhysicsBody.OnBeforeSimulationStep -= PrepareUnfiredOwnerHold;
+            PhysicsBody.OnBeforeSimulationStep += PrepareUnfiredOwnerHold;
         }
 
         public override void PrepareForEquip()
         {
             base.PrepareForEquip();
-            HoldAtOwner();
         }
 
         public override void Fire(Vector2 velocityPx)
@@ -121,7 +121,6 @@ namespace Mutiny.Simulation
                     return;
                 }
 
-                HoldAtOwner();
                 AdvanceAiWait();
             }
         }
@@ -177,7 +176,10 @@ namespace Mutiny.Simulation
                 IsFired = false;
                 PhysicsBody.IsActive = false;
                 PhysicsBody.SetVelocity(0f, 0f);
-                HoldAtOwner();
+                // PiecesOfEight.advance returns the coin to (owner.x,
+                // owner.y + 5) at the start of the following simulation tick.
+                // Preserve the impact position for the remainder of this tick.
+                PhysicsBody.IsActive = true;
                 Owner.WeaponLocked = true;
                 if (TryGetOwnerTeam(out MutinyTeam team) && team.IsAiControlled)
                     m_AiWaitTicks = AiReaimDelayTicks;
@@ -209,6 +211,15 @@ namespace Mutiny.Simulation
             PhysicsBody.State.VelocityX = 0f;
             PhysicsBody.State.VelocityY = 0f;
             transform.position = MutinyPhysics.PixelToUnity(x, y);
+        }
+
+        private void PrepareUnfiredOwnerHold()
+        {
+            // Original PiecesOfEight.advance performs this reset only when the
+            // coin is not the current Controller.twanging object, then calls
+            // Weapon.advance so gravity is still applied in the same tick.
+            if (!IsFired && !IsFinished && !IsBeingAimed)
+                HoldAtOwner();
         }
 
         private void AdvanceAiWait()

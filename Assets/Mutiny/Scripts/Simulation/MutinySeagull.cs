@@ -8,6 +8,9 @@ namespace Mutiny.Simulation
     [DisallowMultipleComponent]
     public sealed class MutinySeagull : MutinyWeapon
     {
+        // Seagull constructor shows only dottedLine. The bird appears in place().
+        public override bool IsBodyVisibleWhileReady => false;
+
         public const float OriginalFlightStartX = -300f;
         public const float OriginalFlightSpeed = 10f;
         public const float OriginalExitPadding = 275f;

@@ -40,6 +40,9 @@ namespace Mutiny.Simulation
     [RequireComponent(typeof(MutinyTeam))]
     public sealed class MutinyAIController : MonoBehaviour
     {
+        public const float OriginalChestMoveRadiusPixels = 40f;
+        public const float OriginalChestMoveBonus = 0.5f;
+
         [Header("AI Settings")]
         public float ThinkDelay = 0.8f;
         [Tooltip("Retained for existing scenes. Flash uses exactly 50 character throw samples.")]
@@ -114,6 +117,40 @@ namespace Mutiny.Simulation
                 MutinyDebugLog.Info("AI", "thinking cancelled because the active turn changed", this);
                 m_TurnCoroutine = null;
                 yield break;
+            }
+
+            // In Flash Team.advance, AI executes its move once panToCharacter == null
+            var camera = FindAnyObjectByType<Mutiny.Presentation.MutinyCameraController>();
+            bool loggedCameraWait = false;
+            while (camera != null && camera.IsPanningToTurnTarget)
+            {
+                if (!loggedCameraWait)
+                {
+                    loggedCameraWait = true;
+                    MutinyDebugLog.Info("AI",
+                        $"waiting for camera pan to character team={TeamLabel(m_Team)}", this);
+                }
+                yield return null;
+                gate = ResolveTurnGate(m_TurnManager, m_Team);
+                if (gate == MutinyAITurnGate.Cancel)
+                {
+                    MutinyDebugLog.Info("AI", "thinking cancelled while waiting for camera", this);
+                    m_TurnCoroutine = null;
+                    yield break;
+                }
+                if (gate == MutinyAITurnGate.Wait)
+                {
+                    while (gate == MutinyAITurnGate.Wait)
+                    {
+                        yield return null;
+                        gate = ResolveTurnGate(m_TurnManager, m_Team);
+                    }
+                    if (gate == MutinyAITurnGate.Cancel)
+                    {
+                        m_TurnCoroutine = null;
+                        yield break;
+                    }
+                }
             }
 
             AIMove bestMove;
@@ -820,8 +857,7 @@ namespace Mutiny.Simulation
             {
                 if (chests[i] == null || chests[i].IsFinished)
                     continue;
-                if (Vector2.Distance(landing, new Vector2(chests[i].PixelX, chests[i].FloorPixelY)) < 40f)
-                    score += 0.5f;
+                score += ScoreChestMoveLanding(landing, chests[i]);
             }
 
             if (character.HasWeapon("cherryBomb"))
@@ -830,6 +866,16 @@ namespace Mutiny.Simulation
             float movement = Vector2.Distance(landing, start);
             score += movement < 300f ? 0.3f * movement / 300f - 0.3f : -0.3f;
             return score;
+        }
+
+        public static float ScoreChestMoveLanding(Vector2 landing, MutinyTreasureChest chest)
+        {
+            if (chest == null || chest.IsFinished)
+                return 0f;
+            return Vector2.Distance(landing, new Vector2(chest.PixelX, chest.FloorPixelY)) <
+                   OriginalChestMoveRadiusPixels
+                ? OriginalChestMoveBonus
+                : 0f;
         }
 
         private float ScoreCherryBombFollowUpAtMoveLanding(

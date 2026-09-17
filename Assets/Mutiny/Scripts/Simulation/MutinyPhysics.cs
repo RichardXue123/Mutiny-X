@@ -412,4 +412,55 @@ namespace Mutiny.Simulation
             return -velocityX * WeaponRotationMultiplier(weaponType);
         }
     }
+
+    /// <summary>
+    /// Keeps the authoritative Flash rotation on the 25 Hz simulation timeline
+    /// while allowing Unity to present the last tick transition smoothly. Sampling
+    /// never feeds back into physics or adds another angular integration step.
+    /// </summary>
+    public sealed class MutinyRotationState
+    {
+        private long m_LastPreparedTick = long.MinValue;
+
+        public float PreviousAngle { get; private set; }
+        public float LogicalAngle { get; private set; }
+
+        public void Reset(float angle)
+        {
+            LogicalAngle = Normalize(angle);
+            PreviousAngle = LogicalAngle;
+            m_LastPreparedTick = long.MinValue;
+        }
+
+        public void AddDelta(long simulationTick, float delta)
+        {
+            PrepareTick(simulationTick);
+            LogicalAngle = Normalize(LogicalAngle + delta);
+        }
+
+        public void SetAngle(long simulationTick, float angle)
+        {
+            PrepareTick(simulationTick);
+            LogicalAngle = Normalize(angle);
+        }
+
+        public float Sample(float alpha)
+        {
+            return Mathf.LerpAngle(PreviousAngle, LogicalAngle, Mathf.Clamp01(alpha));
+        }
+
+        private void PrepareTick(long simulationTick)
+        {
+            if (m_LastPreparedTick == simulationTick)
+                return;
+
+            PreviousAngle = LogicalAngle;
+            m_LastPreparedTick = simulationTick;
+        }
+
+        private static float Normalize(float angle)
+        {
+            return Mathf.DeltaAngle(0f, angle);
+        }
+    }
 }

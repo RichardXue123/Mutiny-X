@@ -9,6 +9,11 @@ namespace Mutiny.Simulation
     [DisallowMultipleComponent]
     public sealed class MutinyTidalWave : MutinyWeapon
     {
+        // TidalWave.advance only delegates to Weapon.advance after startWave().
+        public override bool AdvancesMotionWhileReady => false;
+        // TidalWave constructor omits show(); startWave() creates the visible clip.
+        public override bool IsBodyVisibleWhileReady => false;
+
         public const float OriginalStartX = -550f;
         public const float OriginalSpeed = 20f;
         public const float OriginalExitPadding = 550f;

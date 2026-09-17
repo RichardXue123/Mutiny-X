@@ -10,6 +10,11 @@ namespace Mutiny.Simulation
     [DisallowMultipleComponent]
     public sealed class MutinyWoodenCrate : MutinyWeapon
     {
+        // BoxWeapon.advanceMotion is gated by fired in the Flash source.
+        public override bool AdvancesMotionWhileReady => false;
+        // BoxWeapon constructor omits show(); each legal place() reveals one box.
+        public override bool IsBodyVisibleWhileReady => false;
+
         public const float LeftExtentPixels = 16f;
         public const float RightExtentPixels = 15f;
         public const int OriginalPlacementCount = 3;

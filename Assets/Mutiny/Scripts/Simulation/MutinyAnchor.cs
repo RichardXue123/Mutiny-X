@@ -8,6 +8,11 @@ namespace Mutiny.Simulation
     [DisallowMultipleComponent]
     public sealed class MutinyAnchor : MutinyWeapon
     {
+        // Anchor.advance does not call advanceMotion until place() has committed.
+        public override bool AdvancesMotionWhileReady => false;
+        // Anchor constructor omits show(); place() creates the visible clip.
+        public override bool IsBodyVisibleWhileReady => false;
+
         public const float DropStartYPixels = -200f;
         public const float DropSpeedPixelsPerTick = 40f;
         public const float CrushDamage = 60f;

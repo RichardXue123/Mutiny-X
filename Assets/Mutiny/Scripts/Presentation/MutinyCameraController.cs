@@ -1,5 +1,6 @@
 using Mutiny.Levels;
 using Mutiny.Simulation;
+using Mutiny.Diagnostics;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -25,10 +26,24 @@ namespace Mutiny.Presentation
         private MutinyTeam m_PreviousTeam;
         private Transform m_TurnPanTarget;
         private Vector2 m_EdgeVelocityPixelsPerSecond;
+        private bool m_AirDropCameraWasLocked;
 
         private void Awake()
         {
             m_Camera = GetComponent<Camera>();
+        }
+
+        public bool IsTrackingAirDrop => FindFallingChest() != null;
+        public bool IsPanningToTurnTarget => m_TurnPanTarget != null;
+
+        public void PanToTarget(Transform target)
+        {
+            m_TurnPanTarget = target;
+        }
+
+        public void PanToCharacter(MutinyCharacter character)
+        {
+            m_TurnPanTarget = character != null ? character.transform : null;
         }
 
         private void LateUpdate()
@@ -44,12 +59,29 @@ namespace Mutiny.Presentation
                 m_TurnPanTarget = panCharacter != null ? panCharacter.transform : null;
             }
 
+            // TileSystem.advanceScrolling returns before every automatic camera
+            // branch while Controller.dragging is set (human player dragging).
+            if (PlayerInput != null && PlayerInput.IsAiming)
+                return;
+
             MutinyTreasureChest fallingChest = FindFallingChest();
             if (fallingChest != null)
             {
+                if (!m_AirDropCameraWasLocked)
+                {
+                    m_AirDropCameraWasLocked = true;
+                    MutinyDebugLog.Info("Camera",
+                        $"airdrop tracking started chest={fallingChest.name} timeTaken={fallingChest.TimeTaken} speed=50px/tick", this);
+                }
                 m_EdgeVelocityPixelsPerSecond = Vector2.zero;
                 PanTowards(fallingChest.transform.position, 50f, 0f);
                 return;
+            }
+            if (m_AirDropCameraWasLocked)
+            {
+                m_AirDropCameraWasLocked = false;
+                MutinyDebugLog.Info("Camera",
+                    "airdrop tracking released; normal action/edge camera controls resumed", this);
             }
 
             Transform actionTarget = FindActionTarget();

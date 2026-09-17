@@ -218,7 +218,8 @@ namespace Mutiny.Simulation
                 }
 
                 InactivityTicks = 0;
-                CurrentPhase = TurnPhase.ActionExecuting;
+                if (m_ActionCommittedThisTurn)
+                    CurrentPhase = TurnPhase.ActionExecuting;
             }
         }
 
@@ -296,6 +297,29 @@ namespace Mutiny.Simulation
             {
                 blocker = $"explosions:{activeExplosions.Length}";
                 return false;
+            }
+
+            // 4. Check active treasure chests (air-drops falling or item collection in progress)
+            if (MutinyTreasureChestManager.SystemEnabled)
+            {
+                var chests = FindObjectsByType<MutinyTreasureChest>();
+                for (int i = 0; i < chests.Length; i++)
+                {
+                    var chest = chests[i];
+                    if (chest != null && !chest.IsFinished)
+                    {
+                        if (chest.IsFalling)
+                        {
+                            blocker = $"chest:{chest.name} (falling y={chest.PixelY:0}/{chest.FloorPixelY:0})";
+                            return false;
+                        }
+                        if (chest.CollectingCharacter != null)
+                        {
+                            blocker = $"chest:{chest.name} (collecting remaining={chest.RemainingContents})";
+                            return false;
+                        }
+                    }
+                }
             }
 
             blocker = null;
@@ -415,6 +439,7 @@ namespace Mutiny.Simulation
             {
                 // Current character still has remaining actions
                 CurrentPhase = TurnPhase.TurnActive;
+                m_ActionCommittedThisTurn = false;
                 CurrentTeam?.ContinueSelectedCharacterAfterAction();
                 MutinyDebugLog.Info("Turn",
                     $"continuing team={TeamLabel(CurrentTeam)} selected={CharacterLabel(CurrentTeam?.SelectedCharacter)} canThrow={CurrentTeam?.SelectedCharacter?.CanThrow} canShoot={CurrentTeam?.SelectedCharacter?.CanShoot}", this);
@@ -458,16 +483,17 @@ namespace Mutiny.Diagnostics
     public static class MutinyDebugLog
     {
         public static bool Enabled = true;
+        private static bool s_ForceDisabledInUnityEditorBatchMode = Application.isBatchMode;
 
         public static void Info(string module, string message, UnityEngine.Object context = null)
         {
-            if (Enabled && UnityEngine.Debug.isDebugBuild)
+            if (Enabled && (UnityEngine.Debug.isDebugBuild || Application.isEditor) && !s_ForceDisabledInUnityEditorBatchMode)
                 UnityEngine.Debug.Log($"[Mutiny:{module}] {message}", context);
         }
 
         public static void Warning(string module, string message, UnityEngine.Object context = null)
         {
-            if (Enabled && UnityEngine.Debug.isDebugBuild)
+            if (Enabled && (UnityEngine.Debug.isDebugBuild || Application.isEditor) && !s_ForceDisabledInUnityEditorBatchMode)
                 UnityEngine.Debug.LogWarning($"[Mutiny:{module}] {message}", context);
         }
     }

@@ -34,6 +34,9 @@ namespace Mutiny.Simulation
         private int m_GridHeight;
 
         public bool IsAtRest => State.IsAtRest;
+        public long SimulationTickCount { get; private set; }
+        public float SimulationInterpolationAlpha =>
+            Mathf.Clamp01(m_TimeAccumulator / MutinyPhysics.TimeStep);
 
         private void Awake()
         {
@@ -130,6 +133,7 @@ namespace Mutiny.Simulation
 
         public StepResult AdvanceSimulationTick()
         {
+            SimulationTickCount++;
             // Flash weapon advanceMotion overrides rotate before Solid.advanceMotion.
             OnBeforeSimulationStep?.Invoke();
 

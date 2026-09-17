@@ -11,13 +11,15 @@ namespace Mutiny.Presentation
             public readonly int Y;
             public readonly int Width;
             public readonly int Height;
+            public readonly int OriginYFromTop;
 
-            public Glyph(int x, int y, int width, int height)
+            public Glyph(int x, int y, int width, int height, int originYFromTop = 0)
             {
                 X = x;
                 Y = y;
                 Width = width;
                 Height = height;
+                OriginYFromTop = originYFromTop;
             }
         }
 
@@ -39,11 +41,11 @@ namespace Mutiny.Presentation
             ['k'] = new Glyph(273, 2, 38, 31),
             ['l'] = new Glyph(315, 2, 23, 23),
             ['m'] = new Glyph(342, 2, 28, 23),
-            ['n'] = new Glyph(374, 2, 40, 33),
+            ['n'] = new Glyph(374, 2, 40, 33, 2),
             ['o'] = new Glyph(418, 2, 24, 23),
-            ['p'] = new Glyph(446, 2, 23, 24),
+            ['p'] = new Glyph(446, 2, 23, 24, 1),
             ['q'] = new Glyph(473, 2, 26, 27),
-            ['r'] = new Glyph(2, 39, 39, 31),
+            ['r'] = new Glyph(2, 39, 39, 31, 1),
             ['s'] = new Glyph(45, 39, 22, 23),
             ['t'] = new Glyph(71, 39, 23, 23),
             ['u'] = new Glyph(98, 39, 24, 23),
@@ -85,11 +87,11 @@ namespace Mutiny.Presentation
             ['k'] = new Glyph(273, 117, 38, 31),
             ['l'] = new Glyph(315, 117, 23, 23),
             ['m'] = new Glyph(342, 117, 28, 23),
-            ['n'] = new Glyph(374, 117, 40, 33),
+            ['n'] = new Glyph(374, 117, 40, 33, 2),
             ['o'] = new Glyph(418, 117, 24, 23),
-            ['p'] = new Glyph(446, 117, 23, 24),
+            ['p'] = new Glyph(446, 117, 23, 24, 1),
             ['q'] = new Glyph(473, 117, 26, 27),
-            ['r'] = new Glyph(2, 154, 39, 31),
+            ['r'] = new Glyph(2, 154, 39, 31, 1),
             ['s'] = new Glyph(45, 154, 22, 23),
             ['t'] = new Glyph(71, 154, 23, 23),
             ['u'] = new Glyph(98, 154, 24, 23),
@@ -206,6 +208,19 @@ namespace Mutiny.Presentation
             }
         }
 
+        /// <summary>
+        /// Returns the original Flash symbol's top edge relative to the common
+        /// PirateFont holder origin. PirateFont.as never changes a letter's Y;
+        /// the exported symbol registration point supplies this offset.
+        /// </summary>
+        public static float GetPirateGlyphTopOffset(char character)
+        {
+            char normalized = char.ToLowerInvariant(character);
+            return s_PirateNormal.TryGetValue(normalized, out Glyph glyph)
+                ? -glyph.OriginYFromTop
+                : 0f;
+        }
+
         public static void DrawPirateText(Rect container, string text, bool isHovered, bool centered = true, int tracking = -3)
         {
             if (string.IsNullOrEmpty(text))
@@ -228,10 +243,10 @@ namespace Mutiny.Presentation
                 char c = text[i];
                 if (glyphDict.TryGetValue(c, out Glyph g))
                 {
-                    float glyphY = baseY;
-                    // Vertical alignment tweaks for descenders/punctuation
-                    if (c == 'g' || c == 'j' || c == 'q') glyphY = baseY + 1f;
-                    else if (c == 'k' || c == 'n' || c == 'r') glyphY = baseY - 4f;
+                    // All letters are attached at the same holder Y in PirateFont.as.
+                    // Preserve each exported symbol's registration point instead of
+                    // centering its trimmed bitmap by height.
+                    float glyphY = baseY + GetPirateGlyphTopOffset(c);
 
                     Rect screenRect = new Rect(currentX, Mathf.Round(glyphY), g.Width, g.Height);
                     Rect texCoords = new Rect(
