@@ -21,13 +21,26 @@ namespace Mutiny.Simulation
             LoadSprite();
         }
 
+        public static readonly Vector2 OriginalPivot = new Vector2(9f / 18f, 15f / 48f); // Symbol 918: origin (9, 33) of 18x48
+
         private void LoadSprite()
         {
             for (int frame = 1; frame <= OriginalFrameCount; frame++)
             {
-                Sprite sprite = Resources.Load<Sprite>($"Art/Weapons/RumBottle/{frame}");
-                if (sprite != null)
+                Texture2D texture = Resources.Load<Texture2D>($"Art/Weapons/RumBottle/{frame}");
+                if (texture != null)
+                {
+                    texture.filterMode = FilterMode.Point;
+                    Sprite sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                        OriginalPivot, MutinyPhysics.PixelsPerUnit);
                     m_Frames.Add(sprite);
+                }
+                else
+                {
+                    Sprite sprite = Resources.Load<Sprite>($"Art/Weapons/RumBottle/{frame}");
+                    if (sprite != null)
+                        m_Frames.Add(sprite);
+                }
             }
 
             if (m_Frames.Count > 0 && SpriteRenderer != null)

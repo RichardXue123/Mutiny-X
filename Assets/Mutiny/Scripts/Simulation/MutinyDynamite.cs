@@ -25,20 +25,41 @@ namespace Mutiny.Simulation
             LoadSprites();
         }
 
+        public static readonly Vector2 OriginalPivot = new Vector2(5f / 22f, 12f / 27f); // Symbol 881: origin (5, 15) of 22x27
+
         private void LoadSprites()
         {
             var lit = new List<Sprite>();
             for (int i = 1; i <= 5; i++)
             {
-                Sprite sp = Resources.Load<Sprite>($"Art/Weapons/Dynamite/{i}");
-                if (sp != null)
+                Texture2D texture = Resources.Load<Texture2D>($"Art/Weapons/Dynamite/{i}");
+                if (texture != null)
                 {
+                    texture.filterMode = FilterMode.Point;
+                    Sprite sp = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                        OriginalPivot, MutinyPhysics.PixelsPerUnit);
                     lit.Add(sp);
+                }
+                else
+                {
+                    Sprite sp = Resources.Load<Sprite>($"Art/Weapons/Dynamite/{i}");
+                    if (sp != null)
+                        lit.Add(sp);
                 }
             }
             LitFrames = lit.ToArray();
 
-            UnlitFrame = Resources.Load<Sprite>("Art/Weapons/Dynamite/6");
+            Texture2D unlitTexture = Resources.Load<Texture2D>("Art/Weapons/Dynamite/6");
+            if (unlitTexture != null)
+            {
+                unlitTexture.filterMode = FilterMode.Point;
+                UnlitFrame = Sprite.Create(unlitTexture, new Rect(0f, 0f, unlitTexture.width, unlitTexture.height),
+                    OriginalPivot, MutinyPhysics.PixelsPerUnit);
+            }
+            else
+            {
+                UnlitFrame = Resources.Load<Sprite>("Art/Weapons/Dynamite/6");
+            }
 
             if (LitFrames.Length > 0 && SpriteRenderer != null)
             {

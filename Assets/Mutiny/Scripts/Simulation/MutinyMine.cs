@@ -25,6 +25,8 @@ namespace Mutiny.Simulation
         public int CountdownRemaining => m_Countdown;
         public bool BlocksTurn => !m_Stored || m_Active;
 
+        public static readonly Vector2 OriginalPivot = new Vector2(18f / 38f, 17f / 35f); // Symbol 1024: origin (18, 18) of 38x35
+
         protected override void Awake()
         {
             WeaponType = "mine";
@@ -32,8 +34,19 @@ namespace Mutiny.Simulation
             base.Awake();
             for (int i = 1; i <= 30; i++)
             {
-                Sprite frame = Resources.Load<Sprite>($"Art/Weapons/Mine/{i}");
-                if (frame != null) m_Frames.Add(frame);
+                Texture2D texture = Resources.Load<Texture2D>($"Art/Weapons/Mine/{i}");
+                if (texture != null)
+                {
+                    texture.filterMode = FilterMode.Point;
+                    Sprite frame = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                        OriginalPivot, MutinyPhysics.PixelsPerUnit);
+                    m_Frames.Add(frame);
+                }
+                else
+                {
+                    Sprite frame = Resources.Load<Sprite>($"Art/Weapons/Mine/{i}");
+                    if (frame != null) m_Frames.Add(frame);
+                }
             }
             if (m_Frames.Count > 0) SpriteRenderer.sprite = m_Frames[0];
         }

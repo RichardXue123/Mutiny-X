@@ -28,14 +28,26 @@ namespace Mutiny.Simulation
         public bool IsAwaitingNextCoin => !IsFinished && !IsFired && TimesFired > 0 && TimesFired < TotalCoins;
         public bool CanFireNextCoin => !IsFinished && !IsFired && TimesFired < TotalCoins;
 
+        public static readonly Vector2 OriginalPivot = new Vector2(7f / 15f, 8f / 15f); // Symbol 884: origin (7, 7) of 15x15
+
         protected override void Awake()
         {
             WeaponType = "piecesOfEight";
             Extent = OriginalExtentPixels;
             base.Awake();
-            Sprite sprite = Resources.Load<Sprite>("Art/Weapons/PiecesOfEight/1");
-            if (sprite != null && SpriteRenderer != null)
-                SpriteRenderer.sprite = sprite;
+            Texture2D texture = Resources.Load<Texture2D>("Art/Weapons/PiecesOfEight/1");
+            if (texture != null && SpriteRenderer != null)
+            {
+                texture.filterMode = FilterMode.Point;
+                SpriteRenderer.sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                    OriginalPivot, MutinyPhysics.PixelsPerUnit);
+            }
+            else
+            {
+                Sprite sprite = Resources.Load<Sprite>("Art/Weapons/PiecesOfEight/1");
+                if (sprite != null && SpriteRenderer != null)
+                    SpriteRenderer.sprite = sprite;
+            }
         }
 
         public override void Initialize(MutinyCharacter owner)
@@ -55,6 +67,12 @@ namespace Mutiny.Simulation
             m_OverWater = true;
             m_AiWaitTicks = 0;
             m_AiTickAccumulator = 0f;
+            HoldAtOwner();
+        }
+
+        public override void PrepareForEquip()
+        {
+            base.PrepareForEquip();
             HoldAtOwner();
         }
 

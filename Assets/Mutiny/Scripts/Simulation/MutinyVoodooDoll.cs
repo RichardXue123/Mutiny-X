@@ -55,9 +55,6 @@ namespace Mutiny.Simulation
             m_TransferredTargetVelocity = false;
             IsTwangable = false;
 
-            // Character.equip places every normal equipped weapon at y - 10 px.
-            PhysicsBody.State.Y -= 10f;
-            transform.position = MutinyPhysics.PixelToUnity(PhysicsBody.State.X, PhysicsBody.State.Y);
             if (SpriteRenderer != null)
             {
                 Color color = SpriteRenderer.color;
@@ -214,11 +211,23 @@ namespace Mutiny.Simulation
             Destroy(gameObject, 0.1f);
         }
 
+        public static readonly Vector2 OriginalPivot = new Vector2(9f / 19f, 12f / 26f); // Symbol 1027: origin (9, 14) of 19x26
+
         private void LoadSprite()
         {
-            Sprite sprite = Resources.Load<Sprite>("Art/Weapons/VoodooDoll/1");
-            if (sprite != null && SpriteRenderer != null)
-                SpriteRenderer.sprite = sprite;
+            Texture2D texture = Resources.Load<Texture2D>("Art/Weapons/VoodooDoll/1");
+            if (texture != null && SpriteRenderer != null)
+            {
+                texture.filterMode = FilterMode.Point;
+                SpriteRenderer.sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                    OriginalPivot, MutinyPhysics.PixelsPerUnit);
+            }
+            else
+            {
+                Sprite sprite = Resources.Load<Sprite>("Art/Weapons/VoodooDoll/1");
+                if (sprite != null && SpriteRenderer != null)
+                    SpriteRenderer.sprite = sprite;
+            }
         }
 
         private void OnDestroy()

@@ -85,6 +85,7 @@ namespace Mutiny.Presentation
         private MutinyGunpowderBarrel m_ArmedGunpowderBarrel;
         private MutinyCannon m_ArmedCannon;
         private MutinyWeapon m_EquippedWeapon;
+        private MutinySpecialWeaponCursor m_SpecialWeaponCursor;
         // Unlike ordinary projectiles, PiecesOfEight remains equipped and is reused
         // for coin 2..8 while the turn stays in ActionExecuting.
         private MutinyPiecesOfEight m_ArmedPiecesOfEight;
@@ -114,6 +115,10 @@ namespace Mutiny.Presentation
                 cameraController.PlayerInput = this;
             }
 
+            var cursorObject = new GameObject("SpecialWeaponCursor");
+            cursorObject.transform.SetParent(transform, false);
+            m_SpecialWeaponCursor = cursorObject.AddComponent<MutinySpecialWeaponCursor>();
+
             CacheTerrain();
             ResetForCurrentTurn();
         }
@@ -138,6 +143,7 @@ namespace Mutiny.Presentation
             MutinyGameHUD hud = FindAnyObjectByType<MutinyGameHUD>();
             if (hud != null && hud.IsQuitPromptVisible)
             {
+                ClearSpecialWeaponCursor();
                 ClearHoveredCharacter();
                 if (InteractionState == MutinyPlayerInteractionState.Aiming)
                     HideTrajectory();
@@ -146,6 +152,7 @@ namespace Mutiny.Presentation
 
             if (!CanProcessCurrentTurnInput())
             {
+                ClearSpecialWeaponCursor();
                 ClearHoveredCharacter();
                 m_WasTurnActive = false;
                 if (InteractionState == MutinyPlayerInteractionState.Aiming)
@@ -177,6 +184,7 @@ namespace Mutiny.Presentation
 
             if (currentTeam == null || currentTeam.IsAiControlled)
             {
+                ClearSpecialWeaponCursor();
                 ClearHoveredCharacter();
                 return;
             }
@@ -186,12 +194,25 @@ namespace Mutiny.Presentation
                 return;
 
             Vector3 mouseWorld = GetMouseWorldPosition(mouse.position.ReadValue());
+
+            // Global weapon triggers in flight: Seagull and Banana take priority
+            // over any character selection or action states.
+            if (mouse.leftButton.wasPressedThisFrame)
+            {
+                if (MutinySeagull.TryRequestPlayerShot(currentTeam))
+                    return;
+
+                if (MutinyBanana.TryRequestPlayerDetonation(currentTeam))
+                    return;
+            }
+
             UpdateHoveredCharacter(currentTeam, mouseWorld);
 
             // A new turn begins without SelectedCharacter.  Character-selection
             // input must therefore run before any code that requires one.
             if (InteractionState == MutinyPlayerInteractionState.CharacterSelection)
             {
+                ClearSpecialWeaponCursor();
                 if (mouse.leftButton.wasPressedThisFrame)
                     TrySelectCharacter(currentTeam, mouseWorld);
                 return;
@@ -200,30 +221,18 @@ namespace Mutiny.Presentation
             MutinyCharacter selectedCharacter = currentTeam.SelectedCharacter;
             if (selectedCharacter == null || !selectedCharacter.IsAlive)
             {
+                ClearSpecialWeaponCursor();
                 ReturnToCharacterSelection();
                 return;
             }
 
+            UpdateSpecialWeaponCursor(selectedCharacter, mouse.position.ReadValue());
+
             // CancelWeaponButton.onPress is consumed before TileSystem begins a
-            // drag or routes the global Banana/Seagull click.
+            // drag.
             if (mouse.leftButton.wasPressedThisFrame &&
                 TryCancelWeaponFromOverlay(selectedCharacter, mouseWorld))
                 return;
-
-            // Banana.fire clears the release click in Flash. A later left click is a
-            // global tile-system press that requests detonation even though the
-            // character has already spent CanShoot.
-            if (mouse.leftButton.wasPressedThisFrame &&
-                MutinySeagull.TryRequestPlayerShot(currentTeam))
-            {
-                return;
-            }
-
-            if (mouse.leftButton.wasPressedThisFrame &&
-                MutinyBanana.TryRequestPlayerDetonation(currentTeam))
-            {
-                return;
-            }
 
             if (mouse.rightButton.wasPressedThisFrame &&
                 InteractionState == MutinyPlayerInteractionState.Aiming)
@@ -294,8 +303,43 @@ namespace Mutiny.Presentation
             bool placingWoodenCrate = m_ArmedWoodenCrate != null && m_ArmedWoodenCrate.HasPendingPlacement;
             bool awaitingPiecesOfEight = IsAwaitingPiecesOfEight();
             bool awaitingBananaDetonation = MutinyBanana.HasPlayerDetonatableBanana(TurnManager.CurrentTeam);
+            bool awaitingSeagullShot = MutinySeagull.HasPlayerActiveFlight(TurnManager.CurrentTeam);
             return TurnManager.CurrentPhase == TurnPhase.TurnActive || placingWoodenCrate ||
-                   awaitingPiecesOfEight || awaitingBananaDetonation;
+                   awaitingPiecesOfEight || awaitingBananaDetonation || awaitingSeagullShot;
+        }
+
+        private void UpdateSpecialWeaponCursor(MutinyCharacter selectedCharacter, Vector2 mousePosition)
+        {
+            if (m_SpecialWeaponCursor == null)
+                return;
+
+            MutinySpecialWeaponCursor.Mode mode = MutinySpecialWeaponCursor.Mode.None;
+            if (selectedCharacter != null && InteractionState == MutinyPlayerInteractionState.WeaponReady)
+            {
+                if (string.Equals(ActiveWeapon, "seagull", System.StringComparison.OrdinalIgnoreCase) ||
+                    (m_EquippedWeapon is MutinySeagull && !m_EquippedWeapon.IsFired))
+                {
+                    mode = MutinySpecialWeaponCursor.Mode.Seagull;
+                }
+                else if (string.Equals(ActiveWeapon, "tidalWave", System.StringComparison.OrdinalIgnoreCase) ||
+                         (m_EquippedWeapon is MutinyTidalWave && !m_EquippedWeapon.IsFired))
+                {
+                    mode = MutinySpecialWeaponCursor.Mode.TidalWave;
+                }
+            }
+
+            m_SpecialWeaponCursor.SetMode(mode, mousePosition);
+        }
+
+        private void ClearSpecialWeaponCursor()
+        {
+            if (m_SpecialWeaponCursor != null)
+                m_SpecialWeaponCursor.Clear();
+        }
+
+        private void OnDisable()
+        {
+            ClearSpecialWeaponCursor();
         }
 
         // The verification entry invokes exactly the Update phase gate; it avoids

@@ -285,6 +285,13 @@ namespace Mutiny.Levels
 
         public static Sprite ResolveCharacterPreview(string characterType)
         {
+            Texture2D tex = Resources.Load<Texture2D>($"Art/Characters/Preview/{characterType}");
+            if (tex != null)
+            {
+                tex.filterMode = FilterMode.Point;
+                return Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height),
+                    MutinyCharacterAnimator.GetCharacterPivot(characterType), MutinyPhysics.PixelsPerUnit);
+            }
             return Resources.Load<Sprite>($"Art/Characters/Preview/{characterType}");
         }
     }
@@ -345,6 +352,13 @@ namespace Mutiny.Levels
 
         public static void SpawnSplash(float pixelX, float waterPixelY, int skyColour = 1)
         {
+            if (float.IsInfinity(waterPixelY) || float.IsNaN(waterPixelY))
+            {
+                var levelRoot = UnityEngine.Object.FindAnyObjectByType<MutinyLevelRoot>();
+                if (levelRoot != null)
+                    waterPixelY = -levelRoot.WaterLevelY * MutinyPhysics.PixelsPerUnit;
+            }
+
             GameObject splash = new GameObject("WaterSplash");
             splash.transform.position = MutinyPhysics.PixelToUnity(pixelX, waterPixelY);
             splash.AddComponent<MutinySplashEffect>().Initialize(skyColour);

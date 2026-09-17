@@ -19,15 +19,27 @@ namespace Mutiny.Simulation
         private float m_LastNearestDistanceSquared = float.PositiveInfinity;
         private bool m_PlayerDetonationRequested;
 
+        public static readonly Vector2 OriginalPivot = new Vector2(13f / 27f, 8f / 15f); // Symbol 921: origin (13, 7) of 27x15
+
         protected override void Awake()
         {
             WeaponType = "banana";
             Extent = ExtentPixels;
             TwangMaxForce = 30f;
             base.Awake();
-            Sprite sprite = Resources.Load<Sprite>("Art/Weapons/Banana/1");
-            if (sprite != null && SpriteRenderer != null)
-                SpriteRenderer.sprite = sprite;
+            Texture2D texture = Resources.Load<Texture2D>("Art/Weapons/Banana/1");
+            if (texture != null && SpriteRenderer != null)
+            {
+                texture.filterMode = FilterMode.Point;
+                SpriteRenderer.sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                    OriginalPivot, MutinyPhysics.PixelsPerUnit);
+            }
+            else
+            {
+                Sprite sprite = Resources.Load<Sprite>("Art/Weapons/Banana/1");
+                if (sprite != null && SpriteRenderer != null)
+                    SpriteRenderer.sprite = sprite;
+            }
         }
 
         public override void Initialize(MutinyCharacter owner)

@@ -36,15 +36,28 @@ namespace Mutiny.Simulation
             return flame;
         }
 
+        public static readonly Vector2 FlamePivot = new Vector2(9f / 19f, 1f / 31f); // Symbol 905: origin (9, 30) of 19x31
+
         private void Awake()
         {
             m_Renderer = gameObject.AddComponent<SpriteRenderer>();
             m_Renderer.sortingOrder = MutinyWeapon.WeaponSortingOrder + 3;
             for (int frame = 1; frame <= OriginalFrameCount; frame++)
             {
-                Sprite sprite = Resources.Load<Sprite>($"Art/Effects/SweepingFlame/{frame}");
-                if (sprite != null)
+                Texture2D texture = Resources.Load<Texture2D>($"Art/Effects/SweepingFlame/{frame}");
+                if (texture != null)
+                {
+                    texture.filterMode = FilterMode.Point;
+                    Sprite sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                        FlamePivot, MutinyPhysics.PixelsPerUnit);
                     m_Frames.Add(sprite);
+                }
+                else
+                {
+                    Sprite sprite = Resources.Load<Sprite>($"Art/Effects/SweepingFlame/{frame}");
+                    if (sprite != null)
+                        m_Frames.Add(sprite);
+                }
             }
 
             if (m_Frames.Count > 0)

@@ -21,6 +21,7 @@
 | END-POP-04 | 胜利 popup 显示 | `level score` 和 `total score` 都从 0 分别以 287 / 347 每 tick 递增至目标。 | `MutinyGameHUD.AdvanceDisplayedScore`；`END-POP-T04` | 已实现；Unity Play Mode 待执行 |
 | END-POP-05 | 点击 Next level / Back to title | Next level 增加关卡号并加载下一关；Back to title 结束关卡并去单人选关。 | `MutinyGameHUD.AdvanceToNextLevel` / `BackToSinglePlayerMenu`；`END-POP-T05` | 已实现；Unity Play Mode 待执行 |
 | END-POP-06 | 点击 Restart level | 重载本关并将 session score 清为 0。 | `MutinyGameHUD.RestartFromGameEndPopup` → `MutinyLevelController.RestartCurrentLevel`；`END-POP-T06` | 已实现；Unity Play Mode 待执行 |
+| END-POP-07 | Quit / Complete / Failed popup 可见 | 共用背景 `DefineShape_326` 为 350×260 px，舞台矩形 `(100,70,350,260)`；按钮 `DefineShape_328` 为 280×24 px，时间轴 y=900/1600 twips 对应舞台 y=245/280。分数字段分列于 x=175 和 x=295，不能使用同一窄矩形。 | `MutinyGameHUD.ResolveOriginalPopup*Rect`；`END-POP-T07` | 已实现；Unity Play Mode 待执行 |
 
 ## 时序差异与待验收
 

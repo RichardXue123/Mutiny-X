@@ -381,14 +381,27 @@ namespace Mutiny.Simulation
             MutinyDebugLog.Warning("GunpowderBarrel", "AI found no legal follow-up barrel placement", this);
         }
 
+        public static readonly Vector2 OriginalPivot = new Vector2(16f / 33f, 16f / 32f); // Symbol 968: origin (16, 16) of 33x32
+
         private void LoadFrames()
         {
             m_Frames.Clear();
             for (int i = 1; i <= OriginalTimelineFrames; i++)
             {
-                Sprite frame = Resources.Load<Sprite>($"Art/Weapons/GunpowderBarrel/{i}");
-                if (frame != null)
+                Texture2D texture = Resources.Load<Texture2D>($"Art/Weapons/GunpowderBarrel/{i}");
+                if (texture != null)
+                {
+                    texture.filterMode = FilterMode.Point;
+                    Sprite frame = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                        OriginalPivot, MutinyPhysics.PixelsPerUnit);
                     m_Frames.Add(frame);
+                }
+                else
+                {
+                    Sprite frame = Resources.Load<Sprite>($"Art/Weapons/GunpowderBarrel/{i}");
+                    if (frame != null)
+                        m_Frames.Add(frame);
+                }
             }
             ApplyFrame();
         }

@@ -17,6 +17,9 @@ namespace Mutiny.Simulation
         private const int ShotFrameStart = 10;
         private const int ShotFrameEnd = 14;
 
+        // Symbol 982: 26x20 px, registration origin (13, 10).
+        public static readonly Vector2 OriginalSeagullPivot = new Vector2(13f / 26f, 10f / 20f);
+
         private readonly List<Sprite> m_Frames = new List<Sprite>(OriginalFrameCount);
         private readonly List<MutinySeagullFire> m_Shots = new List<MutinySeagullFire>();
         private readonly Queue<float> m_AiShotXs = new Queue<float>();
@@ -68,20 +71,34 @@ namespace Mutiny.Simulation
 
         public static bool TryRequestPlayerShot(MutinyTeam inputTeam)
         {
+            MutinySeagull seagull = FindPlayerActiveFlight(inputTeam);
+            if (seagull != null)
+                return seagull.RequestShot("player-click");
+            return false;
+        }
+
+        // Seagull.as keeps reading TileSystem.mouseButtonDown after the first
+        // place() click consumed both character actions. The player-input gate
+        // uses this same query so ActionExecuting does not swallow later drops.
+        public static bool HasPlayerActiveFlight(MutinyTeam inputTeam)
+        {
+            return FindPlayerActiveFlight(inputTeam) != null;
+        }
+
+        private static MutinySeagull FindPlayerActiveFlight(MutinyTeam inputTeam)
+        {
             if (inputTeam == null || inputTeam.IsAiControlled)
-                return false;
+                return null;
 
             MutinySeagull[] seagulls = Object.FindObjectsByType<MutinySeagull>();
             for (int i = 0; i < seagulls.Length; i++)
             {
                 MutinySeagull seagull = seagulls[i];
-                if (seagull == null || !seagull.IsFired || seagull.IsFinished || seagull.Owner == null ||
-                    !inputTeam.Characters.Contains(seagull.Owner))
-                    continue;
-
-                return seagull.RequestShot("player-click");
+                if (seagull != null && seagull.IsFired && !seagull.IsFinished && seagull.Owner != null &&
+                    inputTeam.Characters.Contains(seagull.Owner))
+                    return seagull;
             }
-            return false;
+            return null;
         }
 
         public bool RequestShotForVerification()
@@ -125,6 +142,8 @@ namespace Mutiny.Simulation
             transform.position = MutinyPhysics.PixelToUnity(startX, flightY);
             IsFired = true;
             IsFinished = false;
+            if (SpriteRenderer != null)
+                SpriteRenderer.enabled = true;
             m_AiShotXs.Clear();
             if (shotXs != null)
             {
@@ -157,6 +176,8 @@ namespace Mutiny.Simulation
             if (PhysicsBody.State.X > ResolveLevelWidthPixels() + OriginalExitPadding && m_Shots.Count == 0)
             {
                 Finish();
+                if (SpriteRenderer != null)
+                    SpriteRenderer.enabled = false;
                 MutinyDebugLog.Info("Seagull", "flight exited after all shots ended", this);
                 Destroy(gameObject, 0.1f);
             }
@@ -173,7 +194,10 @@ namespace Mutiny.Simulation
             Vector2 position = new Vector2(PhysicsBody.State.X + OriginalShotXOffset, PhysicsBody.State.Y);
             MutinySeagullFire shot = MutinySeagullFire.Spawn(this, position, PhysicsBody.State.VelocityX);
             m_Shots.Add(shot);
-            m_ShotFrame = ShotFrameStart - 1;
+            m_ShotFrame = ShotFrameStart;
+            if (m_ShotFrame - 1 < m_Frames.Count && SpriteRenderer != null)
+                SpriteRenderer.sprite = m_Frames[m_ShotFrame - 1];
+
             MutinyAudioManager.Instance?.PlaySFX($"poop{Random.Range(1, 4)}");
             MutinyDebugLog.Info("Seagull",
                 $"shot created source={source} pos=({position.x:F1},{position.y:F1}) activeShots={m_Shots.Count}", this);
@@ -185,7 +209,7 @@ namespace Mutiny.Simulation
             if (m_Frames.Count == 0 || SpriteRenderer == null)
                 return;
 
-            if (m_ShotFrame >= ShotFrameStart - 1)
+            if (m_ShotFrame >= ShotFrameStart)
             {
                 m_ShotFrame++;
                 if (m_ShotFrame > ShotFrameEnd)
@@ -221,11 +245,23 @@ namespace Mutiny.Simulation
 
         private void LoadSprites()
         {
+            m_Frames.Clear();
             for (int frame = 1; frame <= OriginalFrameCount; frame++)
             {
-                Sprite sprite = Resources.Load<Sprite>($"Art/Weapons/Seagull/{frame}");
-                if (sprite != null)
+                Texture2D texture = Resources.Load<Texture2D>($"Art/Weapons/Seagull/{frame}");
+                if (texture != null)
+                {
+                    texture.filterMode = FilterMode.Point;
+                    Sprite sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                        OriginalSeagullPivot, MutinyPhysics.PixelsPerUnit);
                     m_Frames.Add(sprite);
+                }
+                else
+                {
+                    Sprite sprite = Resources.Load<Sprite>($"Art/Weapons/Seagull/{frame}");
+                    if (sprite != null)
+                        m_Frames.Add(sprite);
+                }
             }
             if (m_Frames.Count > 0 && SpriteRenderer != null)
                 SpriteRenderer.sprite = m_Frames[0];

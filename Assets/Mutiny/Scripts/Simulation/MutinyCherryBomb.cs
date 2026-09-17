@@ -21,6 +21,8 @@ namespace Mutiny.Simulation
             LoadSprites();
         }
 
+        public static readonly Vector2 OriginalPivot = new Vector2(10f / 20f, 10f / 32f); // Symbol 844: origin (10, 22) of 20x32
+
         private void LoadSprites()
         {
             if (AnimationFrames != null && AnimationFrames.Length > 0)
@@ -29,10 +31,19 @@ namespace Mutiny.Simulation
             var frames = new List<Sprite>();
             for (int i = 1; i <= 4; i++)
             {
-                Sprite sp = Resources.Load<Sprite>($"Art/Weapons/CherryBomb/{i}");
-                if (sp != null)
+                Texture2D texture = Resources.Load<Texture2D>($"Art/Weapons/CherryBomb/{i}");
+                if (texture != null)
                 {
+                    texture.filterMode = FilterMode.Point;
+                    Sprite sp = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                        OriginalPivot, MutinyPhysics.PixelsPerUnit);
                     frames.Add(sp);
+                }
+                else
+                {
+                    Sprite sp = Resources.Load<Sprite>($"Art/Weapons/CherryBomb/{i}");
+                    if (sp != null)
+                        frames.Add(sp);
                 }
             }
 

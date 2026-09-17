@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Mutiny.Diagnostics;
 using Mutiny.Levels;
+using Mutiny.Presentation;
 using UnityEngine;
 
 namespace Mutiny.Simulation
@@ -17,12 +18,29 @@ namespace Mutiny.Simulation
         private const int FramesPerSkyColour = 9;
         private const int VisibleFramesPerSkyColour = 5;
 
+        // Flash Symbol 1058 (tidalWave): 499x352 px. Registration point (310.0, 350.0).
+        // Unity Normalized Pivot: (310 / 499, 2 / 352).
+        public static readonly Vector2 OriginalTidalWavePivot = new Vector2(310f / 499f, 2f / 352f);
+
         private readonly List<Sprite> m_Frames = new List<Sprite>(27);
         private int m_SkyColour = 1;
         private int m_AnimationFrame;
+        private bool m_HasStartedSurfaceSplash;
 
         public int CurrentSkyColour => m_SkyColour;
         public int CurrentVisibleFrame => m_AnimationFrame + 1;
+        public int CurrentSourceFrame => (m_SkyColour - 1) * FramesPerSkyColour + m_AnimationFrame + 1;
+
+        public static int ResolveOriginalSkyColourForLevel(int level)
+        {
+            if ((level >= 1 && level <= 5) || (level >= 16 && level <= 21))
+                return 1;
+            if ((level >= 6 && level <= 10) || (level >= 22 && level <= 27))
+                return 2;
+            if ((level >= 11 && level <= 15) || (level >= 28 && level <= 33))
+                return 3;
+            return 1;
+        }
 
         protected override void Awake()
         {
@@ -31,8 +49,11 @@ namespace Mutiny.Simulation
             // gameplay hit area is explicit in advance(), not a body extent.
             Extent = 10f;
             IsDraggable = false;
+            IsTwangable = false;
             base.Awake();
             LoadFrames();
+            if (SpriteRenderer != null)
+                SpriteRenderer.enabled = false;
         }
 
         public override void Initialize(MutinyCharacter owner)
@@ -44,7 +65,20 @@ namespace Mutiny.Simulation
             PhysicsBody.OnSimulationStep += AdvanceOriginalTick;
             m_SkyColour = ResolveOriginalSkyColour();
             m_AnimationFrame = 0;
+            m_HasStartedSurfaceSplash = false;
             ApplyAnimationFrame();
+            // In Flash 2008 (TidalWave.as:15-24), constructor does not call show().
+            // The wave graphic is hidden on the character during preview/ready,
+            // and only becomes visible when startWave() is triggered on click.
+            if (SpriteRenderer != null)
+                SpriteRenderer.enabled = false;
+        }
+
+        public override void PrepareForEquip()
+        {
+            base.PrepareForEquip();
+            if (SpriteRenderer != null)
+                SpriteRenderer.enabled = false;
         }
 
         // startX and direction remain in the signature for old callers, but the
@@ -59,6 +93,7 @@ namespace Mutiny.Simulation
 
             m_SkyColour = ResolveOriginalSkyColour();
             m_AnimationFrame = 0;
+            m_HasStartedSurfaceSplash = false;
             PhysicsBody.State.X = OriginalStartX;
             PhysicsBody.State.Y = waterPixelY;
             PhysicsBody.State.Weight = 0f;
@@ -69,7 +104,11 @@ namespace Mutiny.Simulation
             transform.position = MutinyPhysics.PixelToUnity(OriginalStartX, waterPixelY);
             IsFired = true;
             IsFinished = false;
+            if (SpriteRenderer != null)
+                SpriteRenderer.enabled = true;
             ApplyAnimationFrame();
+
+            MutinyAudioManager.Instance?.PlaySFX("splash");
 
             if (Owner != null)
             {
@@ -97,6 +136,7 @@ namespace Mutiny.Simulation
             if (!IsFired || IsFinished || PhysicsBody == null)
                 return;
 
+            EmitOriginalInitialSurfaceSplash();
             AdvanceAnimation();
             ApplyOriginalDamageWindow();
 
@@ -108,6 +148,21 @@ namespace Mutiny.Simulation
                 MutinyDebugLog.Info("TidalWave", "exited level right boundary", this);
                 Destroy(gameObject, 0.1f);
             }
+        }
+
+        // TidalWave.advance calls Weapon.advance first. That inherited advance
+        // changes Solid.overWater=true to y==water.y and runs splashCheck(),
+        // which creates the colour-matched splash and plays splash exactly once
+        // on the first 25 Hz tick.
+        private void EmitOriginalInitialSurfaceSplash()
+        {
+            if (m_HasStartedSurfaceSplash)
+                return;
+
+            m_HasStartedSurfaceSplash = true;
+            MutinyWaterSurface.SpawnSplash(PhysicsBody.State.X, PhysicsBody.WaterPixelY, m_SkyColour);
+            MutinyDebugLog.Info("TidalWave",
+                $"WPN-12-AUD-01 inherited splash tick pos=({PhysicsBody.State.X:F1},{PhysicsBody.WaterPixelY:F1}) sky={m_SkyColour}", this);
         }
 
         private void ApplyOriginalDamageWindow()
@@ -148,13 +203,7 @@ namespace Mutiny.Simulation
         {
             MutinyLevelController controller = FindAnyObjectByType<MutinyLevelController>();
             int level = controller != null ? controller.CurrentLevelIndex : 1;
-            if ((level >= 1 && level <= 5) || (level >= 16 && level <= 21))
-                return 1;
-            if ((level >= 6 && level <= 10) || (level >= 22 && level <= 27))
-                return 2;
-            if ((level >= 11 && level <= 15) || (level >= 28 && level <= 33))
-                return 3;
-            return 1;
+            return ResolveOriginalSkyColourForLevel(level);
         }
 
         private float ResolveLevelWidthPixels()
@@ -168,11 +217,23 @@ namespace Mutiny.Simulation
 
         private void LoadFrames()
         {
+            m_Frames.Clear();
             for (int frame = 1; frame <= 27; frame++)
             {
-                Sprite sprite = Resources.Load<Sprite>($"Art/Weapons/TidalWave/{frame}");
-                if (sprite != null)
+                Texture2D texture = Resources.Load<Texture2D>($"Art/Weapons/TidalWave/{frame}");
+                if (texture != null)
+                {
+                    texture.filterMode = FilterMode.Point;
+                    Sprite sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                        OriginalTidalWavePivot, MutinyPhysics.PixelsPerUnit);
                     m_Frames.Add(sprite);
+                }
+                else
+                {
+                    Sprite sprite = Resources.Load<Sprite>($"Art/Weapons/TidalWave/{frame}");
+                    if (sprite != null)
+                        m_Frames.Add(sprite);
+                }
             }
         }
 

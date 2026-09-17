@@ -28,11 +28,23 @@ namespace Mutiny.Simulation
             return shot;
         }
 
+        public static readonly Vector2 OriginalPivot = new Vector2(7f / 13f, 8f / 20f); // Symbol 971: origin (7, 12) of 13x20
+
         private void Awake()
         {
             SpriteRenderer renderer = GetComponent<SpriteRenderer>();
             renderer.sortingOrder = MutinyWeapon.WeaponSortingOrder + 1;
-            renderer.sprite = Resources.Load<Sprite>("Art/Weapons/SeagullFire/1");
+            Texture2D texture = Resources.Load<Texture2D>("Art/Weapons/SeagullFire/1");
+            if (texture != null)
+            {
+                texture.filterMode = FilterMode.Point;
+                renderer.sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                    OriginalPivot, MutinyPhysics.PixelsPerUnit);
+            }
+            else
+            {
+                renderer.sprite = Resources.Load<Sprite>("Art/Weapons/SeagullFire/1");
+            }
             m_PhysicsBody = gameObject.AddComponent<MutinyPhysicsBody>();
             m_PhysicsBody.OnFloorLanded += ExplodeOnContact;
             m_PhysicsBody.OnWallHit += ExplodeOnContact;

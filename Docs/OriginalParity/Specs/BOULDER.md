@@ -22,6 +22,7 @@
 | W04-S-08 | S | `Character.as advance` lines 172–175；`Weapon.as advance` | 角色每 tick 调用 `equippedWeapon.advance()`，且 Boulder 未覆盖它。因而 Boulder 的 `.5` 可见度分支之后，同一 tick 仍会执行通用 `.2` 静止结束；不能把 Boulder 的分支误读为必然完整淡出 21 tick。 |
 | W04-S-09 | S | `TileSystem.as mouseDown/mouseUp` lines 740–763；`Weapon.as twang/fire`；`Team.as advance` lines 91–96 | Boulder 是 `twangable=true`、`draggable=false`。人类松键走 `twanging.twang()`，其继承 `Weapon.twang` 仅调用 `Solid.twang` 并设 fired；AI 走 `aiPerform → Weapon.fire(vx,vy)`。两条正常发射路径均不会进入 `Boulder.release` 的 `.5` 分支。 |
 | W04-A-02 | A | `mutiny.swf.xml` DefineSprite 872 lines 20980–20989；DefineSprite 869；bitmap 870 | Boulder 根 symbol 先放 depth 1、名为 `rotating` 的 sprite 869，再放 depth 3 的 shape 871。869 是可旋转石体，871 是独立的静止上层；根 symbol 只有一帧。 |
+| W04-A-03 | A | `DefineSprite_872_boulder/1.svg` 与 `mutiny.swf.xml` 的 869/871 矩阵 | 两个子层均是以根注册点为中心的 `64×64 px` 图像，矩阵为单位缩放、零位移；原版没有缩小 Boulder 的时间轴变换。结合 31 px extent，Unity 层须以 32 pixels-per-unit、中心 pivot 显示为 `2×2` world units。 |
 
 ## 状态与转换
 
@@ -30,6 +31,7 @@
 | WPN-04-INT-01 | 活着人类角色有 Boulder 且可射击 | 选中、按住并松开 | `twang` 路径创建并以 Solid.twang 的 clamp 后速度发射；装备阶段中心在角色上方 30 px；库存一次扣除、两行动禁用 | W04-S-07/09 |
 | WPN-04-INT-02 | AI 已选择 Boulder 候选 | AI 执行 tick | `aiPerform → Weapon.fire(vx,vy)` 直接使用候选速度；不套用 `.5` | W04-S-09 |
 | WPN-04-EFF-01 | 发射 | 每 25 Hz tick | 31/31/31/31、weight 1.5、friction .25、可撞木箱；仅内部 `rotating` 图层按 `vx*2.5` 旋转，depth 3 上层保持不转 | W04-S-01/03、W04-A-02 |
+| WPN-04-ANI-02 | 装备、瞄准或发射 | 绘制 Boulder | 两个 64 px 原始子层均以根 `(0,0)` 为中心、单位缩放叠加；在 Unity 32 pixels-per-unit 坐标系中各自宽高为 2 world units | W04-A-03 |
 | WPN-04-EFF-02 | 发射且角色满足边界 | 每 tick | 推至巨石左右 32 px；仅向接触方向把 vx 加给角色；扣 `abs(vx)*1.5` HP | W04-S-05 |
 | WPN-04-ANI-01 | 物理后 `vx==0 && abs(vy)<.5` | Boulder `advanceMotion` | 先将 `visibility` 减 .1；若此时也满足继承 Weapon 的 `.2` 条件，则同 tick 结束。只有未达到 `.2` 的停稳帧才会继续走 whiteOut/后续淡出。 | W04-S-04/08 |
 | WPN-04-EFF-03 | 发射后越过水面或关卡底部 | 通用 Weapon tick | 水面任一方向 crossing 播 splash、更新 `overWater`，但不施加角色水下阻尼；向下越过 level height 后结束。 | W04-S-06 |
@@ -43,6 +45,7 @@
 | WPN-04-INT-01..02 | `MutinyPlayerInput.Launch` / `MutinyAIController.ExecuteMove` → `MutinyBoulder.Twang/Fire` | W04-T-01 / W04-T-06 | 未执行 |
 | WPN-04-EFF-01..03 | `MutinyBoulder`、`MutinyPhysicsBody` | W04-T-02..04 | 未执行 |
 | WPN-04-ANI-01 | `MutinyBoulder`、`Art/Weapons/Boulder/1` | W04-T-05 | 未执行 |
+| WPN-04-ANI-02 | `Art/Weapons/Boulder/{rotating,overlay}.png.meta`、`MutinyBoulder.LoadOriginalVisualLayers` | W04-T-07 | 未执行 |
 
 | 用例 ID | 操作 | 期望 |
 | --- | --- | --- |
@@ -52,10 +55,11 @@
 | W04-T-04 | 越过水面和地图底部 | 触发通用 splash；水面后保持 Solid 原速度而不使用角色阻尼；仅底部结束 |
 | W04-T-05 | 从 `vy=-1.5` 进入无碰撞 tick，使物理后速度为 0 | Boulder 先将 visibility 2→1.9，继承 Weapon 随即在同 tick 以 `.2` 静止条件结束；不得等待完整淡出 |
 | W04-T-06 | 经 AI 生产执行以固定 `(12,-8)` 候选发射 | 物理初速度精确为 `(12,-8)`，AI 预测使用相同速度，不套用 `.5` |
+| W04-T-07 | 经生产菜单/工厂创建 Boulder 并读取两个实际 SpriteRenderer | 两个 source layer 均为 64 px、中心 pivot、32 pixels-per-unit，渲染 bounds 均为 `2×2` world units；不得以 Unity 默认 100 PPU 显示为 `.64×.64`。 |
 
 ## 完成记录
 
 - 已静态确认：W04-S-01..09、W04-A-01..02。W04-S-08 修正了旧规格对 Boulder 淡出时序的错误推论；W04-S-09 区分了未被正常 Boulder 使用的 drag-release 分支与人类/AI 实际发射路径。
-- 已实现：`MutinyBoulder` 的四向 31 px Solid、hitsBoxes、角色接触、停稳 whiteOut、原版通用 splash/底部结束、无角色水阻尼的跨水面处理，以及 869 可旋转石体与 871 静止上层的原始时间轴结构；人类和 AI 速度修复待本轮代码/回归完成。
+- 已实现：`MutinyBoulder` 的四向 31 px Solid、hitsBoxes、角色接触、停稳 whiteOut、原版通用 splash/底部结束、无角色水阻尼的跨水面处理，以及 869 可旋转石体与 871 静止上层的原始时间轴结构。已修正此前两个拆分子层错误使用 Unity 默认 100 PPU 的导入设置：它们现在按原版 64 px、中心注册点以 32 PPU 显示；人类和 AI 速度修复待本轮代码/回归完成。
 - 已执行并通过：`dotnet build Assembly-CSharp.csproj --no-restore`（0 error；现存 `MutinyLevelTest.levelXml` CS0649 warning）。
 - 待验证：W04-T-01..05 的 Unity 执行、原版实际画面/音效/镜头对照。

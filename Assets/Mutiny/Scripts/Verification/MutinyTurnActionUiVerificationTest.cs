@@ -75,6 +75,7 @@ namespace Mutiny.Verification
             VerifyCharacterLayering(result);
             VerifyCharacterOverlay(result);
             VerifyGMManager(result);
+            VerifySpritePivots(result);
             return result;
         }
 
@@ -123,22 +124,33 @@ namespace Mutiny.Verification
                 character.PhysicsBody.State = ownerState;
 
                 bool allWeaponsEquipped = true;
+                bool allWeaponPivotsMatch = true;
                 for (int i = 0; i < WeaponIconResources.Length; i++)
                 {
                     string weaponType = WeaponIconResources[i];
                     character.AddWeapon(weaponType);
                     bool selected = input.SelectWeapon(weaponType);
                     MutinyWeapon equipped = input.EquippedWeapon;
-                    float expectedY = ownerState.Y + (weaponType == "boulder" ? -30f : -10f);
+                    float expectedY = ownerState.Y + (weaponType == "boulder" ? -30f : (weaponType == "piecesOfEight" ? 5f : -10f));
+                    bool isHiddenReadyWeapon = string.Equals(weaponType, "tidalWave", System.StringComparison.OrdinalIgnoreCase);
+                    bool rendererStateValid = isHiddenReadyWeapon ? !equipped.SpriteRenderer.enabled : equipped.SpriteRenderer.enabled;
                     allWeaponsEquipped &= selected && equipped != null && equipped.Owner == character &&
-                                          equipped.SpriteRenderer != null && equipped.SpriteRenderer.enabled &&
+                                          equipped.SpriteRenderer != null && rendererStateValid &&
                                           Mathf.Approximately(equipped.PhysicsBody.State.X, ownerState.X) &&
                                           Mathf.Approximately(equipped.PhysicsBody.State.Y, expectedY) &&
                                           !equipped.PhysicsBody.IsActive;
+
+                    if (equipped != null && equipped.SpriteRenderer != null && equipped.SpriteRenderer.sprite != null)
+                    {
+                        Sprite sp = equipped.SpriteRenderer.sprite;
+                        Vector2 actualPivot = new Vector2(sp.pivot.x / sp.rect.width, sp.pivot.y / sp.rect.height);
+                        Vector2 expectedPivot = GetExpectedWeaponPivot(weaponType);
+                        allWeaponPivotsMatch &= Vector2.Distance(actualPivot, expectedPivot) < 0.005f;
+                    }
                     input.CancelWeaponSelection();
                 }
-                result.Assert(allWeaponsEquipped,
-                    "WRDY-T01 every menu weapon creates its visible production instance at the original equipment point");
+                result.Assert(allWeaponsEquipped && allWeaponPivotsMatch,
+                    "WRDY-T01 every menu weapon creates its production instance at the original equipment point with exact Flash registration pivot (and hidden on character for placeable tidalWave)");
 
                 int ammoBeforeCancel = character.GetAmmunition("cherryBomb");
                 result.Assert(input.SelectWeapon("cherryBomb"),
@@ -545,6 +557,25 @@ namespace Mutiny.Verification
                     boulder.SpriteRenderer.sortingOrder == MutinyWeapon.WeaponSortingOrder + 1;
                 result.Assert(originalBoulderLayersLoaded,
                     "WPN-04-ANI-01 production Boulder loads original rotating depth-1 art and non-rotating depth-3 overlay separately");
+
+                Sprite rotatingSprite = Resources.Load<Sprite>("Art/Weapons/Boulder/rotating");
+                Sprite overlaySprite = Resources.Load<Sprite>("Art/Weapons/Boulder/overlay");
+                bool originalBoulderScaleAndRegistration =
+                    rotatingSprite != null && overlaySprite != null && boulder != null &&
+                    Mathf.Approximately(rotatingSprite.rect.width, 64f) &&
+                    Mathf.Approximately(overlaySprite.rect.width, 64f) &&
+                    Mathf.Approximately(rotatingSprite.pixelsPerUnit, MutinyPhysics.PixelsPerUnit) &&
+                    Mathf.Approximately(overlaySprite.pixelsPerUnit, MutinyPhysics.PixelsPerUnit) &&
+                    Vector2.Distance(rotatingSprite.pivot, new Vector2(32f, 32f)) < 0.01f &&
+                    Vector2.Distance(overlaySprite.pivot, new Vector2(32f, 32f)) < 0.01f &&
+                    Mathf.Approximately(rotatingSprite.bounds.size.x, 2f) &&
+                    Mathf.Approximately(rotatingSprite.bounds.size.y, 2f) &&
+                    Mathf.Approximately(overlaySprite.bounds.size.x, 2f) &&
+                    Mathf.Approximately(overlaySprite.bounds.size.y, 2f) &&
+                    boulder.RotatingVisual.GetComponent<SpriteRenderer>().sprite == rotatingSprite &&
+                    boulder.SpriteRenderer.sprite == overlaySprite;
+                result.Assert(originalBoulderScaleAndRegistration,
+                    "WPN-04-ANI-02 production Boulder keeps both 64px source layers centered and at the 32px-per-unit simulation scale");
                 result.Assert(selected && launched && boulder != null && boulder.IsFired &&
                               Mathf.Approximately(boulder.PhysicsBody.State.VelocityX, 20f) &&
                               Mathf.Approximately(boulder.PhysicsBody.State.VelocityY, 0f) &&
@@ -1580,6 +1611,27 @@ namespace Mutiny.Verification
                 MutinyGameHUD.ResolveCornerToggleVisualState(false, true) == MutinyCornerToggleVisualState.OffOver,
                 "HUD-CORNER-T03 production Music/SFX state mapping retains all original on/off and hover frames");
 
+            result.Assert(
+                RectApproximately(MutinyGameHUD.ResolveOriginalCornerVisualRect(MutinyCornerControl.Quit),
+                    new Rect(479.9f, 11f, 23f, 34f)) &&
+                RectApproximately(MutinyGameHUD.ResolveOriginalCornerVisualRect(MutinyCornerControl.Music),
+                    new Rect(496.9f, 11f, 31f, 34f)) &&
+                RectApproximately(MutinyGameHUD.ResolveOriginalCornerVisualRect(MutinyCornerControl.Sfx),
+                    new Rect(501.9f, 11f, 47f, 34f)) &&
+                RectApproximately(MutinyGameHUD.ResolveOriginalCornerHitRect(MutinyCornerControl.Quit),
+                    new Rect(483.95f, 11f, 13.95f, 13.9f)) &&
+                RectApproximately(MutinyGameHUD.ResolveOriginalCornerHitRect(MutinyCornerControl.Music),
+                    new Rect(502f, 11f, 19.95f, 13.9f)) &&
+                RectApproximately(MutinyGameHUD.ResolveOriginalCornerHitRect(MutinyCornerControl.Sfx),
+                    new Rect(525.95f, 11f, 13.95f, 13.9f)),
+                "HUD-CORNER-T04 production icon visual and hit rectangles retain root-timeline twip placements and source bounds");
+
+            result.Assert(
+                MutinyGameHUD.ResolveOriginalCornerTooltip(MutinyCornerControl.Quit) == "quit" &&
+                MutinyGameHUD.ResolveOriginalCornerTooltip(MutinyCornerControl.Music) == "music" &&
+                MutinyGameHUD.ResolveOriginalCornerTooltip(MutinyCornerControl.Sfx) == "sound fx",
+                "HUD-CORNER-T05 production hover state maps to the original quit, music, and sound fx bubble labels");
+
             GameObject hudObject = null;
             try
             {
@@ -1625,6 +1677,16 @@ namespace Mutiny.Verification
 
             AssertTexture(result, "UI/Frontend/button_small", 163, 24);
             AssertTexture(result, "UI/Frontend/button_back", 140, 24);
+            AssertTexture(result, "UI/CornerControls/quit_up", 23, 34);
+            AssertTexture(result, "UI/CornerControls/quit_over", 23, 34);
+            AssertTexture(result, "UI/CornerControls/music_on_up", 31, 34);
+            AssertTexture(result, "UI/CornerControls/music_on_over", 31, 34);
+            AssertTexture(result, "UI/CornerControls/music_off_up", 31, 34);
+            AssertTexture(result, "UI/CornerControls/music_off_over", 31, 34);
+            AssertTexture(result, "UI/CornerControls/sfx_on_up", 47, 34);
+            AssertTexture(result, "UI/CornerControls/sfx_on_over", 47, 34);
+            AssertTexture(result, "UI/CornerControls/sfx_off_up", 47, 34);
+            AssertTexture(result, "UI/CornerControls/sfx_off_over", 47, 34);
         }
 
         private static void VerifyGameEndPopup(MutinyLevel1VerificationResult result)
@@ -1647,6 +1709,12 @@ namespace Mutiny.Verification
                 MutinyGameHUD.AdvanceDisplayedScore(574, 600, 287) == 600 &&
                 MutinyGameHUD.AdvanceDisplayedScore(0, 600, 347) == 347,
                 "END-POP-T04 production score counters use original 287/347 tick increments and clamp at the target");
+
+            result.Assert(
+                RectApproximately(MutinyGameHUD.ResolveOriginalPopupPanelRect(), new Rect(100f, 70f, 350f, 260f)) &&
+                RectApproximately(MutinyGameHUD.ResolveOriginalPopupPrimaryButtonRect(), new Rect(135f, 245f, 280f, 24f)) &&
+                RectApproximately(MutinyGameHUD.ResolveOriginalPopupSecondaryButtonRect(), new Rect(135f, 280f, 280f, 24f)),
+                "END-POP-T07 popup panel and button bounds match DefineShape_326/328 and the 900/1600-twip timeline placements");
 
             GameObject controllerObject = null;
             GameObject managerObject = null;
@@ -2284,6 +2352,8 @@ namespace Mutiny.Verification
             GameObject teamObject = null;
             GameObject ownerObject = null;
             GameObject seagullObject = null;
+            GameObject turnObject = null;
+            GameObject inputObject = null;
             GameObject firstShotObject = null;
             GameObject secondShotObject = null;
             try
@@ -2319,6 +2389,20 @@ namespace Mutiny.Verification
                               Mathf.Approximately(seagull.PhysicsBody.State.VelocityX, MutinySeagull.OriginalFlightSpeed) &&
                               !owner.CanShoot && !owner.CanThrow,
                     "WPN-11-INT production first click starts the -300px no-gravity flight and consumes both actions");
+
+                // The real input gate must remain open after NotifyActionStarted
+                // changes the turn to ActionExecuting; otherwise Update never
+                // reaches its later TryRequestPlayerShot production branch.
+                turnObject = new GameObject("SeagullVerification_TurnManager");
+                MutinyTurnManager turnManager = turnObject.AddComponent<MutinyTurnManager>();
+                turnManager.Team1 = team;
+                turnManager.CurrentTeam = team;
+                turnManager.CurrentPhase = TurnPhase.ActionExecuting;
+                inputObject = new GameObject("SeagullVerification_Input");
+                MutinyPlayerInput input = inputObject.AddComponent<MutinyPlayerInput>();
+                input.TurnManager = turnManager;
+                result.Assert(MutinySeagull.HasPlayerActiveFlight(team) && input.CanProcessCurrentTurnInputForVerification(),
+                    "WPN-11-INT-02 production ActionExecuting input gate stays open while the player's Seagull flight awaits repeat clicks");
 
                 bool acceptedShot = MutinySeagull.TryRequestPlayerShot(team);
                 MutinySeagullFire[] shots = Object.FindObjectsByType<MutinySeagullFire>();
@@ -2373,6 +2457,8 @@ namespace Mutiny.Verification
                 DestroyNow(seagullObject);
                 DestroyNow(ownerObject);
                 DestroyNow(teamObject);
+                DestroyNow(inputObject);
+                DestroyNow(turnObject);
             }
         }
 
@@ -2381,13 +2467,22 @@ namespace Mutiny.Verification
             GameObject waveObject = null;
             GameObject targetObject = null;
             GameObject outsideObject = null;
+            MutinyAudioManager audioManager = null;
+            string playedSfx = null;
+            bool previousSfxEnabled = false;
+            System.Action<string> audioListener = null;
             try
             {
                 bool framesPresent = true;
                 for (int frame = 1; frame <= 27; frame++)
                     framesPresent &= Resources.Load<Sprite>($"Art/Weapons/TidalWave/{frame}") != null;
-                result.Assert(framesPresent,
-                    "WPN-12-ANI all 27 original tidalWave timeline frames load through Resources");
+                result.Assert(framesPresent &&
+                              MutinyTidalWave.ResolveOriginalSkyColourForLevel(1) == 1 &&
+                              MutinyTidalWave.ResolveOriginalSkyColourForLevel(6) == 2 &&
+                              MutinyTidalWave.ResolveOriginalSkyColourForLevel(11) == 3 &&
+                              Resources.Load<Sprite>("Art/Weapons/TidalWave/1") != Resources.Load<Sprite>("Art/Weapons/TidalWave/10") &&
+                              Resources.Load<Sprite>("Art/Weapons/TidalWave/10") != Resources.Load<Sprite>("Art/Weapons/TidalWave/19"),
+                    "WPN-12-ANI original 27-frame timeline loads and level 1/6/11 select distinct anim1/anim2/anim3 colour groups");
 
                 targetObject = new GameObject("TidalWaveVerification_Target");
                 MutinyCharacter target = targetObject.AddComponent<MutinyCharacter>();
@@ -2410,19 +2505,27 @@ namespace Mutiny.Verification
                 waveObject = new GameObject("TidalWaveVerification_Wave");
                 MutinyTidalWave wave = waveObject.AddComponent<MutinyTidalWave>();
                 wave.Initialize(null);
+                bool hiddenBeforeStart = wave.SpriteRenderer != null && !wave.SpriteRenderer.enabled;
                 wave.PhysicsBody.SetTerrain(new string[4, 8], 8, 4);
                 wave.StartWave(200f, 400f, -1f);
-                result.Assert(wave.IsFired &&
+                bool visibleAfterStart = wave.SpriteRenderer != null && wave.SpriteRenderer.enabled;
+                result.Assert(hiddenBeforeStart && visibleAfterStart && wave.IsFired &&
                               Mathf.Approximately(wave.PhysicsBody.State.X, -550f) &&
                               Mathf.Approximately(wave.PhysicsBody.State.Y, 400f) &&
                               Mathf.Approximately(wave.PhysicsBody.State.VelocityX, 20f),
-                    "WPN-12-INT production startWave ignores click direction and starts the original rightward -550px wave");
+                    "WPN-12-INT production startWave ignores click direction and starts the original rightward -550px wave (hidden during preview, visible on wave start)");
 
+                audioManager = MutinyAudioManager.Instance;
+                previousSfxEnabled = audioManager.SfxEnabled;
+                audioManager.SfxEnabled = true;
+                audioListener = soundName => playedSfx = soundName;
+                audioManager.SfxPlayed += audioListener;
                 wave.PhysicsBody.AdvanceSimulationTick();
                 result.Assert(Mathf.Approximately(target.Health, 95f) &&
                               Mathf.Approximately(outside.Health, 100f) &&
-                              wave.CurrentVisibleFrame == 2,
-                    "WPN-12-EFF/ANI production tick damages only the inclusive ±150px window for 5 HP and advances animation at 25 Hz");
+                              wave.CurrentVisibleFrame == 2 && wave.CurrentSourceFrame == 2 &&
+                              Resources.Load<AudioClip>("Audio/SFX/splash") != null && playedSfx == "splash",
+                    "WPN-12-EFF/ANI/AUD production tick damages only the inclusive ±150px window for 5 HP, advances sky-colour frame 2, and emits inherited splash once");
 
                 PhysicsBodyState waveState = wave.PhysicsBody.State;
                 waveState.X = 807f; // terrain width 8 * 32 + original +550 exit padding
@@ -2433,6 +2536,16 @@ namespace Mutiny.Verification
             }
             finally
             {
+                if (audioManager != null)
+                {
+                    if (audioListener != null)
+                        audioManager.SfxPlayed -= audioListener;
+                    audioManager.SfxEnabled = previousSfxEnabled;
+                }
+
+                MutinySplashEffect[] splashes = Object.FindObjectsByType<MutinySplashEffect>();
+                for (int i = 0; i < splashes.Length; i++)
+                    DestroyNow(splashes[i].gameObject);
                 DestroyNow(waveObject);
                 DestroyNow(outsideObject);
                 DestroyNow(targetObject);
@@ -2588,6 +2701,119 @@ namespace Mutiny.Verification
             {
                 DestroyNow(characterObject);
                 DestroyNow(gmObject);
+            }
+        }
+
+        private static void VerifySpritePivots(MutinyLevel1VerificationResult result)
+        {
+            // Character pivots
+            Vector2 redPiratePivot = MutinyCharacterAnimator.GetCharacterPivot("redPirate");
+            result.Assert(Mathf.Approximately(redPiratePivot.x, 12f / 28f) && Mathf.Approximately(redPiratePivot.y, 15f / 30f),
+                "PIVOT-01 redPirate pivot matches Flash registration point (12/28, 15/30)");
+
+            Vector2 soldierPivot = MutinyCharacterAnimator.GetCharacterPivot("soldier");
+            result.Assert(Mathf.Approximately(soldierPivot.x, 12f / 24f) && Mathf.Approximately(soldierPivot.y, 15f / 46f),
+                "PIVOT-02 soldier pivot matches Flash registration point (12/24, 15/46) preventing floor sinking");
+
+            Vector2 squidPivot = MutinyCharacterAnimator.GetCharacterPivot("squid");
+            result.Assert(Mathf.Approximately(squidPivot.x, 12f / 24f) && Mathf.Approximately(squidPivot.y, 15f / 39f),
+                "PIVOT-03 squid pivot matches Flash registration point (12/24, 15/39) preventing floor sinking");
+
+            Vector2 bossGuyPivot = MutinyCharacterAnimator.GetCharacterPivot("bossGuy");
+            result.Assert(Mathf.Approximately(bossGuyPivot.x, 21f / 40f) && Mathf.Approximately(bossGuyPivot.y, 15f / 62f),
+                "PIVOT-04 bossGuy pivot matches Flash registration point (21/40, 15/62)");
+
+            // Effects & Props pivots
+            result.Assert(Mathf.Approximately(MutinySweepingFlame.FlamePivot.x, 9f / 19f) &&
+                          Mathf.Approximately(MutinySweepingFlame.FlamePivot.y, 1f / 31f),
+                "PIVOT-05 SweepingFlame pivot matches Flash bottom registration (9/19, 1/31)");
+
+            result.Assert(Mathf.Approximately(MutinyAnchor.OriginalAnchorPivot.x, 52f / 104f) &&
+                          Mathf.Approximately(MutinyAnchor.OriginalAnchorPivot.y, 2f / 100f),
+                "PIVOT-06 Anchor pivot matches Flash anchor tip registration (52/104, 2/100)");
+
+            result.Assert(Mathf.Approximately(MutinyTreasureChest.OriginalPivot.x, 29f / 62f) &&
+                          Mathf.Approximately(MutinyTreasureChest.OriginalPivot.y, 27.95f / 82f),
+                "PIVOT-07 TreasureChest pivot matches Flash registration point (29/62, 27.95/82)");
+
+            // Weapon pivots
+            result.Assert(Mathf.Approximately(MutinyCherryBomb.OriginalPivot.x, 10f / 20f) &&
+                          Mathf.Approximately(MutinyCherryBomb.OriginalPivot.y, 10f / 32f),
+                "PIVOT-08 CherryBomb pivot matches Flash registration (10/20, 10/32)");
+
+            result.Assert(Mathf.Approximately(MutinyRumBottle.OriginalPivot.x, 9f / 18f) &&
+                          Mathf.Approximately(MutinyRumBottle.OriginalPivot.y, 15f / 48f),
+                "PIVOT-09 RumBottle pivot matches Flash registration (9/18, 15/48)");
+
+            result.Assert(Mathf.Approximately(MutinyParachuteBomb.OriginalPivot.x, 18f / 36f) &&
+                          Mathf.Approximately(MutinyParachuteBomb.OriginalPivot.y, 14f / 60f),
+                "PIVOT-10 ParachuteBomb pivot matches Flash registration (18/36, 14/60)");
+
+            result.Assert(Mathf.Approximately(MutinyBanana.OriginalPivot.x, 13f / 27f) &&
+                          Mathf.Approximately(MutinyBanana.OriginalPivot.y, 8f / 15f),
+                "PIVOT-11 Banana pivot matches Flash registration (13/27, 8/15)");
+
+            result.Assert(Mathf.Approximately(MutinyPiecesOfEight.OriginalPivot.x, 7f / 15f) &&
+                          Mathf.Approximately(MutinyPiecesOfEight.OriginalPivot.y, 8f / 15f),
+                "PIVOT-12 PiecesOfEight pivot matches Flash registration (7/15, 8/15)");
+
+            result.Assert(Mathf.Approximately(MutinyMine.OriginalPivot.x, 18f / 38f) &&
+                          Mathf.Approximately(MutinyMine.OriginalPivot.y, 17f / 35f),
+                "PIVOT-13 Mine pivot matches Flash registration (18/38, 17/35)");
+
+            result.Assert(Mathf.Approximately(MutinyVoodooDoll.OriginalPivot.x, 9f / 19f) &&
+                          Mathf.Approximately(MutinyVoodooDoll.OriginalPivot.y, 12f / 26f),
+                "PIVOT-14 VoodooDoll pivot matches Flash registration (9/19, 12/26)");
+
+            result.Assert(Mathf.Approximately(MutinySeagullFire.OriginalPivot.x, 7f / 13f) &&
+                          Mathf.Approximately(MutinySeagullFire.OriginalPivot.y, 8f / 20f),
+                "PIVOT-15 SeagullFire pivot matches Flash registration (7/13, 8/20)");
+
+            result.Assert(Mathf.Approximately(MutinyTidalWave.OriginalTidalWavePivot.x, 310f / 499f) &&
+                          Mathf.Approximately(MutinyTidalWave.OriginalTidalWavePivot.y, 2f / 352f),
+                "PIVOT-16 TidalWave pivot matches Flash bottom registration (310/499, 2/352)");
+
+            result.Assert(Mathf.Approximately(MutinySeagull.OriginalSeagullPivot.x, 13f / 26f) &&
+                          Mathf.Approximately(MutinySeagull.OriginalSeagullPivot.y, 10f / 20f),
+                "PIVOT-17 Seagull pivot matches Flash registration (13/26, 10/20)");
+
+            result.Assert(Mathf.Approximately(MutinyDynamite.OriginalPivot.x, 5f / 22f) &&
+                          Mathf.Approximately(MutinyDynamite.OriginalPivot.y, 12f / 27f),
+                "PIVOT-18 Dynamite pivot matches Flash registration (5/22, 12/27)");
+
+            result.Assert(Mathf.Approximately(MutinyCannon.OriginalPivot.x, 26f / 53f) &&
+                          Mathf.Approximately(MutinyCannon.OriginalPivot.y, 19f / 38f),
+                "PIVOT-19 Cannon pivot matches Flash registration (26/53, 19/38)");
+
+            result.Assert(Mathf.Approximately(MutinyGunpowderBarrel.OriginalPivot.x, 16f / 33f) &&
+                          Mathf.Approximately(MutinyGunpowderBarrel.OriginalPivot.y, 16f / 32f),
+                "PIVOT-20 GunpowderBarrel pivot matches Flash registration (16/33, 16/32)");
+
+            result.Assert(Mathf.Approximately(MutinyWoodenCrate.OriginalPivot.x, 30.65f / 62f) &&
+                          Mathf.Approximately(MutinyWoodenCrate.OriginalPivot.y, 29.35f / 64f),
+                "PIVOT-21 WoodenCrate pivot matches Flash registration (30.65/62, 29.35/64)");
+        }
+
+        private static Vector2 GetExpectedWeaponPivot(string weaponType)
+        {
+            switch (weaponType)
+            {
+                case "cherryBomb": return MutinyCherryBomb.OriginalPivot;
+                case "dynamite": return MutinyDynamite.OriginalPivot;
+                case "banana": return MutinyBanana.OriginalPivot;
+                case "boulder": return new Vector2(0.5f, 0.5f);
+                case "cannon": return MutinyCannon.OriginalPivot;
+                case "gunpowderBarrel": return MutinyGunpowderBarrel.OriginalPivot;
+                case "mine": return MutinyMine.OriginalPivot;
+                case "parachuteBomb": return MutinyParachuteBomb.OriginalPivot;
+                case "piecesOfEight": return MutinyPiecesOfEight.OriginalPivot;
+                case "rumBottle": return MutinyRumBottle.OriginalPivot;
+                case "voodooDoll": return MutinyVoodooDoll.OriginalPivot;
+                case "anchor": return MutinyAnchor.OriginalAnchorPivot;
+                case "seagull": return MutinySeagull.OriginalSeagullPivot;
+                case "tidalWave": return MutinyTidalWave.OriginalTidalWavePivot;
+                case "woodenCrate": return MutinyWoodenCrate.OriginalPivot;
+                default: return new Vector2(0.5f, 0.5f);
             }
         }
 

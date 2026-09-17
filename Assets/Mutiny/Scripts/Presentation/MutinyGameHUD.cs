@@ -25,6 +25,13 @@ namespace Mutiny.Presentation
         OffOver
     }
 
+    public enum MutinyCornerControl
+    {
+        Quit,
+        Music,
+        Sfx
+    }
+
     public enum MutinyGameEndPopupKind
     {
         None,
@@ -46,6 +53,27 @@ namespace Mutiny.Presentation
         private const float OriginalTeam1OriginX = 1439f / 20f;
         private const float OriginalTeam2OriginX = 9557f / 20f;
         private const float OriginalTeamOriginY = 380f;
+        // DefineShape_326 bounds are (-3500,-2600)..(3499,2599) twips,
+        // under IngamePopup's x=275 / y=200 stage registration point.
+        private static readonly Rect OriginalPopupPanelRect = new Rect(100f, 70f, 350f, 260f);
+        // DefineShape_328 (the shared popup-button background) spans
+        // (-2800,0)..(2800,480) twips.  Its parent button clips are placed at
+        // y=900 and y=1600 twips respectively.
+        private static readonly Rect OriginalPopupPrimaryButtonRect = new Rect(135f, 245f, 280f, 24f);
+        private static readonly Rect OriginalPopupSecondaryButtonRect = new Rect(135f, 280f, 280f, 24f);
+        // Root-timeline placements are: quit (9818,359), music (10239,359),
+        // sfx (10658,359) twips.  The exported frames retain the negative
+        // shape bounds used by the original tooltip bubbles, so these visual
+        // rectangles start at the timeline placement plus that frame's min
+        // bound rather than at the visible icon itself.
+        private static readonly Rect OriginalQuitCornerVisualRect = new Rect(479.9f, 11f, 23f, 34f);
+        private static readonly Rect OriginalMusicCornerVisualRect = new Rect(496.9f, 11f, 31f, 34f);
+        private static readonly Rect OriginalSfxCornerVisualRect = new Rect(501.9f, 11f, 47f, 34f);
+        // The clickable part is the normal-state icon shape.  The tooltip is
+        // presentation only and must not become a larger invisible hit target.
+        private static readonly Rect OriginalQuitCornerHitRect = new Rect(483.95f, 11f, 13.95f, 13.9f);
+        private static readonly Rect OriginalMusicCornerHitRect = new Rect(502f, 11f, 19.95f, 13.9f);
+        private static readonly Rect OriginalSfxCornerHitRect = new Rect(525.95f, 11f, 13.95f, 13.9f);
 
         public MutinyTurnManager TurnManager;
         public MutinyPlayerInput PlayerInput;
@@ -105,6 +133,16 @@ namespace Mutiny.Presentation
         private bool m_SfxHovered;
         private Texture2D m_CornerButtonTexture;
         private Texture2D m_CornerBackButtonTexture;
+        private Texture2D m_QuitCornerUpTexture;
+        private Texture2D m_QuitCornerOverTexture;
+        private Texture2D m_MusicCornerOnUpTexture;
+        private Texture2D m_MusicCornerOnOverTexture;
+        private Texture2D m_MusicCornerOffUpTexture;
+        private Texture2D m_MusicCornerOffOverTexture;
+        private Texture2D m_SfxCornerOnUpTexture;
+        private Texture2D m_SfxCornerOnOverTexture;
+        private Texture2D m_SfxCornerOffUpTexture;
+        private Texture2D m_SfxCornerOffOverTexture;
         private int m_Team1HealthFrame = 1;
         private int m_Team2HealthFrame = 1;
         private TextAsset m_CachedMapXml;
@@ -118,6 +156,40 @@ namespace Mutiny.Presentation
         public bool IsGameEndPopupShowRequested => m_GameEndPopupShow;
         public float GameEndPopupAlpha => Mathf.Clamp01(m_GameEndPopupAlpha);
         public MutinyGameEndPopupKind GameEndPopupKind => m_GameEndPopupKind;
+
+        public static Rect ResolveOriginalPopupPanelRect() => OriginalPopupPanelRect;
+        public static Rect ResolveOriginalPopupPrimaryButtonRect() => OriginalPopupPrimaryButtonRect;
+        public static Rect ResolveOriginalPopupSecondaryButtonRect() => OriginalPopupSecondaryButtonRect;
+
+        public static Rect ResolveOriginalCornerVisualRect(MutinyCornerControl control)
+        {
+            switch (control)
+            {
+                case MutinyCornerControl.Quit: return OriginalQuitCornerVisualRect;
+                case MutinyCornerControl.Music: return OriginalMusicCornerVisualRect;
+                default: return OriginalSfxCornerVisualRect;
+            }
+        }
+
+        public static Rect ResolveOriginalCornerHitRect(MutinyCornerControl control)
+        {
+            switch (control)
+            {
+                case MutinyCornerControl.Quit: return OriginalQuitCornerHitRect;
+                case MutinyCornerControl.Music: return OriginalMusicCornerHitRect;
+                default: return OriginalSfxCornerHitRect;
+            }
+        }
+
+        public static string ResolveOriginalCornerTooltip(MutinyCornerControl control)
+        {
+            switch (control)
+            {
+                case MutinyCornerControl.Quit: return "quit";
+                case MutinyCornerControl.Music: return "music";
+                default: return "sound fx";
+            }
+        }
 
         private static readonly string[] OriginalWeaponOrder =
         {
@@ -437,6 +509,16 @@ namespace Mutiny.Presentation
             // the Flash MovieClip; it is not baked into one state image.
             m_CornerButtonTexture = LoadPointTexture("UI/Frontend/button_small");
             m_CornerBackButtonTexture = LoadPointTexture("UI/Frontend/button_back");
+            m_QuitCornerUpTexture = LoadPointTexture("UI/CornerControls/quit_up");
+            m_QuitCornerOverTexture = LoadPointTexture("UI/CornerControls/quit_over");
+            m_MusicCornerOnUpTexture = LoadPointTexture("UI/CornerControls/music_on_up");
+            m_MusicCornerOnOverTexture = LoadPointTexture("UI/CornerControls/music_on_over");
+            m_MusicCornerOffUpTexture = LoadPointTexture("UI/CornerControls/music_off_up");
+            m_MusicCornerOffOverTexture = LoadPointTexture("UI/CornerControls/music_off_over");
+            m_SfxCornerOnUpTexture = LoadPointTexture("UI/CornerControls/sfx_on_up");
+            m_SfxCornerOnOverTexture = LoadPointTexture("UI/CornerControls/sfx_on_over");
+            m_SfxCornerOffUpTexture = LoadPointTexture("UI/CornerControls/sfx_off_up");
+            m_SfxCornerOffOverTexture = LoadPointTexture("UI/CornerControls/sfx_off_over");
             m_OpponentPortraits = Resources.LoadAll<Texture2D>("UI/BattleHUD/Opponents");
             Array.Sort(m_OpponentPortraits, (a, b) => ParseNumericTextureName(a).CompareTo(ParseNumericTextureName(b)));
             for (int i = 0; i < OriginalWeaponOrder.Length; i++)
@@ -496,29 +578,37 @@ namespace Mutiny.Presentation
             GUI.matrix = Matrix4x4.TRS(new Vector3(left, top, 0f), Quaternion.identity,
                 new Vector3(scale, scale, 1f));
 
-            // Root timeline controls sit on the upper right of the 550 x 400 stage.
-            // The x/y positions are kept in the Flash logical coordinate system.
-            Rect sfxRect = new Rect(377f, 5f, 52f, 13f);
-            Rect musicRect = new Rect(431f, 5f, 57f, 13f);
-            Rect quitRect = new Rect(490f, 5f, 55f, 13f);
+            Rect sfxVisualRect = ResolveOriginalCornerVisualRect(MutinyCornerControl.Sfx);
+            Rect musicVisualRect = ResolveOriginalCornerVisualRect(MutinyCornerControl.Music);
+            Rect quitVisualRect = ResolveOriginalCornerVisualRect(MutinyCornerControl.Quit);
+            Rect sfxHitRect = ResolveOriginalCornerHitRect(MutinyCornerControl.Sfx);
+            Rect musicHitRect = ResolveOriginalCornerHitRect(MutinyCornerControl.Music);
+            Rect quitHitRect = ResolveOriginalCornerHitRect(MutinyCornerControl.Quit);
             MutinyAudioManager audio = MutinyAudioManager.Instance;
 
-            bool sfxHovered = sfxRect.Contains(GetOriginalCanvasMousePosition());
-            bool musicHovered = musicRect.Contains(GetOriginalCanvasMousePosition());
-            bool quitHovered = quitRect.Contains(GetOriginalCanvasMousePosition());
+            Vector2 mousePosition = GetOriginalCanvasMousePosition();
+            bool sfxHovered = sfxHitRect.Contains(mousePosition);
+            bool musicHovered = musicHitRect.Contains(mousePosition);
+            bool quitHovered = quitHitRect.Contains(mousePosition);
             UpdateCornerHover(ref m_SfxHovered, sfxHovered);
             UpdateCornerHover(ref m_MusicHovered, musicHovered);
             UpdateCornerHover(ref m_QuitHovered, quitHovered);
 
-            DrawCornerToggle(sfxRect, "sfx", audio != null && audio.SfxEnabled, sfxHovered);
-            DrawCornerToggle(musicRect, "music", audio != null && audio.MusicEnabled, musicHovered);
-            DrawCornerButton(quitRect, "quit level", quitHovered);
+            // These are the original MovieClip frames.  Their hover frames
+            // already contain the pixel-art bubble and its label, so do not
+            // recreate a text tooltip beside the source graphic.
+            DrawOriginalCornerSprite(quitVisualRect,
+                quitHovered ? m_QuitCornerOverTexture : m_QuitCornerUpTexture);
+            DrawOriginalCornerSprite(musicVisualRect,
+                ResolveCornerToggleTexture(true, audio != null && audio.MusicEnabled, musicHovered));
+            DrawOriginalCornerSprite(sfxVisualRect,
+                ResolveCornerToggleTexture(false, audio != null && audio.SfxEnabled, sfxHovered));
 
-            if (GUI.Button(sfxRect, GUIContent.none, GUIStyle.none))
+            if (GUI.Button(sfxHitRect, GUIContent.none, GUIStyle.none))
                 ToggleCornerSfx();
-            if (GUI.Button(musicRect, GUIContent.none, GUIStyle.none))
+            if (GUI.Button(musicHitRect, GUIContent.none, GUIStyle.none))
                 ToggleCornerMusic();
-            if (GUI.Button(quitRect, GUIContent.none, GUIStyle.none))
+            if (GUI.Button(quitHitRect, GUIContent.none, GUIStyle.none))
                 OpenQuitPrompt();
 
             if (m_QuitPromptAlpha > 0f)
@@ -535,11 +625,33 @@ namespace Mutiny.Presentation
             previous = current;
         }
 
-        private void DrawCornerToggle(Rect rect, string label, bool enabled, bool hovered)
+        private Texture2D ResolveCornerToggleTexture(bool isMusic, bool enabled, bool hovered)
         {
             MutinyCornerToggleVisualState state = ResolveCornerToggleVisualState(enabled, hovered);
-            DrawCornerButton(rect, $"{label}: {(enabled ? "on" : "off")}",
-                state == MutinyCornerToggleVisualState.OnOver || state == MutinyCornerToggleVisualState.OffOver);
+            if (isMusic)
+            {
+                switch (state)
+                {
+                    case MutinyCornerToggleVisualState.OnUp: return m_MusicCornerOnUpTexture;
+                    case MutinyCornerToggleVisualState.OnOver: return m_MusicCornerOnOverTexture;
+                    case MutinyCornerToggleVisualState.OffUp: return m_MusicCornerOffUpTexture;
+                    default: return m_MusicCornerOffOverTexture;
+                }
+            }
+
+            switch (state)
+            {
+                case MutinyCornerToggleVisualState.OnUp: return m_SfxCornerOnUpTexture;
+                case MutinyCornerToggleVisualState.OnOver: return m_SfxCornerOnOverTexture;
+                case MutinyCornerToggleVisualState.OffUp: return m_SfxCornerOffUpTexture;
+                default: return m_SfxCornerOffOverTexture;
+            }
+        }
+
+        private static void DrawOriginalCornerSprite(Rect rect, Texture2D texture)
+        {
+            if (texture != null)
+                GUI.DrawTexture(rect, texture, ScaleMode.StretchToFill, true);
         }
 
         private void DrawCornerButton(Rect rect, string label, bool hovered)
@@ -561,20 +673,21 @@ namespace Mutiny.Presentation
             Color prior = GUI.color;
             GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01(m_QuitPromptAlpha));
 
-            // `popup` is a separate MovieClip. This panel is deliberately drawn over
-            // the stage and its buttons, matching the root timeline depth ordering.
-            Rect shadow = new Rect(159f, 124f, 232f, 114f);
-            DrawPopupSolid(new Rect(shadow.x + 2f, shadow.y + 2f, shadow.width, shadow.height), Color.black);
-            DrawPopupSolid(shadow, new Color32(51, 51, 51, 255));
-            DrawPopupOutline(shadow, new Color32(239, 49, 28, 255));
-            DrawPopupOutline(new Rect(shadow.x + 3f, shadow.y + 3f, shadow.width - 6f, shadow.height - 6f), Color.black);
-            MutinyBitmapFont.DrawPirateText(new Rect(shadow.x, shadow.y + 13f, shadow.width, 20f),
+            // DefineShape_326 is 350x260 px, centered at (275,200).  The old
+            // 232x114 approximation forced both labels into half-width buttons.
+            Rect panel = ResolveOriginalPopupPanelRect();
+            DrawPopupSolid(new Rect(panel.x + 2f, panel.y + 2f, panel.width, panel.height), Color.black);
+            DrawPopupSolid(panel, new Color32(51, 51, 51, 255));
+            DrawPopupOutline(panel, new Color32(239, 49, 28, 255));
+            DrawPopupOutline(new Rect(panel.x + 3f, panel.y + 3f, panel.width - 6f, panel.height - 6f), Color.black);
+            MutinyBitmapFont.DrawPirateText(new Rect(panel.x, 84f, panel.width, 28f),
                 "quit level", false, true, -3);
-            MutinyBitmapFont.DrawDangleText(new Rect(shadow.x + 16f, shadow.y + 42f, shadow.width - 32f, 18f),
-                "are you sure you want to quit?", Color.white, TextAnchor.MiddleCenter, 0, 7);
 
-            Rect continueRect = new Rect(183f, 205f, 86f, 16f);
-            Rect backRect = new Rect(281f, 205f, 86f, 16f);
+            // The original continue_game MovieClip is a 280x24 button placed at
+            // popup y=45.  Back to menu is the user-authorized companion action,
+            // placed on the matching y=80 row without reducing either hit area.
+            Rect continueRect = ResolveOriginalPopupPrimaryButtonRect();
+            Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
             bool continueHovered = continueRect.Contains(GetOriginalCanvasMousePosition());
             bool backHovered = backRect.Contains(GetOriginalCanvasMousePosition());
             DrawPopupButton(continueRect, "continue", continueHovered);
@@ -1255,7 +1368,7 @@ namespace Mutiny.Presentation
             // DefineSprite_342_popup places its common dark panel below text fields
             // and independent button clips.  Keep those children separate so score
             // values and hover states are never baked into a static popup texture.
-            Rect panel = new Rect(100f, 80f, 350f, 170f);
+            Rect panel = ResolveOriginalPopupPanelRect();
             DrawGameEndSolid(new Rect(panel.x + 2f, panel.y + 2f, panel.width, panel.height), Color.black, alpha);
             DrawGameEndSolid(panel, new Color32(51, 51, 51, 255), alpha);
             DrawGameEndOutline(panel, new Color32(239, 49, 28, 255), alpha);
@@ -1264,15 +1377,18 @@ namespace Mutiny.Presentation
             bool complete = m_GameEndPopupKind == MutinyGameEndPopupKind.LevelComplete;
             bool finalComplete = m_GameEndPopupKind == MutinyGameEndPopupKind.GameComplete;
             string title = complete ? "level complete" : finalComplete ? "game complete" : "level failed";
-            MutinyBitmapFont.DrawPirateText(new Rect(panel.x, panel.y + 10f, panel.width, 28f), title, false, true, -3);
+            // Title is at popup y=-105 (= -2100 twips); score labels are at
+            // y=-40/-10 for complete and y=-44 for failed.  These are stage
+            // coordinates after the popup's (275,200) registration point.
+            MutinyBitmapFont.DrawPirateText(new Rect(panel.x, 84f, panel.width, 28f), title, false, true, -3);
 
             if (complete)
             {
-                DrawGameEndScoreRow(panel.x + 78f, panel.y + 53f, "level score", m_GameEndDisplayedLevelScore, alpha);
-                DrawGameEndScoreRow(panel.x + 78f, panel.y + 78f, "total score", m_GameEndDisplayedTotalScore, alpha);
+                DrawGameEndScoreRow(175f, 160f, "level score", m_GameEndDisplayedLevelScore, alpha);
+                DrawGameEndScoreRow(175f, 190f, "total score", m_GameEndDisplayedTotalScore, alpha);
 
-                Rect nextRect = new Rect(193f, 181f, 163f, 24f);
-                Rect backRect = new Rect(205f, 211f, 140f, 24f);
+                Rect nextRect = ResolveOriginalPopupPrimaryButtonRect();
+                Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
                 DrawGameEndButton(nextRect, "next level", m_CornerButtonTexture, alpha);
                 DrawGameEndButton(backRect, "back to title", m_CornerBackButtonTexture, alpha);
                 if (alpha > 0f && GUI.Button(nextRect, GUIContent.none, GUIStyle.none))
@@ -1282,16 +1398,16 @@ namespace Mutiny.Presentation
             }
             else if (finalComplete)
             {
-                DrawGameEndScoreRow(panel.x + 78f, panel.y + 66f, "final score", m_GameEndDisplayedTotalScore, alpha);
-                Rect congratsRect = new Rect(193f, 181f, 163f, 24f);
+                DrawGameEndScoreRow(175f, 155f, "final score", m_GameEndDisplayedTotalScore, alpha);
+                Rect congratsRect = ResolveOriginalPopupPrimaryButtonRect();
                 DrawGameEndButton(congratsRect, "congratulations", m_CornerButtonTexture, alpha);
                 if (alpha > 0f && GUI.Button(congratsRect, GUIContent.none, GUIStyle.none))
                     CompleteCampaignAndReturnToLevelSelect();
             }
             else
             {
-                DrawGameEndScoreRow(panel.x + 78f, panel.y + 66f, "final score", m_GameEndDisplayedTotalScore, alpha);
-                Rect restartRect = new Rect(193f, 181f, 163f, 24f);
+                DrawGameEndScoreRow(175f, 156f, "final score", m_GameEndDisplayedTotalScore, alpha);
+                Rect restartRect = ResolveOriginalPopupPrimaryButtonRect();
                 DrawGameEndButton(restartRect, "restart level", m_CornerButtonTexture, alpha);
                 if (alpha > 0f && GUI.Button(restartRect, GUIContent.none, GUIStyle.none))
                     RestartFromGameEndPopup();
@@ -1304,8 +1420,11 @@ namespace Mutiny.Presentation
         private static void DrawGameEndScoreRow(float x, float y, string label, int score, float alpha)
         {
             Color textColor = new Color(1f, 1f, 1f, alpha);
-            MutinyBitmapFont.DrawDangleText(new Rect(x, y, 110f, 13f), label, textColor, TextAnchor.MiddleLeft, 0, 13);
-            MutinyBitmapFont.DrawDangleText(new Rect(x + 126f, y, 40f, 13f), score.ToString(), textColor, TextAnchor.MiddleRight, 0, 13);
+            // Both source DynamicText instances use align="left".  Keeping
+            // separate fields at x=-100 and x=20 avoids a long score colliding
+            // with its label.
+            MutinyBitmapFont.DrawDangleText(new Rect(x, y, 112f, 13f), label, textColor, TextAnchor.MiddleLeft, 0, 13);
+            MutinyBitmapFont.DrawDangleText(new Rect(295f, y, 90f, 13f), score.ToString(), textColor, TextAnchor.MiddleLeft, 0, 13);
         }
 
         private void DrawGameEndButton(Rect rect, string label, Texture2D texture, float alpha)

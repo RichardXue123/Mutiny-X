@@ -272,14 +272,27 @@ namespace Mutiny.Simulation
                 m_ParentBox.AdvanceOriginalTick();
         }
 
+        public static readonly Vector2 OriginalPivot = new Vector2(30.65f / 62f, 29.35f / 64f); // Symbol 965: origin (30.65, 34.65) of 62x64
+
         private void LoadFrames()
         {
             m_Frames.Clear();
             for (int i = 1; i <= 18; i++)
             {
-                Sprite frame = Resources.Load<Sprite>($"Art/Weapons/WoodenCrate/{i}");
-                if (frame != null)
+                Texture2D texture = Resources.Load<Texture2D>($"Art/Weapons/WoodenCrate/{i}");
+                if (texture != null)
+                {
+                    texture.filterMode = FilterMode.Point;
+                    Sprite frame = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                        OriginalPivot, MutinyPhysics.PixelsPerUnit);
                     m_Frames.Add(frame);
+                }
+                else
+                {
+                    Sprite frame = Resources.Load<Sprite>($"Art/Weapons/WoodenCrate/{i}");
+                    if (frame != null)
+                        m_Frames.Add(frame);
+                }
             }
             ApplyFrame();
         }

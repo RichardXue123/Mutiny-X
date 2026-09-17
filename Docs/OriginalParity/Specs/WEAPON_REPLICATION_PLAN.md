@@ -107,7 +107,7 @@
 ### WPN-04 — Boulder — 实现中
 
 - [~] WPN-04-EFF：已按 `Boulder.as` 接入四向 31 px extent、weight 1.5、friction .25、`hitsBoxes=true`、角色闭区间 32 px 推挤与每 tick `abs(vx)*1.5` HP。人类 `twang` 和 AI `fire` 均保留 20 px/tick clamp 后的原始速度，不再误用只属于不可达 drag-release 的 `.5`；已恢复 `Weapon.advance` 的水面 crossing splash 和地图底部结束。物理斜坡/木箱、多人连续接触和 AI 模拟待运行对照。
-- [~] WPN-04-ANI：已从 DefineSprite 872 拆出 869 可旋转石体和 depth 3 的静止 871 上层，25 Hz `vx*2.5` 只作用 `rotating` child；停稳从 visibility=2 以 .1/tick 调用 whiteOut 到两个子层。`blendMode="layer"` 的混色、白化 additive 前半段和装备 `(x,y-30)` 注册点待画面对照。
+- [~] WPN-04-ANI：已从 DefineSprite 872 拆出 869 可旋转石体和 depth 3 的静止 871 上层，25 Hz `vx*2.5` 只作用 `rotating` child；停稳从 visibility=2 以 .1/tick 调用 whiteOut 到两个子层。两个原版 `64×64` 子层现以中心 pivot、32 PPU 导入，恢复与 31 px Solid 对应的 `2×2` world-unit 画面尺寸；`blendMode="layer"` 的混色、白化 additive 前半段和装备 `(x,y-30)` 注册点待画面对照。
 - [ ] WPN-04-AUD：静态 `Boulder.as` 未见独立 release/滚动/碰撞/结束声音；水面继续走通用 `splash`。运行对照前未臆加其他声音。
 - [~] WPN-04-INT：已通过通用菜单选中和拖拽 twang 生产路径、AI `aiPerform` 路径提交库存/两行动；镜头和物理静止后的回合结算待对照。
 - [~] WPN-04-VER：已新增人类 twang 20 px/tick 速度、AI 预测/执行速度、原始子层、Solid 参数、32 px 临界推挤/伤害、水面/底部和静止时序回归；`dotnet build Assembly-CSharp.csproj --no-restore` 通过。Unity Editor、Play Mode、坡度/木箱/水、镜头和原版逐 tick 对照未执行。详见 `BOULDER.md`。

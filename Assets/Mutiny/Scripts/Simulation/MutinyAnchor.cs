@@ -215,14 +215,27 @@ namespace Mutiny.Simulation
             MutinyDebugLog.Info("Anchor", "finished after hold and white-out", this);
         }
 
+        public static readonly Vector2 OriginalAnchorPivot = new Vector2(52f / 104f, 2f / 100f); // Symbol 1003: origin (52, 98) of 104x100
+
         private void LoadFrames()
         {
             m_Frames.Clear();
             for (int i = 1; i <= 12; i++)
             {
-                Sprite frame = Resources.Load<Sprite>($"Art/Weapons/Anchor/{i}");
-                if (frame != null)
+                Texture2D texture = Resources.Load<Texture2D>($"Art/Weapons/Anchor/{i}");
+                if (texture != null)
+                {
+                    texture.filterMode = FilterMode.Point;
+                    Sprite frame = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                        OriginalAnchorPivot, MutinyPhysics.PixelsPerUnit);
                     m_Frames.Add(frame);
+                }
+                else
+                {
+                    Sprite frame = Resources.Load<Sprite>($"Art/Weapons/Anchor/{i}");
+                    if (frame != null)
+                        m_Frames.Add(frame);
+                }
             }
             ApplyFrame();
         }

@@ -33,14 +33,26 @@ namespace Mutiny.Simulation
         public bool IsDraggingPin => m_DraggingPin;
         public MutinyCannonball Cannonball => m_Cannonball;
 
+        public static readonly Vector2 OriginalPivot = new Vector2(26f / 53f, 19f / 38f); // Symbol 850: origin (26, 19) of 53x38
+
         protected override void Awake()
         {
             WeaponType = "cannon";
             Extent = 10f;
             base.Awake();
-            Sprite sprite = Resources.Load<Sprite>("Art/Weapons/Cannon/1");
-            if (sprite != null)
-                SpriteRenderer.sprite = sprite;
+            Texture2D texture = Resources.Load<Texture2D>("Art/Weapons/Cannon/1");
+            if (texture != null && SpriteRenderer != null)
+            {
+                texture.filterMode = FilterMode.Point;
+                SpriteRenderer.sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                    OriginalPivot, MutinyPhysics.PixelsPerUnit);
+            }
+            else
+            {
+                Sprite sprite = Resources.Load<Sprite>("Art/Weapons/Cannon/1");
+                if (sprite != null && SpriteRenderer != null)
+                    SpriteRenderer.sprite = sprite;
+            }
         }
 
         public override void Initialize(MutinyCharacter owner)

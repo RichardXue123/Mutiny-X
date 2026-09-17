@@ -143,6 +143,8 @@ namespace Mutiny.Simulation
             }
         }
 
+        public static readonly Vector2 OriginalPivot = new Vector2(29f / 62f, 27.95f / 82f); // Symbol 1725: origin (29, 54.05) of 62x82
+
         private void SetVisualFrame(int frame)
         {
             m_VisualFrame = frame;
@@ -150,10 +152,11 @@ namespace Mutiny.Simulation
             if (texture == null)
                 return;
 
+            texture.filterMode = FilterMode.Point;
             m_Renderer.sprite = Sprite.Create(
                 texture,
                 new Rect(0f, 0f, texture.width, texture.height),
-                new Vector2(0.5f, 0.5f),
+                OriginalPivot,
                 MutinyPhysics.PixelsPerUnit);
         }
 

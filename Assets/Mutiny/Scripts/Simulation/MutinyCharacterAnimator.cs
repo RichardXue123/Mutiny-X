@@ -140,6 +140,45 @@ namespace Mutiny.Simulation
                 m_Renderer.sprite = m_Frames[index];
         }
 
+        public static readonly Dictionary<string, Vector2> CharacterPivots =
+            new Dictionary<string, Vector2>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "redPirate", new Vector2(12f / 28f, 15f / 30f) },              // (0.4286, 0.5000)
+            { "bluePirate", new Vector2(12f / 28f, 15f / 30f) },             // (0.4286, 0.5000)
+            { "cabinBoy", new Vector2(12f / 28f, 15f / 30f) },               // (0.4286, 0.5000)
+            { "skeletonPirate", new Vector2(12f / 28f, 15f / 30f) },         // (0.4286, 0.5000)
+            { "rainbowBeard", new Vector2(12f / 27f, 15f / 30f) },           // (0.4444, 0.5000)
+            { "femalePirate", new Vector2(13f / 29f, 15f / 30f) },           // (0.4483, 0.5000)
+            { "blindPirate", new Vector2(13f / 29f, 15f / 30f) },            // (0.4483, 0.5000)
+            { "soldier", new Vector2(12f / 24f, 15f / 46f) },                // (0.5000, 0.3261) -> fixes soldier clipping into floor
+            { "bossGuy", new Vector2(21f / 40f, 15f / 62f) },                // (0.5250, 0.2419) -> fixes bossGuy clipping into floor
+            { "bossGuyZombie", new Vector2(21f / 40f, 15f / 62f) },          // (0.5250, 0.2419)
+            { "soldierCaptain", new Vector2(17f / 34f, 15f / 36f) },         // (0.5000, 0.4167)
+            { "blindPirateCaptain", new Vector2(14f / 28f, 15f / 34f) },     // (0.5000, 0.4412)
+            { "femalePirateCaptain", new Vector2(15f / 31f, 15f / 32f) },    // (0.4839, 0.4688)
+            { "rainbowBeardCaptain", new Vector2(18f / 36f, 15f / 39f) },    // (0.5000, 0.3846)
+            { "oldPirateCaptain", new Vector2(17f / 36f, 15f / 34f) },       // (0.4722, 0.4412)
+            { "cabinBoyCaptain", new Vector2(12f / 24f, 15f / 33f) },        // (0.5000, 0.4545)
+            { "tribeChief", new Vector2(14f / 28f, 15f / 39f) },             // (0.5000, 0.3846)
+            { "skeletonPirateCaptain", new Vector2(14f / 30f, 15f / 35f) },  // (0.4667, 0.4286)
+            { "squid", new Vector2(12f / 24f, 15f / 39f) },                  // (0.5000, 0.3846) -> fixes squid clipping into floor
+            { "bluePirateCaptain", new Vector2(14f / 29f, 15f / 35f) },      // (0.4828, 0.4286)
+            { "redPirateCaptain", new Vector2(14f / 29f, 15f / 35f) },       // (0.4828, 0.4286)
+            { "oldPirate", new Vector2(18f / 36f, 15f / 30f) },              // (0.5000, 0.5000)
+            { "tribe", new Vector2(12f / 24f, 15f / 30f) },                  // (0.5000, 0.5000)
+            { "monkey", new Vector2(14f / 29f, 15f / 30f) },                 // (0.4828, 0.5000)
+            { "crab", new Vector2(20f / 40f, 15f / 30f) },                   // (0.5000, 0.5000)
+            { "shark", new Vector2(16f / 32f, 15f / 30f) },                  // (0.5000, 0.5000)
+            { "parrot", new Vector2(12f / 24f, 15f / 30f) }                  // (0.5000, 0.5000)
+        };
+
+        public static Vector2 GetCharacterPivot(string characterType)
+        {
+            if (!string.IsNullOrEmpty(characterType) && CharacterPivots.TryGetValue(characterType, out Vector2 pivot))
+                return pivot;
+            return new Vector2(0.5f, 0.5f);
+        }
+
         private static Sprite[] LoadFrames(string characterType)
         {
             if (string.IsNullOrEmpty(characterType))
@@ -149,14 +188,16 @@ namespace Mutiny.Simulation
 
             Texture2D[] textures = Resources.LoadAll<Texture2D>($"Art/Characters/Animations/{characterType}");
             Array.Sort(textures, (a, b) => ParseFrame(a.name).CompareTo(ParseFrame(b.name)));
+            Vector2 pivot = GetCharacterPivot(characterType);
             var frames = new Sprite[textures.Length];
             for (int i = 0; i < textures.Length; i++)
             {
                 Texture2D texture = textures[i];
+                texture.filterMode = FilterMode.Point;
                 frames[i] = Sprite.Create(
                     texture,
                     new Rect(0f, 0f, texture.width, texture.height),
-                    new Vector2(0.5f, 0.5f),
+                    pivot,
                     MutinyPhysics.PixelsPerUnit);
                 frames[i].name = $"{characterType}_{i + 1:D2}";
             }
