@@ -59,7 +59,7 @@ namespace Mutiny.Presentation
             if (m_LevelController != null && m_LevelController.CurrentLevel != null)
                 m_LevelController.CurrentLevel.gameObject.SetActive(false);
 
-            MutinyAudioManager.Instance?.PlayMusic("menu_music");
+            MutinyAudioManager.Instance?.StartMenuMusic();
             Debug.Log($"[MutinyFrontend] FRONT-01 title shown; highestUnlocked={MutinySaveSystem.HighestUnlockedLevel}", this);
         }
 
@@ -245,7 +245,7 @@ namespace Mutiny.Presentation
             m_LevelController.LoadLevel(level);
             if (m_LevelController.CurrentLevel != null)
                 m_LevelController.CurrentLevel.gameObject.SetActive(true);
-            MutinyAudioManager.Instance?.PlayMusic("game_music");
+            MutinyAudioManager.Instance?.StartGameMusic();
         }
 
         /// <summary>
@@ -262,7 +262,7 @@ namespace Mutiny.Presentation
             if (m_LevelController != null && m_LevelController.CurrentLevel != null)
                 m_LevelController.CurrentLevel.gameObject.SetActive(false);
 
-            MutinyAudioManager.Instance?.PlayMusic("menu_music");
+            MutinyAudioManager.Instance?.StartMenuMusic();
             Debug.Log("[MutinyFrontend] HUD-CORNER-04 back to menu -> level select 1p", this);
             return true;
         }

@@ -111,7 +111,7 @@ namespace Mutiny.Simulation
             MutinyDebugLog.Info("Turn",
                 $"game started active={TeamLabel(CurrentTeam)} phase={CurrentPhase} team1Alive={Team1.AliveCount} team2Alive={Team2.AliveCount}", this);
 
-            Mutiny.Presentation.MutinyAudioManager.Instance?.PlayMusic("game_music");
+            Mutiny.Presentation.MutinyAudioManager.Instance?.StartGameMusic();
         }
 
         public void RefreshCharacterCache()
@@ -374,12 +374,10 @@ namespace Mutiny.Simulation
                 if (team1Defeated && team2Defeated)
                 {
                     GameResult = GameOverResult.Draw;
-                    Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("die");
                 }
                 else if (team2Defeated)
                 {
                     GameResult = GameOverResult.Team1Wins;
-                    Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("ching");
 
                     var controller = FindAnyObjectByType<MutinyLevelController>();
                     if (controller != null)
@@ -392,9 +390,12 @@ namespace Mutiny.Simulation
                 else
                 {
                     GameResult = GameOverResult.Team2Wins;
-                    Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("fan");
                 }
 
+                // Original MusicController has no victory/defeat BGM state. The
+                // gameplay track continues through the single-player result speech
+                // and popup. SpeechBubble.setTarget supplies a team voice cue; do
+                // not substitute unrelated SFX (for example fan/ching) as a third song.
                 MutinyDebugLog.Info("Turn",
                     $"END-POP result={GameResult} team1Alive={Team1.AliveCount} team2Alive={Team2.AliveCount} level={FindAnyObjectByType<MutinyLevelController>()?.CurrentLevelIndex}", this);
                 OnGameOver?.Invoke(GameResult);

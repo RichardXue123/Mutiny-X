@@ -4,9 +4,18 @@ using UnityEngine;
 
 namespace Mutiny.Presentation
 {
+    public enum MutinyMusicState
+    {
+        None,
+        Menu,
+        Game
+    }
+
     [DisallowMultipleComponent]
     public sealed class MutinyAudioManager : MonoBehaviour
     {
+        public const string MenuMusicName = "menu_music";
+        public const string GameMusicName = "game_music";
         private static MutinyAudioManager s_Instance;
 
         public static MutinyAudioManager Instance
@@ -38,6 +47,13 @@ namespace Mutiny.Presentation
 
         private Dictionary<string, AudioClip> m_SfxClips = new Dictionary<string, AudioClip>(StringComparer.OrdinalIgnoreCase);
         private Dictionary<string, AudioClip> m_MusicClips = new Dictionary<string, AudioClip>(StringComparer.OrdinalIgnoreCase);
+        private MutinyMusicState m_MusicState = MutinyMusicState.None;
+
+        /// <summary>
+        /// Flash MusicController.music_type. This is the requested page/game state,
+        /// not merely the clip currently audible: it keeps changing while music is muted.
+        /// </summary>
+        public MutinyMusicState CurrentMusicState => m_MusicState;
 
         // Production diagnostics and parity tests observe actual resolved SFX here.
         // The event is raised only when a loaded clip is about to be played.
@@ -109,29 +125,109 @@ namespace Mutiny.Presentation
             }
         }
 
+        /// <summary>
+        /// Compatibility entry point. The original game has only two looping BGM
+        /// states, menu_music and game_music; use the explicit Start* methods for them.
+        /// </summary>
         public void PlayMusic(string musicName, bool loop = true)
         {
+            if (string.Equals(musicName, MenuMusicName, StringComparison.OrdinalIgnoreCase))
+            {
+                StartMenuMusic();
+                return;
+            }
+
+            if (string.Equals(musicName, GameMusicName, StringComparison.OrdinalIgnoreCase))
+            {
+                StartGameMusic();
+                return;
+            }
+
             if (!MusicEnabled || MusicSource == null || string.IsNullOrEmpty(musicName))
                 return;
 
-            if (m_MusicClips.TryGetValue(musicName, out AudioClip clip))
-            {
-                if (MusicSource.clip == clip && MusicSource.isPlaying)
-                    return;
-
-                MusicSource.clip = clip;
-                MusicSource.loop = loop;
-                MusicSource.volume = MusicVolume;
-                MusicSource.Play();
-            }
+            PlayResolvedMusic(musicName, loop);
         }
 
-        public void StopMusic()
+        /// <summary>
+        /// Mirrors MusicController.startMenuMusic(from_toggle). Re-entering another
+        /// menu frame does not restart the track; turning music back on does.
+        /// </summary>
+        public void StartMenuMusic(bool fromToggle = false)
+        {
+            SetMusicState(MutinyMusicState.Menu, fromToggle);
+        }
+
+        /// <summary>
+        /// Mirrors MusicController.startGameMusic(from_toggle). Loading/restarting
+        /// another level while already in game state leaves the looping track alone.
+        /// </summary>
+        public void StartGameMusic(bool fromToggle = false)
+        {
+            SetMusicState(MutinyMusicState.Game, fromToggle);
+        }
+
+        private void SetMusicState(MutinyMusicState state, bool fromToggle)
+        {
+            bool changed = m_MusicState != state;
+            m_MusicState = state;
+
+            // Original startMenuMusic/startGameMusic always update music_type even
+            // while music_on is false. This is what makes a later toggle resume the
+            // correct menu/game track.
+            if (!changed && !fromToggle)
+                return;
+
+            if (!MusicEnabled || MusicSource == null)
+                return;
+
+            string musicName = state == MutinyMusicState.Menu
+                ? MenuMusicName
+                : state == MutinyMusicState.Game
+                    ? GameMusicName
+                    : null;
+
+            if (!string.IsNullOrEmpty(musicName))
+                PlayResolvedMusic(musicName, loop: true);
+        }
+
+        private void PlayResolvedMusic(string musicName, bool loop)
+        {
+            if (MusicSource == null || string.IsNullOrEmpty(musicName))
+                return;
+
+            if (!m_MusicClips.TryGetValue(musicName, out AudioClip clip))
+            {
+                Debug.LogWarning($"[MutinyAudio] Music clip not found: {musicName}", this);
+                return;
+            }
+
+            MusicSource.Stop();
+            MusicSource.clip = clip;
+            MusicSource.loop = loop;
+            MusicSource.volume = MusicVolume;
+            MusicSource.Play();
+        }
+
+        private void RestartCurrentMusic()
+        {
+            if (m_MusicState == MutinyMusicState.Menu)
+                StartMenuMusic(fromToggle: true);
+            else if (m_MusicState == MutinyMusicState.Game)
+                StartGameMusic(fromToggle: true);
+        }
+
+        /// <summary>
+        /// Stops the audible source without forgetting the original music_type.
+        /// clearState is only for callers that intentionally leave both original states.
+        /// </summary>
+        public void StopMusic(bool clearState = false)
         {
             if (MusicSource != null)
-            {
                 MusicSource.Stop();
-            }
+
+            if (clearState)
+                m_MusicState = MutinyMusicState.None;
         }
 
         public void PlayCharacterVoice(string characterType)
@@ -152,25 +248,28 @@ namespace Mutiny.Presentation
 
         public void ToggleMusic()
         {
-            MusicEnabled = !MusicEnabled;
-            Mutiny.Persistence.MutinySaveSystem.MusicEnabled = MusicEnabled;
-            if (!MusicEnabled && MusicSource != null)
-            {
-                // MusicController.turnOffMusic stops both Flash Sound instances. Do
-                // not pause: turning it back on restarts the current menu/game track.
-                MusicSource.Stop();
-            }
-            else if (MusicEnabled && MusicSource != null)
-            {
-                if (MusicSource.clip != null)
-                {
-                    MusicSource.loop = true;
-                    MusicSource.volume = MusicVolume;
-                    MusicSource.Play();
-                }
-            }
+            if (MusicEnabled)
+                TurnOffMusic();
+            else
+                TurnOnMusic();
+        }
 
-            Debug.Log($"[MutinyAudio] HUD-CORNER-06 music={(MusicEnabled ? "on" : "off")} clip={(MusicSource != null && MusicSource.clip != null ? MusicSource.clip.name : "none")}", this);
+        public void TurnOffMusic()
+        {
+            MusicEnabled = false;
+            Mutiny.Persistence.MutinySaveSystem.MusicEnabled = false;
+            StopMusic();
+            Debug.Log($"[MutinyAudio] HUD-CORNER-06 music=off state={m_MusicState}", this);
+        }
+
+        public void TurnOnMusic()
+        {
+            MusicEnabled = true;
+            Mutiny.Persistence.MutinySaveSystem.MusicEnabled = true;
+
+            // Original turnOnMusic restarts the current music_type from its beginning.
+            RestartCurrentMusic();
+            Debug.Log($"[MutinyAudio] HUD-CORNER-06 music=on state={m_MusicState} clip={(MusicSource != null && MusicSource.clip != null ? MusicSource.clip.name : "none")}", this);
         }
 
         public void SetSfxVolume(float vol)

@@ -1887,6 +1887,7 @@ namespace Mutiny.Verification
             MutinyAudioManager audio = MutinyAudioManager.Instance;
             bool previousSfx = audio.SfxEnabled;
             bool previousMusic = audio.MusicEnabled;
+            MutinyMusicState previousMusicState = audio.CurrentMusicState;
             try
             {
                 audio.SfxEnabled = true;
@@ -1897,11 +1898,34 @@ namespace Mutiny.Verification
 
                 audio.MusicEnabled = true;
                 Mutiny.Persistence.MutinySaveSystem.MusicEnabled = true;
+                audio.StartMenuMusic();
                 audio.ToggleMusic();
                 bool musicOffSaved = !audio.MusicEnabled && !Mutiny.Persistence.MutinySaveSystem.MusicEnabled;
+
+                // MusicController updates music_type even while muted. Entering a
+                // level while music is off must therefore remember Game and restore
+                // game_music, not the old menu clip, when the toggle is turned on.
+                audio.StartGameMusic();
+                bool mutedTransitionRemembered = audio.CurrentMusicState == MutinyMusicState.Game;
                 audio.ToggleMusic();
-                result.Assert(sfxOffSaved && audio.SfxEnabled && musicOffSaved && audio.MusicEnabled,
-                    "HUD-CORNER-T03 production Music/SFX actions toggle and persist their corresponding saved settings");
+                bool gameRestored =
+                    audio.MusicEnabled &&
+                    audio.CurrentMusicState == MutinyMusicState.Game &&
+                    audio.MusicSource != null &&
+                    audio.MusicSource.clip != null &&
+                    audio.MusicSource.clip.name == MutinyAudioManager.GameMusicName;
+
+                audio.StartMenuMusic();
+                bool menuSwitchResolved =
+                    audio.CurrentMusicState == MutinyMusicState.Menu &&
+                    audio.MusicSource != null &&
+                    audio.MusicSource.clip != null &&
+                    audio.MusicSource.clip.name == MutinyAudioManager.MenuMusicName;
+
+                result.Assert(
+                    sfxOffSaved && audio.SfxEnabled && musicOffSaved &&
+                    mutedTransitionRemembered && gameRestored && menuSwitchResolved,
+                    "HUD-CORNER-T03/MUSIC-T01 production audio preserves original menu/game music_type across mute and restores the correct track");
             }
             finally
             {
@@ -1909,6 +1933,16 @@ namespace Mutiny.Verification
                 audio.MusicEnabled = previousMusic;
                 Mutiny.Persistence.MutinySaveSystem.SfxEnabled = previousSfx;
                 Mutiny.Persistence.MutinySaveSystem.MusicEnabled = previousMusic;
+
+                if (previousMusicState == MutinyMusicState.Menu)
+                    audio.StartMenuMusic(fromToggle: previousMusic);
+                else if (previousMusicState == MutinyMusicState.Game)
+                    audio.StartGameMusic(fromToggle: previousMusic);
+                else
+                    audio.StopMusic(clearState: true);
+
+                if (!previousMusic)
+                    audio.StopMusic();
             }
 
             AssertTexture(result, "UI/Frontend/button_small", 163, 24);
