@@ -1,145 +1,311 @@
 # Mutiny X
 
-使用 Unity 6（6000）重制 Nitrome 的 Flash 游戏《Mutiny》。通过分析原版 SWF 的 ActionScript、关卡数据和资源，逐步还原地图、角色、武器、回合规则与操作手感。
+Mutiny X 是一个使用 **Unity 6** 重构 Nitrome Flash 游戏《Mutiny》的项目。项目不是按“看起来像原版”进行近似重写，而是以原始 SWF、AS2 反编译结果、pcode、时间轴、关卡 XML、导出资源和原版运行表现为证据，逐步把 Flash 的规则、状态机、画面、声音与操作语义迁移到 Unity。
 
-当前处于逆向准备阶段。Unity 工程基本为 URP 2D 模板，尚未实现游戏玩法。详细任务与完成标准见 [TODO.md](TODO.md)。
+> **当前状态（2026-09-18）**：已经具备可运行的单人游戏闭环，包括关卡生成、25 Hz 自定义模拟、角色与队伍、15 种战术武器、AI、空投、HUD、音频、存档和单人前端流程；18 个本地关卡 XML 已进入运行时与回归体系。与此同时，项目仍在持续进行 **Original Parity（原版一致性）审计**，因此“功能存在”不等于“已经与 Flash 原版逐帧/逐行为完全一致”。
 
-## 目录与开发环境
+## 项目概况
 
-```text
-D:\My Project\Mutiny X\
-├─ Mutiny Source\mutiny-flash-game\   原版 SWF、XML 关卡及归档文件
-└─ Mutiny X\                         本 Unity 工程
-   ├─ Assets\
-   ├─ Packages\
-   ├─ ProjectSettings\
-   ├─ README.md
-   └─ TODO.md
-```
-
-- Unity 编辑器：`6000.6.0f1`，以 `ProjectSettings/ProjectVersion.txt` 为准。
-- 渲染：URP 2D。
-- 工程已配置 Tilemap、2D Animation、Pixel Perfect、Input System 和 UGUI；具体版本见 `Packages/manifest.json`。
-- 使用 Unity Hub 打开本目录，完成包解析和编译后打开 `Assets/Scenes/Main.unity`。该场景目前只有模板内容。
-- 历史日志存在 `packages.unity.com` DNS 失败记录，开始开发前需确认当前包解析正常。
-
-## 原版材料与已验证信息
-
-以下为 2026-09-15 的文件、SWF 结构和 XML 检查结果，不代表已完成运行验证或完整反编译。
-
-| 项目 | 检查结果 |
+| 项目 | 当前基线 |
 | --- | --- |
-| 源文件 | 当前材料中没有发现 `.as` 或 `.fla`，需要从 SWF 反编译 |
-| 主程序 | `mutiny.swf`，压缩 SWF，版本 8，AVM1 脚本；按 AS1/AS2 路线分析 |
-| 舞台 | 550 × 400，25 FPS，主时间轴 140 帧 |
-| 脚本线索 | 保留 `com.nitrome.throwgame` 等包名，以及 Controller、Character、TileSystem、Team、武器类等名称 |
-| 资源结构 | 574 个 Flash Sprite 定义，其中 172 个有多帧；39 个声音定义；421 个导出链接 |
-| 关卡 | `mutiny_levels/level_01.xml` 至 `level_18.xml`，共 18 个，均声明 `players="1"` |
-| XML 扫描 | 107 种非空 tile 标记、29 种 object type、20 种 object 属性；前景与背景行数、展开宽度均匹配声明。此前记为 22 种属性，正式扫描与独立核对后修正为 20 |
-| 重复程序 | `mutiny.swf`、`mutinyASp.swf`、`mutinyfpa.swf` 的 SHA256 相同 |
+| Unity | `6000.6.0f1` |
+| 渲染 | URP / 2D |
+| 原版舞台 | 550 × 400，25 FPS |
+| 地图网格 | 32 px / tile，Unity 中 32 PPU、1 tile = 1 unit |
+| 关卡数据 | `level_01.xml` ~ `level_18.xml`，均为单人 XML |
+| 当前单人前端 | 标题页 → 人数选择 → 单人选关 → Gameplay；选关 UI 当前按原版流程显示 15 格 |
+| 战术武器 | 15 种菜单武器；`cannonball` 为 Cannon 的内部弹药/对象，不算第 16 种 |
+| 模拟 | 自定义 25 Hz 离散物理，不依赖 Rigidbody2D 作为核心玩法模拟 |
+| 原版脚本逆向 | source / deobfuscated / pcode 各 494 份脚本 |
+| 原版类索引 | 99 个 AS2 类、688 个方法/访问器、932 个字段声明 |
+| 原版美术导出 | 7417 PNG、6618 SVG，含时间轴、帧标签、注册点与嵌套放置索引 |
 
-主 SWF 的 SHA256：
+原始 SWF 基线：
 
 ```text
 c034d2cfa50272a1aac93ad75114b542ca5993dd7b70fa8901aa195de7820586
 ```
 
-`skywire` 属于另一个游戏，不纳入本项目逆向范围。现有 18 个 XML 不能作为原版双人模式地图已经齐全的证据。
+## 当前完成度怎么理解
 
-XML 使用 `tile:数量` 的行程编码，例如 `-:50` 表示 50 个空格。`row`、`bgRow` 分别存放前景和背景，`obj` 包含类型、坐标及武器等配置。标记的实际玩法语义需要结合原版脚本确认。
+项目早期的 01~18 开发里程碑已经完成，意味着主要系统已经进入可运行/可验证状态；但现在采用更严格的原版一致性标准，因此不能把这些里程碑直接解释为“整个游戏已经 100% 复刻”。
 
-已发现两个需要处理的映射问题：
+### 已实现并进入自动验证体系
 
-- `antichest` 没有同名 SWF 导出链接，需要确认是否为逻辑标记。
-- XML 中的 `ship_anchor_4` 与 SWF 链接 `Ship_anchor_4` 大小写不同，需要显式映射。
+- 18 关 XML parser、批量扫描、运行时资源加载与关卡生成。
+- 107 种关卡 tile 标记的映射；背景、实体地形、水域与逻辑标记分层。
+- 角色、队伍、生命值、武器库存、选择与行动资格。
+- 25 Hz 离散移动、重力、碰撞、反弹、摩擦、落水、爆炸、伤害与击退。
+- 回合状态机、静止结算、队伍轮换、胜负判断与单人计分。
+- 15 种战术武器及各自的 C# 生产组件。
+- 单人 AI 决策、瞄准与行动执行。
+- Treasure Chest / Air Drop 生成、掉落池、下落、拾取和镜头跟随基础流程。
+- 游戏内 HUD、行动面板、武器槽、角落控制、结束弹窗、位图字体。
+- 菜单音乐、游戏音乐、SFX，以及音量/开关持久化。
+- 关卡解锁存档与单人流程状态。
+- GM 调试命令与对应生产回归入口。
 
-## 实现路线
+### 仍在持续做原版一致性审计
 
-工作目录已建立：
+当前详细工作不再以“有没有同名类”为完成标准，而是检查：前置状态、输入、状态转换、25 Hz 时序、资源帧、命中区域、音效、镜头和最终可观察表现是否与原版一致。近期审计范围包括行动 UI、角色时间轴/层级、旋转动画、空投、战斗 HUD、结束弹窗、角落按钮和每一种特殊武器。
+
+### 当前明确的范围差异
+
+- `MutinyFrontendController` 的单人选关流程当前按原版前端规格使用 **15 个选关位**，而运行时 `MutinyLevelController` / `MutinySaveSystem` 和本地数据支持 **18 个 XML 关卡**。这个范围差异不能被 README 隐藏，后续按原版证据继续处理。
+- Scores / Help / Credits / 2 Player 当前主要保留显示与 hover；现有生产前端的完整可玩路径是单人流程。
+- 静态反编译、美术导出和自动断言只能证明各自范围，不能单独证明完整的原版运行时画面和节奏一致。
+
+## 运行架构
+
+```mermaid
+flowchart TD
+    XML[Resources/Data/Levels XML] --> Parser[MutinyLevelXmlParser]
+    Parser --> Data[MutinyLevelData]
+    Data --> Builder[MutinyLevelBuilder]
+    Controller[MutinyLevelController] --> Builder
+    Builder --> Root[MutinyLevelRoot]
+    Builder --> Teams[MutinyTeam + MutinyCharacter]
+    Builder --> Chest[MutinyTreasureChestManager]
+    Builder --> Turn[MutinyTurnManager]
+    Builder --> Input[MutinyPlayerInput]
+    Builder --> HUD[MutinyGameHUD]
+    Turn --> Input
+    Turn --> AI[MutinyAIController]
+    Input --> Factory[MutinyWeaponFactory / Weapon Components]
+    AI --> Factory
+    Factory --> Physics[MutinyPhysics + MutinyPhysicsBody]
+    Physics --> Damage[MutinyExplosion / Water / Character State]
+    Damage --> Turn
+    Turn --> HUD
+    Input --> HUD
+    Save[MutinySaveSystem] --> Controller
+    Save --> Audio[MutinyAudioManager]
+    Frontend[MutinyFrontendController + Flow] --> Controller
+```
+
+关卡不是手工堆在场景里的固定对象集合。`MutinyLevelController` 读取运行时 XML，交给 `MutinyLevelXmlParser` 生成数据模型，再由 `MutinyLevelBuilder` 构造背景、地形、水域、角色、队伍、空投管理器、回合控制器、输入和 HUD。玩法层随后由 `MutinyTurnManager` 协调玩家输入或 AI 与武器/物理系统。
+
+## 代码目录
 
 ```text
-Assets/Mutiny/
-├─ Data/
-│  └─ Levels/           level_01.xml 至 level_18.xml 的原版副本
-├─ Scripts/
-│  ├─ Core/             核心数据与公共规则
-│  ├─ Level/            XML 解析、关卡数据与加载
-│  ├─ Simulation/       运动、碰撞、伤害、武器与回合模拟
-│  └─ Presentation/     显示、输入、UI 与动画衔接
-├─ Art/                 待导出的美术资源
-└─ Audio/               待导出的音乐与音效
+Assets/
+├─ Scenes/
+│  └─ Main.unity
+└─ Mutiny/
+   ├─ Resources/
+   │  ├─ Art/                  # 运行时角色、tile、武器、特效等
+   │  ├─ Audio/                # Music / SFX
+   │  ├─ Data/Levels/          # 运行时 level_01 ~ level_18
+   │  └─ UI/                   # Frontend、HUD、字体、按钮状态资源
+   └─ Scripts/
+      ├─ Level/                # XML、数据模型、关卡构建与控制
+      ├─ Simulation/           # 物理、角色、队伍、回合、AI、武器、空投
+      ├─ Presentation/         # 输入、HUD、前端、镜头、音频、位图字体、GM
+      ├─ Persistence/          # PlayerPrefs 存档封装
+      └─ Verification/         # 生产路径验证与回归测试
+
+Docs/
+├─ LevelScan/                  # 18 关扫描统计
+├─ Modules/                    # 物理、武器、回合系统的说明页面
+├─ OriginalParity/             # 当前最重要的原版一致性工作区
+├─ ReverseEngineering/         # SWF / AS2 / Art / Tiles 等逆向产物
+├─ Verification/               # Level 1 与全关卡回归记录
+├─ GM_COMMANDS.md
+└─ ART_PIVOT_AND_OFFSET_BUGS.md
+
+Tools/ReverseEngineering/      # 可重复的反编译、索引、导出与映射脚本
+Mutiny Source/                 # 原版 SWF 与原始关卡材料
 ```
 
-关卡副本与原文件逐一核对 SHA256，一致；原版材料保留在源目录。目录建立不代表对应模块已经实现。
+## 关键模块
 
-1. 编写 Level XML parser，将关卡转换为与 Unity 场景对象分离的数据模型，并保存批量扫描结果。
-2. 完整反编译 SWF，整理类树、时间轴脚本、游戏状态与外部依赖。
-3. 导出资源，建立 `tile name → SWF symbol → Unity Sprite` 映射，记录资源 ID、枢轴和动画信息。
-4. 在 Unity 中还原第 1 关静态地图，再实现角色、运动碰撞、爆炸、水域和回合闭环。
-5. 依次还原 Cherry Bomb、Dynamite 和剩余武器，再补齐 AI、UI、动画与声音。
-6. 对照原版逐项验证第 1 关行为，再扩展并回归全部关卡。
+| 模块 | 主要入口 | 作用 |
+| --- | --- | --- |
+| 关卡数据 | `MutinyLevelXmlParser`, `MutinyLevelData` | 解析原版 XML/RLE，保留 `[y,x]` 数据与对象原始属性 |
+| 关卡构建 | `MutinyLevelController`, `MutinyLevelBuilder`, `MutinyLevelRoot` | 从 XML 动态构建背景、碰撞地形、水域、角色和运行时系统 |
+| 角色与队伍 | `MutinyCharacter`, `MutinyCharacterAnimator`, `MutinyTeam` | 生命、库存、行动资格、动画与队伍状态 |
+| 物理 | `MutinyPhysics`, `MutinyPhysicsBody` | 以像素/tick 表达的 25 Hz 离散运动与逐轴碰撞 |
+| 回合 | `MutinyTurnManager` | `NotStarted → TurnActive → ActionExecuting → Settling → GameOver` |
+| 玩家操作 | `MutinyPlayerInput`, `MutinyTrajectoryRenderer`, `MutinySpecialWeaponCursor` | 选人、拖拽瞄准、预测、特殊武器输入与行动提交 |
+| 武器 | `MutinyWeapon`, `MutinyWeaponFactory` + 各独立武器类 | 武器生命周期、发射/放置/特殊控制、库存与结算 |
+| AI | `MutinyAIController` | 等待合法行动窗口、评估动作、选人/选武器/瞄准并走生产入口执行 |
+| 空投 | `MutinyTreasureChestManager`, `MutinyTreasureChest` | 权重池、有效列、下落、拾取、奖励与回合影响 |
+| HUD / 菜单 | `MutinyGameHUD`, `MutinyFrontendController`, `MutinyFrontendFlow` | 550×400 原版风格 UI、选关、行动面板、结束弹窗 |
+| 镜头 | `MutinyCameraController` | 地图滚动与角色、武器、空投等目标跟随 |
+| 音频 | `MutinyAudioManager` | `Resources/Audio` 加载、音乐/SFX、静音与音量状态 |
+| 存档 | `MutinySaveSystem` | 关卡解锁、音乐/SFX 设置的 PlayerPrefs 封装 |
+| GM | `MutinyGMManager` | 调试命令；属于 Unity 扩展，不属于 Flash 原版行为 |
+| 验证 | `MutinyLevel1VerificationTest`, `MutinyAllLevelsRegressionTest`, `MutinyTurnActionUiVerificationTest` | 从生产代码入口检查关卡、回合、UI、资源与行为回归 |
 
-JPEXS 支持 AS1/AS2 反编译及图片、动画帧、声音等导出，可作为逆向工具；本 SWF 的实际导出质量仍需验证。参考 [JPEXS 官方功能说明](https://github.com/jindrapetrik/jpexs-decompiler/wiki/Features)。
+## 核心实现说明
 
-## 还原原则
+### 1. 25 Hz 离散模拟
 
-- 保留原版材料，提取与转换结果放在独立目录，记录来源和转换方式。
-- 先查清规则和公式，再实现 C# 行为；避免仅凭类名推断玩法。
-- 原版 25 FPS 作为逻辑时序调查基准。是否采用固定 25 Hz 模拟，需要确认原版运动、计时和碰撞实现；Unity 渲染帧率可独立设置。
-- 不直接假设默认 Rigidbody2D 能还原原版弹道、反弹和击退；根据逆向结果选择自定义模拟或 Unity 物理。
-- 分别记录地图装饰、碰撞形状和逻辑标记，不把每个非空 tile 都视为实体地形。
-- 动画提取同时关注嵌套时间轴、帧标签和脚本事件，避免仅保存画面而丢失行为。
-- 排行榜接口、域名检查和 Flash SharedObject 需要单独梳理，确定 Unity 中的对应处理。
-- 原版代码、图像与声音的来源为 Nitrome 游戏材料；本仓库文档不表示已取得其使用或发布授权。
+原版 Flash 逻辑以 25 FPS / tick 推进。Mutiny X 没有直接把核心玩法交给 Unity Rigidbody2D，而是把原版常量和更新顺序迁移到 `MutinyPhysics` / `MutinyPhysicsBody`。常用量仍以 **px/tick** 表达，例如角色 weight、地面摩擦、墙体反弹和 twang 发射速度，再由 32 PPU 映射到 Unity 世界。
 
-## 首个可玩版本的目标
+这样做的目标是保证：同一逻辑输入在不同渲染帧率下仍得到一致的游戏模拟结果，并能逐 tick 与 AS2/pcode 对照。
 
-第 1 关地图与角色可正确加载；完成角色操作、Cherry Bomb 投掷、碰撞、爆炸伤害、击退、水域处理、回合切换及胜负判断。通过原版对照确认核心规则后，再扩大内容范围。
+### 2. 地图与坐标
 
-## Level XML parser
+- XML 数组保持原版 `[y, x]`。
+- 32 px = 1 tile = 1 Unity unit。
+- XML 从左上向下增长；Unity 构建时使用负 Y 映射。
+- `row` 生成实体地形；`bgRow` 是视觉背景。
+- `antichest` 是用于空投有效列判断的逻辑/背景标记，不作为普通可见 tile 强行生成。
+- 地形按现有逆向结论不可破坏；爆炸作用于角色/对象，不挖掉 tile。
 
-`Assets/Mutiny/Scripts/Level/MutinyLevelXmlParser.cs` 不依赖 Unity API，可直接解析字符串：
+### 3. 回合与行动资格
 
-```csharp
-using Mutiny.Levels;
+`MutinyTurnManager` 使用明确的生产状态机，而不是用 UI 状态推断回合是否结束。全场动作完成后需要连续的 25 Hz 静止 tick 才进入下一步结算。
 
-MutinyLevelData level = MutinyLevelXmlParser.Parse(xmlText, "level_01.xml");
-string tile = level.Terrain[y, x];
-string[] row = MutinyLevelXmlParser.DecodeRow("grass:2,-:3", 5);
+当前通用人类回合规则已经区分角色 Throw Self 与武器行动：跳跃后仍可继续使用合法武器；提交武器后会结束该角色本回合的攻击链。特殊武器是否覆盖通用规则，必须按各自原版类与规格单独验证。
+
+### 4. 武器系统
+
+当前菜单武器集合：
+
+```text
+cherryBomb, boulder, dynamite, piecesOfEight, rumBottle,
+banana, parachuteBomb, woodenCrate, gunpowderBarrel, seagull,
+mine, cannon, anchor, voodooDoll, tidalWave
 ```
 
-数组保持 XML 的 `[y, x]`：x 从左到右、y 从上到下。非空 tile 名称不改写，空标记 `-` 解码为 `null`。`Properties` 保存全部对象属性，包括 `type/x/y` 的原始字符串；`Type/X/Y` 提供类型化读取入口。缺失的关卡名称使用空字符串。
+每个复杂武器都有独立生产组件，不以一个“通用抛射物 + 不同伤害”代替所有行为。Cannon 使用 `cannonball` 作为内部对象/库存别名。
 
-Parser 校验根节点、正整数尺寸与玩家数、层行数、RLE 名称和正整数重复次数、展开宽度及对象坐标范围。数据错误抛出 `FormatException`；Parse 的可选 sourceName 与 XML 行列信息用于定位错误。已通过本地 .NET 10 / C# 9 编译、18 关解析及异常输入验证；用户已确认单关卡 Unity 验证组件运行通过。
+针对武器的新增或修复必须遵循 [`Docs/OriginalParity/Specs/WEAPON_REPLICATION_WORKFLOW.md`](Docs/OriginalParity/Specs/WEAPON_REPLICATION_WORKFLOW.md)：先追踪原版类、父类、调用者、物理、资源、声音和回合依赖，再写状态转换和回归用例。
 
-## 批量扫描关卡
+### 5. AI
 
-在 Unity 菜单选择 **Mutiny → Levels → Scan All XML**。工具读取 `Assets/Mutiny/Data/Levels/level_*.xml`，重新生成 [Docs/LevelScan](Docs/LevelScan/README.md) 下的报告，Console 输出解析数量与错误数量。报告位于 Assets 外，不作为游戏资源导入。
+`MutinyAIController` 只在当前 AI 队伍拥有合法 `TurnActive` 窗口时执行。它会等待场景/镜头准备，评估候选动作并通过与玩家一致的生产系统提交动作，而不是直接修改最终结果。AI 的具体决策流程记录在 [`AI_DECISION_FLOW.md`](Docs/OriginalParity/Specs/AI_DECISION_FLOW.md)。
 
-- `levels.csv`：各关元数据、对象数量、前景与背景种类数及 XML SHA256。
-- `tile-types.csv`、`tile-occurrences.csv`：全部非空标记、出现次数与每次出现的关卡、层、原版坐标。
-- `object-types.csv`、`objects.csv`：对象类型统计及各对象的索引和坐标。
-- `attribute-values.csv`、`object-properties.csv`：全部原始属性取值、次数及所在对象。
-- `errors.csv`：读取或解析失败的文件与诊断；一个文件失败后继续扫描其他文件。
+### 6. UI 与 Flash 时间轴语义
 
-扫描保留大小写和逻辑标记，不推断资源对应关系。空 tile 不计入清单，属性包括 `type/x/y`。每次覆盖报告，排序固定。已使用正式 parser 生成 18 关报告，并验证重复生成一致、错误后继续扫描及 CSV 转义；用户已确认 Unity 菜单运行通过。
+UI 不是简单换成 Unity 默认 Button。项目保留 550×400 的逻辑视口，并从 SWF 中恢复：
 
-## SWF 反编译产物
+- 位图字体 normal / hover 字形。
+- `up / over / disabled` 等按钮时间轴状态。
+- 武器槽、跳跃、End Turn、角落控制的原版帧资源。
+- Flash 注册点、shape bounds 和嵌套 MovieClip 的位置信息。
 
-已完成脚本导出与自动去混淆，阅读入口见 [Docs/ReverseEngineering/Swf](Docs/ReverseEngineering/Swf/README.md)。默认 AS、去混淆 AS 与带 hex 的 pcode 各 494 份，逐路径匹配脚本索引；99 个包脚本恢复类声明。原始 SWF 保持不变。后续分析优先阅读 deobfuscated，重要公式与行为结合 pcode 核对；当前尚未完成规则语义验证或美术音频提取。
+如果一个原版子 MovieClip 可以独立 `gotoAndStop()`，Unity 侧也应保留它独立的视觉状态，而不是只画一张父面板 PNG。
 
-## 进度维护
+### 7. 音频与存档
 
-原始美术资源与来源、动画、注册点清单见 [美术导出说明](Docs/ReverseEngineering/Art/README.md)。共保存 7417 PNG 和 6618 SVG；1963 个可绘制符号全部覆盖。资源暂留 Assets 外，下一阶段按 XML 标记筛选并配置 Unity Sprite；脚本驱动动画仍需另行重建。
+`MutinyAudioManager` 从 `Resources/Audio/SFX` 和 `Resources/Audio/Music` 加载资源并保存开关/音量；`MutinySaveSystem` 保存最高解锁关卡和音频设置。单人关卡分数是当前单人会话状态，不等同于长期解锁存档。
 
-完整 AS2 类树、方法与依赖索引，以及加载、逐帧更新、回合和武器流程见 [AS2 分析文档](Docs/ReverseEngineering/AS2/README.md)。当前确认 32 像素网格与爆炸动画帧事件；部分反编译循环、空库存行为及 33 关程序与本地 18 XML 的范围差异仍待核对。
+### 8. GM 调试扩展
 
-### 在 Unity 中验证单个关卡
+游戏内 GM 面板是 Unity 版的调试扩展，不属于原版一致性结论。当前支持解锁武器、全队无限武器、解锁/重置关卡与 Help。完整命令和持久化影响见 [`Docs/GM_COMMANDS.md`](Docs/GM_COMMANDS.md)。
 
-1. 在场景中创建空 GameObject，添加 `MutinyLevelTest` 组件。
-2. 将 `Assets/Mutiny/Data/Levels/level_01.xml` 拖入组件的 `Level Xml` 字段。
-3. 进入 Play Mode，在 Console 查看关卡尺寸、玩家数、对象数量、非空地形种类数及每个对象的原始属性。
+## SWF 逆向资料
 
-第 1 关应输出 `50 x 17, players=1, objects=10`。未指定 XML 或解析失败时会输出错误并停止该次验证。此组件仅验证单个关卡并打印数据，不生成地图；场景需按上述步骤手动挂载。
+原始输入位于：
 
-[TODO.md](TODO.md) 是任务状态的统一入口。每次推进后更新任务状态、产物路径、验证结果与未解决问题。只有达到完成标准并保存必要产物后才勾选完成；初步检查不替代正式导出、实现或测试。
+```text
+Mutiny Source/mutiny-flash-game/mutiny.swf
+```
+
+主要逆向产物位于：
+
+```text
+Docs/ReverseEngineering/Swf/
+├─ source/scripts/             # 默认 AS 反编译，对照混淆/异常
+├─ deobfuscated/scripts/       # 自动去混淆，日常优先阅读
+├─ pcode/scripts/              # AVM1 字节码反汇编，语义争议时回查
+├─ mutiny.swf.xml              # 完整 SWF tag / timeline / script byte 数据
+├─ symbols/
+└─ ...
+
+Docs/ReverseEngineering/AS2/   # 类树、方法、字段、引用、事件、game-flow
+Docs/ReverseEngineering/Art/   # PNG/SVG、frame labels、placements、origins、bounds
+Docs/ReverseEngineering/Tiles/ # XML tile → SWF symbol → Unity resource 映射
+```
+
+反编译出的 `.as` **不是开发者原始源码的逐字恢复**：注释、部分局部变量名、原始工程组织和未编译内容已经丢失。日常分析优先看 `deobfuscated`，涉及可疑条件、循环或反编译异常时必须回查 `pcode`，视觉问题还要结合 SWF 时间轴和原版运行结果。
+
+可重复生成命令包括：
+
+```powershell
+python Tools/ReverseEngineering/decompile_swf.py
+python Tools/ReverseEngineering/build_class_index.py
+python Tools/ReverseEngineering/export_art.py
+```
+
+详细工具版本、命令、指纹和限制见 [`Docs/ReverseEngineering/Swf/README.md`](Docs/ReverseEngineering/Swf/README.md) 与 [`Docs/ReverseEngineering/Art/README.md`](Docs/ReverseEngineering/Art/README.md)。
+
+## 原版一致性工作流
+
+原版行为的当前权威工作区是 [`Docs/OriginalParity`](Docs/OriginalParity/README.md)。核心原则：
+
+1. 先找原版证据，再修改 Unity；不能从当前 C# 反推“原版应该如此”。
+2. AS2 反编译有歧义时回查 pcode。
+3. 视觉必须同时检查 symbol、帧标签、注册点、嵌套层级和运行时表现。
+4. 每条行为区分“证据状态 / 实现状态 / 验证状态”。
+5. 编译通过、资源存在、写了测试步骤，都不能单独等价为玩法一致。
+6. 缺陷修复应补能在修复前暴露问题、修复后通过的生产路径回归。
+
+完整标准见 [`REPLICATION_STANDARD.md`](Docs/OriginalParity/REPLICATION_STANDARD.md)，具体行为规格位于 [`Docs/OriginalParity/Specs`](Docs/OriginalParity/Specs)。
+
+## 验证与回归
+
+现有验证资料包括：
+
+- [`Docs/Verification/level-1-comparison.md`](Docs/Verification/level-1-comparison.md)：Level 1 数据、队伍、核心物理、伤害和回合断言记录。
+- [`Docs/Verification/full-level-regression.md`](Docs/Verification/full-level-regression.md)：18 个 XML 关卡的数据/队伍/水域/AI/解锁链路回归。
+- [`Docs/OriginalParity/VALIDATION.md`](Docs/OriginalParity/VALIDATION.md)：当前一致性验证结果、待 Play Mode / 原版运行对照项。
+
+Unity 中的主要验证入口：
+
+```text
+Mutiny → Levels → Scan All XML
+Mutiny → Parity → Validate Runtime Resources
+Mutiny → Parity → Validate Turn Action UI
+```
+
+代码编译检查通常使用：
+
+```powershell
+dotnet build Assembly-CSharp.csproj --no-restore
+```
+
+> `Docs/Verification` 中早期报告的“PASS / 100%”只表示报告所列断言范围通过。项目当前以 `Docs/OriginalParity/REPLICATION_STANDARD.md` 的更严格标准判断“是否完成原版复刻”。
+
+## 开发环境与启动
+
+1. 使用 Unity Hub 以 **Unity 6000.6.0f1** 打开仓库根目录。
+2. 等待 Package Manager 与脚本编译完成，确认 Console 没有新的编译错误。
+3. 打开 `Assets/Scenes/Main.unity`。
+4. 进入 Play Mode，从当前单人前端流程开始测试。
+5. 修改玩法前先查对应的 `Docs/OriginalParity/Specs/*.md`；修改原版规则时同时更新证据和回归。
+
+主要 Unity package 版本以 `Packages/manifest.json` 为准；项目使用 URP 17.6、Input System 1.20、2D Animation 16、Pixel Perfect 6、UGUI 2.6 等 Unity 6 包。
+
+## 文档入口
+
+| 文档 | 用途 |
+| --- | --- |
+| [`TODO.md`](TODO.md) | 历史开发里程碑与持续记录 |
+| [`Docs/OriginalParity/README.md`](Docs/OriginalParity/README.md) | 当前原版一致性审计入口 |
+| [`Docs/OriginalParity/TODO.md`](Docs/OriginalParity/TODO.md) | 一致性工作的执行清单 |
+| [`Docs/OriginalParity/REPLICATION_STANDARD.md`](Docs/OriginalParity/REPLICATION_STANDARD.md) | Flash → Unity 复刻标准和完成门槛 |
+| [`Docs/OriginalParity/Specs`](Docs/OriginalParity/Specs) | 回合、UI、角色、武器、空投、HUD 等行为规格 |
+| [`Docs/ReverseEngineering/Swf/README.md`](Docs/ReverseEngineering/Swf/README.md) | SWF 反编译产物与复现方式 |
+| [`Docs/ReverseEngineering/AS2/README.md`](Docs/ReverseEngineering/AS2/README.md) | AS2 类树、方法、引用与 game-flow |
+| [`Docs/ReverseEngineering/Art/README.md`](Docs/ReverseEngineering/Art/README.md) | 美术时间轴、注册点和导出清单 |
+| [`Docs/LevelScan/README.md`](Docs/LevelScan/README.md) | 18 关 XML 扫描结果 |
+| [`Docs/Verification`](Docs/Verification) | 关卡与核心系统回归报告 |
+| [`Docs/Modules`](Docs/Modules) | 物理、武器、回合模块说明 |
+| [`Docs/GM_COMMANDS.md`](Docs/GM_COMMANDS.md) | GM 调试命令 |
+| [`Docs/ART_PIVOT_AND_OFFSET_BUGS.md`](Docs/ART_PIVOT_AND_OFFSET_BUGS.md) | Flash 注册点 / Unity 偏移类问题记录 |
+
+## 维护约定
+
+- README 描述 **当前可运行架构与入口**，不要再写成一次性的早期开发计划。
+- `Docs/OriginalParity/TODO.md` 是当前一致性工作的执行队列；Specs 保存详细规则和证据。
+- 修改核心规则时同步更新对应规格、验证和必要的 TODO/审计记录。
+- 不因为存在同名 C# 类、资源已导入或编译成功就宣布某功能“与原版一致”。
+- 原版资源转换时保留来源 symbol、帧、注册点、矩阵或可追溯映射。
+
+## 原版资源与版权说明
+
+本项目中的原版代码线索、图像、声音、关卡和游戏设计来源于 Nitrome 的《Mutiny》材料。此仓库的逆向、索引和重构文档用于技术研究与复刻开发；仓库内容本身不表示已经取得原作资源的商业使用、再发布或其他授权。
