@@ -7,8 +7,8 @@ import re
 from collections import defaultdict
 
 PROJECT = pathlib.Path(__file__).resolve().parents[2]
-INPUT = PROJECT / 'Docs/ReverseEngineering/Swf/deobfuscated/scripts'
-OUTPUT = PROJECT / 'Docs/ReverseEngineering/AS2'
+INPUT = PROJECT / 'Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts'
+OUTPUT = PROJECT / 'Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/AS2'
 
 
 def mask(text):

@@ -59,6 +59,69 @@ namespace Mutiny.Simulation
         }
     }
 
+    /// <summary>
+    /// Level-scoped equivalent of the Flash Controller.boxes array. Every placed
+    /// BoxWeapon subtype shares this collection, so characters and projectiles see
+    /// crates and barrels as the same kind of Solid terrain obstacle.
+    /// </summary>
+    public static class MutinyBoxRegistry
+    {
+        private static readonly List<MutinyPhysicsBody> Bodies = new();
+
+        public static int Count
+        {
+            get
+            {
+                PruneDestroyedBodies();
+                return Bodies.Count;
+            }
+        }
+
+        public static void Register(MutinyPhysicsBody body)
+        {
+            if (body != null && !Bodies.Contains(body))
+                Bodies.Add(body);
+        }
+
+        public static void Unregister(MutinyPhysicsBody body)
+        {
+            if (body != null)
+                Bodies.Remove(body);
+        }
+
+        public static List<PhysicsBoxObstacle> GetObstacles(MutinyPhysicsBody requester = null)
+        {
+            PruneDestroyedBodies();
+            var obstacles = new List<PhysicsBoxObstacle>(Bodies.Count);
+            for (int i = 0; i < Bodies.Count; i++)
+            {
+                MutinyPhysicsBody body = Bodies[i];
+                if (body != requester)
+                    obstacles.Add(new PhysicsBoxObstacle(body, body.State));
+            }
+            return obstacles;
+        }
+
+        /// <summary>
+        /// Called synchronously at the level lifecycle boundary. Unity destroys the
+        /// previous level at end-of-frame, so waiting for OnDestroy would allow its
+        /// boxes to leak into the newly built level for one frame.
+        /// </summary>
+        public static void ResetForLevel()
+        {
+            Bodies.Clear();
+        }
+
+        private static void PruneDestroyedBodies()
+        {
+            for (int i = Bodies.Count - 1; i >= 0; i--)
+            {
+                if (Bodies[i] == null)
+                    Bodies.RemoveAt(i);
+            }
+        }
+    }
+
     public struct StepResult
     {
         public bool HitFloor;
@@ -134,6 +197,7 @@ namespace Mutiny.Simulation
             int maxGridRow = (int)Mathf.Floor((endY + body.BottomExtent * stepY) / 32f);
 
             bool hitY = false;
+            bool targetYFromBox = false;
             float targetY = body.Y;
 
             // 1. Vertical Movement & Collision
@@ -197,6 +261,7 @@ namespace Mutiny.Simulation
                             {
                                 targetY = candidateY;
                                 hitY = true;
+                                targetYFromBox = true;
                             }
                         }
                         else
@@ -208,6 +273,7 @@ namespace Mutiny.Simulation
                             {
                                 targetY = candidateY;
                                 hitY = true;
+                                targetYFromBox = true;
                             }
                         }
                     }
@@ -215,6 +281,21 @@ namespace Mutiny.Simulation
 
                 if (hitY)
                 {
+                    // A box candidate can point back through the body's starting
+                    // position when an explosion or a corner contact has already
+                    // left the two AABBs slightly overlapped. Flash applies that
+                    // candidate directly; in Unity it can put the character into
+                    // the supporting tile beneath a settled box. Keep the original
+                    // axis start whenever the box correction would create a new
+                    // terrain overlap. The contact/bounce still resolves this tick.
+                    if (targetYFromBox && body.HitsTiles &&
+                        WouldOverlapSolidTerrain(
+                            body.X, targetY, body,
+                            terrainGrid, gridWidth, gridHeight))
+                    {
+                        targetY = startY;
+                    }
+
                     body.VelocityY *= -body.Bounce;
                     body.Y = targetY;
 
@@ -240,6 +321,7 @@ namespace Mutiny.Simulation
 
             // 2. Horizontal Movement & Collision
             bool hitX = false;
+            bool targetXFromBox = false;
             float targetX = body.X;
 
             if (body.VelocityX != 0f)
@@ -303,6 +385,7 @@ namespace Mutiny.Simulation
                             {
                                 targetX = candidateX;
                                 hitX = true;
+                                targetXFromBox = true;
                                 result.HitRightWall = true;
                             }
                         }
@@ -315,6 +398,7 @@ namespace Mutiny.Simulation
                             {
                                 targetX = candidateX;
                                 hitX = true;
+                                targetXFromBox = true;
                                 result.HitLeftWall = true;
                             }
                         }
@@ -323,6 +407,14 @@ namespace Mutiny.Simulation
 
                 if (hitX)
                 {
+                    if (targetXFromBox && body.HitsTiles &&
+                        WouldOverlapSolidTerrain(
+                            targetX, body.Y, body,
+                            terrainGrid, gridWidth, gridHeight))
+                    {
+                        targetX = startX;
+                    }
+
                     body.VelocityX *= -0.4f; // Fixed Flash wall bounce
                     body.X = targetX;
                 }
@@ -350,6 +442,38 @@ namespace Mutiny.Simulation
                 return false;
 
             return true;
+        }
+
+        private static bool WouldOverlapSolidTerrain(
+            float x,
+            float y,
+            PhysicsBodyState body,
+            string[,] terrainGrid,
+            int gridWidth,
+            int gridHeight)
+        {
+            if (terrainGrid == null || gridWidth <= 0 || gridHeight <= 0)
+                return false;
+
+            // Treat an exact edge contact as clear. Collision corrections retain a
+            // 0.1 px separation, while this smaller inset only avoids assigning an
+            // AABB edge to the tile on the far side of that edge.
+            const float edgeInset = 0.001f;
+            int leftCol = (int)Mathf.Floor((x - body.LeftExtent + edgeInset) / 32f);
+            int rightCol = (int)Mathf.Floor((x + body.RightExtent - edgeInset) / 32f);
+            int topRow = (int)Mathf.Floor((y - body.TopExtent + edgeInset) / 32f);
+            int bottomRow = (int)Mathf.Floor((y + body.BottomExtent - edgeInset) / 32f);
+
+            for (int row = topRow; row <= bottomRow; row++)
+            {
+                for (int column = leftCol; column <= rightCol; column++)
+                {
+                    if (IsSolidTile(terrainGrid, column, row, gridWidth, gridHeight))
+                        return true;
+                }
+            }
+
+            return false;
         }
 
         public static List<Vector2> SimulateTrajectory(PhysicsBodyState initialState, string[,] terrainGrid, int gridWidth, int gridHeight, int maxSteps = 60)

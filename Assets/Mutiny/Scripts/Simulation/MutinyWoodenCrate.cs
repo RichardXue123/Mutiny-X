@@ -14,12 +14,16 @@ namespace Mutiny.Simulation
         public override bool AdvancesMotionWhileReady => false;
         // BoxWeapon constructor omits show(); each legal place() reveals one box.
         public override bool IsBodyVisibleWhileReady => false;
+        // Original BoxWeapon waits indefinitely for every remaining placement.
+        // The Unity stuck-projectile watchdog must never expire this input state.
+        public override bool CanExpireFromTurnSafetyTimeout => false;
 
         public const float LeftExtentPixels = 16f;
         public const float RightExtentPixels = 15f;
         public const int OriginalPlacementCount = 3;
+        public const int OriginalExplodeFirstFrame = 11;
+        public const int OriginalDestroyFrame = 18;
 
-        private static readonly List<MutinyWoodenCrate> PlacedCrates = new();
         private readonly List<Sprite> m_Frames = new();
         private MutinyWoodenCrate m_NextBox;
         private MutinyWoodenCrate m_ParentBox;
@@ -33,7 +37,9 @@ namespace Mutiny.Simulation
         public bool HasPlacedAny => IsFired;
         public bool HasPendingPlacement => !IsFinished && FindPendingBox() != null;
         public bool IsExploding => m_IsExploding;
-        public int PlacedCount => CountPlaced(this);
+        public int PlacedCount => CountPlaced(GetRootBox());
+        internal int TimelineFrameForVerification => m_AnimationFrame + 1;
+        internal bool IsVisibleForVerification => SpriteRenderer != null && SpriteRenderer.enabled;
 
         protected override void Awake()
         {
@@ -67,7 +73,7 @@ namespace Mutiny.Simulation
             m_IsExploding = false;
             m_AnimationAccumulator = 0f;
             m_AnimationFrame = 0;
-            SetVisible(true);
+            SetVisible(false);
         }
 
         /// <summary>Routes a stage click to the first unplaced BoxWeapon child.</summary>
@@ -87,6 +93,13 @@ namespace Mutiny.Simulation
             if (firstPlacement)
                 FindAnyObjectByType<MutinyTurnManager>()?.NotifyActionStarted();
             return true;
+        }
+
+        /// <summary>Checks the same pending chain node that will receive the next click.</summary>
+        public bool CanPlaceNext(Vector2 pixelPosition)
+        {
+            MutinyWoodenCrate pending = FindPendingBox();
+            return pending != null && pending.CanPlace(pixelPosition);
         }
 
         /// <summary>Original BoxWeapon.canPlace, retaining raw pixel coordinates.</summary>
@@ -122,6 +135,8 @@ namespace Mutiny.Simulation
                 {
                     if (IsSolidTile(terrain, x, y, gridWidth, gridHeight))
                     {
+                        // Original canPlace accepts the first supporting column;
+                        // the complete box width does not need ground beneath it.
                         foundSolid = true;
                         break;
                     }
@@ -133,12 +148,10 @@ namespace Mutiny.Simulation
                 }
             }
 
-            for (int i = PlacedCrates.Count - 1; i >= 0; i--)
+            List<PhysicsBoxObstacle> boxes = MutinyBoxRegistry.GetObstacles(PhysicsBody);
+            for (int i = 0; i < boxes.Count; i++)
             {
-                MutinyWoodenCrate box = PlacedCrates[i];
-                if (box == null || !box.m_IsRegistered || box.PhysicsBody == null)
-                    continue;
-                PhysicsBodyState other = box.PhysicsBody.State;
+                PhysicsBodyState other = boxes[i].State;
                 if (other.X - other.LeftExtent <= px + LeftExtentPixels &&
                     other.X + other.RightExtent >= px - RightExtentPixels &&
                     other.Y + other.BottomExtent >= py - RightExtentPixels)
@@ -187,23 +200,12 @@ namespace Mutiny.Simulation
             m_IsExploding = true;
             if (PhysicsBody != null)
                 PhysicsBody.IsActive = false;
-            // `explode` is a timeline label. Frame 1 is the static crate; the later
-            // frames are retained as the destruction sequence pending label timing.
-            m_AnimationFrame = Mathf.Min(1, m_Frames.Count - 1);
+            // Symbol 965 holds the intact box on frames 1..10. BoxWeapon.explode
+            // removes the Solid from Controller.boxes, then gotoAndPlay("explode")
+            // jumps directly to the label on frame 11 in the same hit callback.
+            m_AnimationFrame = Mathf.Min(OriginalExplodeFirstFrame - 1, m_Frames.Count - 1);
             ApplyFrame();
             MutinyDebugLog.Info("WoodenCrate", $"exploded pos={PhysicsBody?.State.X:F1},{PhysicsBody?.State.Y:F1}", this);
-        }
-
-        public static List<PhysicsBoxObstacle> GetPhysicsObstacles(MutinyPhysicsBody requester)
-        {
-            var obstacles = new List<PhysicsBoxObstacle>(PlacedCrates.Count);
-            for (int i = 0; i < PlacedCrates.Count; i++)
-            {
-                MutinyWoodenCrate crate = PlacedCrates[i];
-                if (crate != null && crate.m_IsRegistered && crate.PhysicsBody != null)
-                    obstacles.Add(new PhysicsBoxObstacle(crate.PhysicsBody, crate.PhysicsBody.State));
-            }
-            return obstacles;
         }
 
         protected override void Update()
@@ -221,6 +223,14 @@ namespace Mutiny.Simulation
             return m_NextBox != null ? m_NextBox.FindPendingBox() : null;
         }
 
+        private MutinyWoodenCrate GetRootBox()
+        {
+            MutinyWoodenCrate root = this;
+            while (root.m_ParentBox != null)
+                root = root.m_ParentBox;
+            return root;
+        }
+
         private void Place(Vector2 pixelPosition)
         {
             transform.position = MutinyPhysics.PixelToUnity(pixelPosition.x, pixelPosition.y);
@@ -233,7 +243,7 @@ namespace Mutiny.Simulation
             SetVisible(true);
             if (!m_IsRegistered)
             {
-                PlacedCrates.Add(this);
+                MutinyBoxRegistry.Register(PhysicsBody);
                 m_IsRegistered = true;
             }
             if (Owner != null)
@@ -308,19 +318,30 @@ namespace Mutiny.Simulation
             while (m_AnimationAccumulator >= MutinyPhysics.TimeStep)
             {
                 m_AnimationAccumulator -= MutinyPhysics.TimeStep;
-                m_AnimationFrame++;
-                if (m_AnimationFrame >= m_Frames.Count)
-                {
-                    // BoxWeapon.explode only changes the movie-clip timeline; it
-                    // deliberately leaves the chain alive so later crates can still
-                    // be placed. The completed final box may now be destroyed.
-                    SetVisible(false);
-                    if (IsFinished)
-                        Destroy(gameObject);
-                    return;
-                }
-                ApplyFrame();
+                AdvanceExplosionTimelineFrame();
             }
+        }
+
+        private void AdvanceExplosionTimelineFrame()
+        {
+            m_AnimationFrame++;
+            if (m_Frames.Count == 0 || m_AnimationFrame >= OriginalDestroyFrame - 1)
+            {
+                // Frame 18 runs cl.destroy(). Keep an unfinished logical parent
+                // alive only so its pending BoxWeapon child can finish placement;
+                // visually and physically the destroyed crate is already gone.
+                SetVisible(false);
+                if (IsFinished)
+                    Destroy(gameObject);
+                return;
+            }
+            ApplyFrame();
+        }
+
+        internal void AdvanceExplosionTimelineFrameForVerification()
+        {
+            if (m_IsExploding)
+                AdvanceExplosionTimelineFrame();
         }
 
         private void ApplyFrame()
@@ -339,7 +360,7 @@ namespace Mutiny.Simulation
         {
             if (!m_IsRegistered)
                 return;
-            PlacedCrates.Remove(this);
+            MutinyBoxRegistry.Unregister(PhysicsBody);
             m_IsRegistered = false;
         }
 

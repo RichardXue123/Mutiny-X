@@ -12,9 +12,9 @@ from collections import Counter
 
 PROJECT = pathlib.Path(__file__).resolve().parents[2]
 WORKSPACE = PROJECT.parent
-OUTPUT = PROJECT / 'Docs/ReverseEngineering/Art'
+OUTPUT = PROJECT / 'Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Art'
 SWF = WORKSPACE / 'Mutiny Source/mutiny-flash-game/mutiny.swf'
-SWF_XML = PROJECT / 'Docs/ReverseEngineering/Swf/mutiny.swf.xml'
+SWF_XML = PROJECT / 'Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/mutiny.swf.xml'
 
 
 def main():

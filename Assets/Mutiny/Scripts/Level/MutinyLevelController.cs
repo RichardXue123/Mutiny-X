@@ -198,6 +198,10 @@ namespace Mutiny.Levels
         [ContextMenu("Clear Level")]
         public void ClearLevel()
         {
+            // Clear gameplay state immediately; do not wait for delayed OnDestroy
+            // callbacks from objects under the previous level root.
+            MutinyBoxRegistry.ResetForLevel();
+
             if (m_CurrentLevel != null)
             {
 #if UNITY_EDITOR

@@ -47,6 +47,8 @@ namespace Mutiny.Simulation
         public override void Initialize(MutinyCharacter owner)
         {
             base.Initialize(owner);
+            // VoodooDoll.as constructor: hitsBoxes = true.
+            PhysicsBody.State.HitsBoxes = true;
             TargetCharacter = null;
             m_FramesOnThis = OriginalOwnerFlightTicks;
             m_FramesOnTarget = OriginalTargetWaitTicks;

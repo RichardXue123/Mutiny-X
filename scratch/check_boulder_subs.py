@@ -1,13 +1,13 @@
 import csv
 
 for sym in ['869', '870', '871', '872']:
-    with open('Docs/ReverseEngineering/Art/symbols.csv', 'r', encoding='utf-8') as f:
+    with open('Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Art/symbols.csv', 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
             if row['symbol_id'] == sym:
                 print(f"symbols.csv: Sym {sym}: {row}")
 
-    with open('Docs/ReverseEngineering/Art/sprite-origins.csv', 'r', encoding='utf-8') as f:
+    with open('Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Art/sprite-origins.csv', 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
             if row['symbol_id'] == sym:

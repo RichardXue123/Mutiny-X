@@ -32,6 +32,11 @@ namespace Mutiny.Levels
             if (levelData == null)
                 throw new ArgumentNullException(nameof(levelData));
 
+            // TileSystem.readXML resets Controller.boxes before constructing every
+            // level. Do this synchronously because the prior Unity root is normally
+            // destroyed at end-of-frame during restart/next-level transitions.
+            MutinyBoxRegistry.ResetForLevel();
+
             string rootName = string.IsNullOrEmpty(levelData.Name) || levelData.Name == "undefined"
                 ? "MutinyLevel"
                 : $"MutinyLevel_{levelData.Name}";

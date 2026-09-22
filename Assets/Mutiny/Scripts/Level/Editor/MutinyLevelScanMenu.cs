@@ -11,7 +11,13 @@ namespace Mutiny.Levels.Editor
         public static void ScanAllXml()
         {
             string input = Path.Combine(Application.dataPath, "Mutiny", "Data", "Levels");
-            string output = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Docs", "LevelScan"));
+            string output = Path.GetFullPath(Path.Combine(
+                Application.dataPath,
+                "..",
+                "Docs",
+                "10-OriginalEvidence",
+                "Artifacts",
+                "LevelScan"));
             try
             {
                 MutinyLevelScanResult result = MutinyLevelScanner.Scan(input, output);

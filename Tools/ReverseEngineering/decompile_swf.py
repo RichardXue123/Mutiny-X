@@ -11,7 +11,7 @@ PROJECT = pathlib.Path(__file__).resolve().parents[2]
 WORKSPACE = PROJECT.parent
 SWF = WORKSPACE / 'Mutiny Source/mutiny-flash-game/mutiny.swf'
 TOOLS = WORKSPACE / 'Tools'
-OUTPUT = PROJECT / 'Docs/ReverseEngineering/Swf'
+OUTPUT = PROJECT / 'Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Swf'
 
 
 def audit():

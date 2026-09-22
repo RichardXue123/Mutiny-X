@@ -23,15 +23,30 @@ namespace Mutiny.Presentation
         private Texture2D m_LevelSelectPanel;
         private Texture2D m_GameTypePirates;
         private Texture2D m_ButtonSmall;
+        private Texture2D m_ButtonSmallOver;
         private Texture2D m_ButtonWide;
+        private Texture2D m_ButtonWideOver;
         private Texture2D m_ButtonBack;
+        private Texture2D m_ButtonBackOver;
         private Texture2D m_LevelSlot;
+        private Texture2D m_LevelSlotOver;
+        private Texture2D m_MusicCornerOnUpTexture;
+        private Texture2D m_MusicCornerOnOverTexture;
+        private Texture2D m_MusicCornerOffUpTexture;
+        private Texture2D m_MusicCornerOffOverTexture;
+        private Texture2D m_SfxCornerOnUpTexture;
+        private Texture2D m_SfxCornerOnOverTexture;
+        private Texture2D m_SfxCornerOffUpTexture;
+        private Texture2D m_SfxCornerOffOverTexture;
+        private bool m_MusicHovered;
+        private bool m_SfxHovered;
         private GUIStyle m_ButtonStyle;
         private GUIStyle m_HeadingStyle;
         private GUIStyle m_LevelNumberStyle;
         private GUIStyle m_QuestionStyle;
 
         public MutinyFrontendPage CurrentPage => m_Flow.CurrentPage;
+        public bool AreCornerAudioControlsVisible => m_Flow.CurrentPage != MutinyFrontendPage.Gameplay;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void BootstrapAfterSceneLoad()
@@ -71,11 +86,32 @@ namespace Mutiny.Presentation
             m_LevelSelectPanel = Resources.Load<Texture2D>("UI/Frontend/level_select_panel");
             m_GameTypePirates = Resources.Load<Texture2D>("UI/Frontend/game_type_pirates");
             m_ButtonSmall = Resources.Load<Texture2D>("UI/Frontend/button_small");
+            m_ButtonSmallOver = Resources.Load<Texture2D>("UI/Frontend/button_small_over");
             m_ButtonWide = Resources.Load<Texture2D>("UI/Frontend/button_wide");
+            m_ButtonWideOver = Resources.Load<Texture2D>("UI/Frontend/button_wide_over");
             m_ButtonBack = Resources.Load<Texture2D>("UI/Frontend/button_back");
+            m_ButtonBackOver = Resources.Load<Texture2D>("UI/Frontend/button_back_over");
             m_LevelSlot = Resources.Load<Texture2D>("UI/Frontend/level_slot");
+            m_LevelSlotOver = Resources.Load<Texture2D>("UI/Frontend/level_slot_over");
             for (int i = 0; i < SinglePlayerLevelCount; i++)
                 m_LevelPreviews[i] = Resources.Load<Texture2D>($"UI/Frontend/LevelPreviews/{i + 1:D2}");
+
+            m_MusicCornerOnUpTexture = LoadPointTexture("UI/CornerControls/music_on_up");
+            m_MusicCornerOnOverTexture = LoadPointTexture("UI/CornerControls/music_on_over");
+            m_MusicCornerOffUpTexture = LoadPointTexture("UI/CornerControls/music_off_up");
+            m_MusicCornerOffOverTexture = LoadPointTexture("UI/CornerControls/music_off_over");
+            m_SfxCornerOnUpTexture = LoadPointTexture("UI/CornerControls/sfx_on_up");
+            m_SfxCornerOnOverTexture = LoadPointTexture("UI/CornerControls/sfx_on_over");
+            m_SfxCornerOffUpTexture = LoadPointTexture("UI/CornerControls/sfx_off_up");
+            m_SfxCornerOffOverTexture = LoadPointTexture("UI/CornerControls/sfx_off_over");
+        }
+
+        private static Texture2D LoadPointTexture(string path)
+        {
+            Texture2D texture = Resources.Load<Texture2D>(path);
+            if (texture != null)
+                texture.filterMode = FilterMode.Point;
+            return texture;
         }
 
         private void OnGUI()
@@ -110,6 +146,8 @@ namespace Mutiny.Presentation
                     break;
             }
 
+            DrawCornerAudioControls();
+
             GUI.color = oldColor;
             GUI.matrix = oldMatrix;
         }
@@ -117,15 +155,15 @@ namespace Mutiny.Presentation
         private void DrawTitle()
         {
             DrawTexture(new Rect(54f, 36f, 452f, 154f), m_TitleLogo);
-            if (DrawOriginalButton(new Rect(193f, 187f, 163f, 24f), "play", m_ButtonSmall))
+            if (DrawOriginalButton(new Rect(193f, 187f, 163f, 24f), "play", m_ButtonSmall, m_ButtonSmallOver))
             {
                 m_Flow.PressPlay();
                 LogPage("FRONT-01 play", m_Flow.CurrentPage);
             }
 
-            DrawOriginalButton(new Rect(193f, 216f, 163f, 24f), "scores", m_ButtonSmall);
-            DrawOriginalButton(new Rect(193f, 245f, 163f, 24f), "help", m_ButtonSmall);
-            DrawOriginalButton(new Rect(193f, 274f, 163f, 24f), "credits", m_ButtonSmall);
+            DrawOriginalButton(new Rect(193f, 216f, 163f, 24f), "scores", m_ButtonSmall, m_ButtonSmallOver);
+            DrawOriginalButton(new Rect(193f, 245f, 163f, 24f), "help", m_ButtonSmall, m_ButtonSmallOver);
+            DrawOriginalButton(new Rect(193f, 274f, 163f, 24f), "credits", m_ButtonSmall, m_ButtonSmallOver);
         }
 
         private void DrawGameSelect()
@@ -135,14 +173,14 @@ namespace Mutiny.Presentation
             MutinyBitmapFont.DrawDangleText(new Rect(161f, 76f, 300f, 60f), "click one of the buttons below.||play against the computer or|against a friend!", Color.black, TextAnchor.UpperLeft, 0, 13);
             DrawTexture(new Rect(127f, 169.5f, 345f, 80f), m_GameTypePirates);
 
-            if (DrawOriginalButton(new Rect(63f, 263f, 200f, 24f), "1 player", m_ButtonWide))
+            if (DrawOriginalButton(new Rect(63f, 263f, 200f, 24f), "1 player", m_ButtonWide, m_ButtonWideOver))
             {
                 m_Flow.PressOnePlayer();
                 LogPage("FRONT-02 one player", m_Flow.CurrentPage);
             }
 
-            DrawOriginalButton(new Rect(287f, 263f, 200f, 24f), "2 player", m_ButtonWide);
-            if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "back", m_ButtonBack))
+            DrawOriginalButton(new Rect(287f, 263f, 200f, 24f), "2 player", m_ButtonWide, m_ButtonWideOver);
+            if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
             {
                 m_Flow.PressGameSelectBack();
                 LogPage("FRONT-02 back", m_Flow.CurrentPage);
@@ -161,7 +199,7 @@ namespace Mutiny.Presentation
                 DrawLevelButton(level, new Rect(110f + column * 70f, 68f + row * 90f, 51f, 77f));
             }
 
-            if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "back", m_ButtonBack))
+            if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
             {
                 m_Flow.PressLevelSelectBack();
                 LogPage("FRONT-03 back", m_Flow.CurrentPage);
@@ -174,7 +212,7 @@ namespace Mutiny.Presentation
             bool hovered = unlocked && rect.Contains(GetCanvasMousePosition());
             bool pressed = unlocked && IsPointerDown(rect);
 
-            GUI.color = hovered ? new Color(1f, 0.82f, 0.52f, 1f) : Color.white;
+            GUI.color = Color.white;
             DrawTexture(rect, m_LevelSlot);
 
             Texture2D preview = m_LevelPreviews[level - 1];
@@ -185,6 +223,14 @@ namespace Mutiny.Presentation
             if (unlocked)
             {
                 MutinyBitmapFont.DrawDangleText(new Rect(rect.x, rect.y + 60f, rect.width, 14f), level.ToString("D2"), Color.white, TextAnchor.MiddleCenter);
+                if (hovered && m_LevelSlotOver != null)
+                {
+                    Color prev = GUI.color;
+                    GUI.color = new Color(1f, 1f, 1f, 102f / 255f);
+                    DrawTexture(rect, m_LevelSlotOver);
+                    GUI.color = prev;
+                }
+
                 bool clicked = GUI.Button(rect, GUIContent.none, GUIStyle.none);
                 if ((clicked || pressed) &&
                     m_Flow.TrySelectLevel(level, MutinySaveSystem.IsLevelUnlocked))
@@ -198,12 +244,13 @@ namespace Mutiny.Presentation
             }
         }
 
-        private bool DrawOriginalButton(Rect rect, string text, Texture2D texture, bool activateOnPress = false)
+        private bool DrawOriginalButton(Rect rect, string text, Texture2D texture, Texture2D hoverTexture = null, bool activateOnPress = false)
         {
             bool hovered = rect.Contains(GetCanvasMousePosition());
             bool pressed = activateOnPress && IsPointerDown(rect);
 
-            DrawTexture(rect, texture);
+            Texture2D texToDraw = (hovered && hoverTexture != null) ? hoverTexture : texture;
+            DrawTexture(rect, texToDraw);
             MutinyBitmapFont.DrawPirateText(rect, text, hovered, true, -3);
 
             bool clicked = GUI.Button(rect, GUIContent.none, GUIStyle.none);
@@ -221,9 +268,8 @@ namespace Mutiny.Presentation
         {
             // IMGUI transforms Event.current.mousePosition into the active GUI.matrix
             // coordinate space before controls and custom drawing are evaluated. Applying
-            // GUI.matrix.inverse here transformed the pointer a second time, so the
-            // original Flash-style up/over hit tests almost never matched the drawn
-            // button when the 550x400 canvas was scaled or letterboxed.
+            // ScreenToCanvasPoint or GUI.matrix.inverse here transforms the pointer a second time,
+            // so the original Flash-style up/over hit tests fail when scaled or letterboxed.
             return Event.current != null ? Event.current.mousePosition : Vector2.zero;
         }
 
@@ -265,6 +311,87 @@ namespace Mutiny.Presentation
             MutinyAudioManager.Instance?.PlayMusic("menu_music");
             Debug.Log("[MutinyFrontend] HUD-CORNER-04 back to menu -> level select 1p", this);
             return true;
+        }
+
+        private void DrawCornerAudioControls()
+        {
+            Rect sfxVisualRect = MutinyGameHUD.ResolveOriginalCornerVisualRect(MutinyCornerControl.Sfx);
+            Rect musicVisualRect = MutinyGameHUD.ResolveOriginalCornerVisualRect(MutinyCornerControl.Music);
+            Rect sfxHitRect = MutinyGameHUD.ResolveOriginalCornerHitRect(MutinyCornerControl.Sfx);
+            Rect musicHitRect = MutinyGameHUD.ResolveOriginalCornerHitRect(MutinyCornerControl.Music);
+            MutinyAudioManager audio = MutinyAudioManager.Instance;
+
+            Vector2 mousePosition = GetCanvasMousePosition();
+            bool sfxHovered = MutinyGameHUD.IsCornerHovered(MutinyCornerControl.Sfx, mousePosition, m_SfxHovered);
+            bool musicHovered = MutinyGameHUD.IsCornerHovered(MutinyCornerControl.Music, mousePosition, m_MusicHovered);
+            UpdateCornerHover(ref m_SfxHovered, sfxHovered);
+            UpdateCornerHover(ref m_MusicHovered, musicHovered);
+
+            // Draw unhovered first, hovered last so active tooltip bubble is always on top
+            if (!musicHovered)
+                DrawCornerSprite(musicVisualRect,
+                    ResolveCornerToggleTexture(true, audio != null && audio.MusicEnabled, false), false, MutinyCornerControl.Music);
+            if (!sfxHovered)
+                DrawCornerSprite(sfxVisualRect,
+                    ResolveCornerToggleTexture(false, audio != null && audio.SfxEnabled, false), false, MutinyCornerControl.Sfx);
+
+            if (musicHovered)
+                DrawCornerSprite(musicVisualRect,
+                    ResolveCornerToggleTexture(true, audio != null && audio.MusicEnabled, true), true, MutinyCornerControl.Music);
+            if (sfxHovered)
+                DrawCornerSprite(sfxVisualRect,
+                    ResolveCornerToggleTexture(false, audio != null && audio.SfxEnabled, true), true, MutinyCornerControl.Sfx);
+
+            Rect sfxClickRect = sfxHovered ? sfxVisualRect : sfxHitRect;
+            Rect musicClickRect = musicHovered ? musicVisualRect : musicHitRect;
+
+            if (GUI.Button(sfxClickRect, GUIContent.none, GUIStyle.none))
+                audio?.ToggleSFX();
+            if (GUI.Button(musicClickRect, GUIContent.none, GUIStyle.none))
+                audio?.ToggleMusic();
+        }
+
+        private static void DrawCornerSprite(Rect rect, Texture2D texture, bool hovered, MutinyCornerControl control)
+        {
+            if (texture != null)
+            {
+                DrawTexture(rect, texture);
+            }
+            else if (hovered)
+            {
+                string label = MutinyGameHUD.ResolveOriginalCornerTooltip(control);
+                MutinyGameHUD.DrawCornerTooltipBubble(rect, label);
+            }
+        }
+
+        private void UpdateCornerHover(ref bool previous, bool current)
+        {
+            if (current && !previous)
+                MutinyAudioManager.Instance?.PlaySFX("rollover");
+            previous = current;
+        }
+
+        private Texture2D ResolveCornerToggleTexture(bool isMusic, bool enabled, bool hovered)
+        {
+            MutinyCornerToggleVisualState state = MutinyGameHUD.ResolveCornerToggleVisualState(enabled, hovered);
+            if (isMusic)
+            {
+                switch (state)
+                {
+                    case MutinyCornerToggleVisualState.OnUp: return m_MusicCornerOnUpTexture;
+                    case MutinyCornerToggleVisualState.OnOver: return m_MusicCornerOnOverTexture;
+                    case MutinyCornerToggleVisualState.OffUp: return m_MusicCornerOffUpTexture;
+                    default: return m_MusicCornerOffOverTexture;
+                }
+            }
+
+            switch (state)
+            {
+                case MutinyCornerToggleVisualState.OnUp: return m_SfxCornerOnUpTexture;
+                case MutinyCornerToggleVisualState.OnOver: return m_SfxCornerOnOverTexture;
+                case MutinyCornerToggleVisualState.OffUp: return m_SfxCornerOffUpTexture;
+                default: return m_SfxCornerOffOverTexture;
+            }
         }
 
         private static void DrawTexture(Rect rect, Texture2D texture)

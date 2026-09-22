@@ -111,7 +111,10 @@ namespace Mutiny.Simulation
             MutinyDebugLog.Info("Turn",
                 $"game started active={TeamLabel(CurrentTeam)} phase={CurrentPhase} team1Alive={Team1.AliveCount} team2Alive={Team2.AliveCount}", this);
 
-            Mutiny.Presentation.MutinyAudioManager.Instance?.PlayMusic("game_music");
+            // Music follows the visible front-end page, not the lifetime of a
+            // turn manager that may initialize behind the title screen.
+            // MutinyFrontendController switches to game_music only when the
+            // player actually enters Gameplay.
         }
 
         public void RefreshCharacterCache()
@@ -164,7 +167,7 @@ namespace Mutiny.Simulation
 
         public void AdvanceSimulationTick()
         {
-            bool allAtRest = CheckAllBodiesAtRest(out string restBlocker);
+            bool allAtRest = CheckAllBodiesAtRest(out string restBlocker, out MutinyWeapon blockingWeapon);
 
             if (allAtRest)
             {
@@ -200,20 +203,15 @@ namespace Mutiny.Simulation
                         $"still waiting ticks={m_RestBlockerTicks} {DescribeRestBlocker(restBlocker)}", this);
                 }
 
-                // Safety timeout recovery for stuck weapons (150 ticks = 6.0 seconds)
-                if (m_RestBlockerTicks > 150 && !string.IsNullOrEmpty(restBlocker) && restBlocker.StartsWith("weapon:"))
+                // Unity-only recovery for genuinely stuck weapons (150 ticks = 6.0 seconds).
+                // Apply it only to the exact blocker. Source-authentic long-running weapons
+                // such as Parachute Bomb own their finish conditions and explicitly opt out.
+                if (m_RestBlockerTicks > 150 && blockingWeapon != null &&
+                    blockingWeapon.CanExpireFromTurnSafetyTimeout)
                 {
                     MutinyDebugLog.Warning("Turn", $"force settling stuck weapon blocker: {restBlocker}", this);
-                    var activeWeapons = FindObjectsByType<MutinyWeapon>();
-                    for (int i = 0; i < activeWeapons.Length; i++)
-                    {
-                        var w = activeWeapons[i];
-                        if (w != null && w.IsFired && !w.IsFinished)
-                        {
-                            w.Finish();
-                            Destroy(w.gameObject, 0.1f);
-                        }
-                    }
+                    blockingWeapon.Finish();
+                    Destroy(blockingWeapon.gameObject, 0.1f);
                     m_RestBlockerTicks = 0;
                 }
 
@@ -230,11 +228,13 @@ namespace Mutiny.Simulation
 
         public bool CheckAllBodiesAtRest()
         {
-            return CheckAllBodiesAtRest(out _);
+            return CheckAllBodiesAtRest(out _, out _);
         }
 
-        private bool CheckAllBodiesAtRest(out string blocker)
+        private bool CheckAllBodiesAtRest(out string blocker, out MutinyWeapon blockingWeapon)
         {
+            blockingWeapon = null;
+
             // 1. Check characters
             for (int i = 0; i < m_AllCharacters.Count; i++)
             {
@@ -286,6 +286,7 @@ namespace Mutiny.Simulation
                     continue; // Mine.limitedToTurn=false: an armed idle mine persists across turns.
                 if (w != null && w.IsFired && !w.IsFinished)
                 {
+                    blockingWeapon = w;
                     blocker = $"weapon:{w.WeaponType}/{w.name} fired={w.IsFired} finished={w.IsFinished}";
                     return false;
                 }

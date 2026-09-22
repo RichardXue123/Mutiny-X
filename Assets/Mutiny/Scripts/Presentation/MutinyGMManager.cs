@@ -10,6 +10,12 @@ namespace Mutiny.Presentation
     public sealed class MutinyGMManager : MonoBehaviour
     {
         public static MutinyGMManager Instance { get; private set; }
+        public const float ButtonSize = 60f;
+
+        public static Rect ResolveButtonRect(float screenHeight)
+        {
+            return new Rect(8f, (screenHeight - ButtonSize) * 0.5f, ButtonSize, ButtonSize);
+        }
 
         private bool m_IsOpen = false;
         private string m_InputText = "";
@@ -59,9 +65,9 @@ namespace Mutiny.Presentation
             if (m_CircleNormalTex != null)
                 return;
 
-            const int circleSize = 180;
-            m_CircleNormalTex = CreateCircleTexture(circleSize, new Color(0.2f, 0.2f, 0.2f, 0.70f), new Color(0.6f, 0.6f, 0.6f, 0.85f), 8f);
-            m_CircleHoverTex = CreateCircleTexture(circleSize, new Color(0.35f, 0.35f, 0.35f, 0.90f), new Color(1.0f, 0.85f, 0.3f, 1.0f), 8f);
+            const int circleSize = (int)ButtonSize;
+            m_CircleNormalTex = CreateCircleTexture(circleSize, new Color(0.2f, 0.2f, 0.2f, 0.70f), new Color(0.6f, 0.6f, 0.6f, 0.85f), 3f);
+            m_CircleHoverTex = CreateCircleTexture(circleSize, new Color(0.35f, 0.35f, 0.35f, 0.90f), new Color(1.0f, 0.85f, 0.3f, 1.0f), 3f);
 
             m_PanelBackgroundTex = CreateSolidTexture(new Color(0.08f, 0.09f, 0.12f, 0.90f));
             m_InputBackgroundTex = CreateSolidTexture(new Color(0.15f, 0.16f, 0.20f, 0.95f));
@@ -70,7 +76,7 @@ namespace Mutiny.Presentation
             m_CircleButtonStyle = new GUIStyle
             {
                 alignment = TextAnchor.MiddleCenter,
-                fontSize = 54,
+                fontSize = 18,
                 fontStyle = FontStyle.Bold
             };
             m_CircleButtonStyle.normal.textColor = Color.white;
@@ -128,11 +134,11 @@ namespace Mutiny.Presentation
             GUI.matrix = Matrix4x4.identity;
             GUI.color = Color.white;
 
-            // 1. Draw circular floating GM button on the left vertical center (size scaled 5x from 36 to 180)
-            float btnSize = 180f;
-            float btnX = 8f;
-            float btnY = (Screen.height - btnSize) * 0.5f;
-            Rect buttonRect = new Rect(btnX, btnY, btnSize, btnSize);
+            // 1. Draw circular floating GM button on the left vertical center (reduced to 1/3: 60px)
+            Rect buttonRect = ResolveButtonRect(Screen.height);
+            float btnSize = buttonRect.width;
+            float btnX = buttonRect.x;
+            float btnY = buttonRect.y;
 
             bool isHovered = buttonRect.Contains(Event.current.mousePosition);
             GUI.DrawTexture(buttonRect, isHovered ? m_CircleHoverTex : m_CircleNormalTex);

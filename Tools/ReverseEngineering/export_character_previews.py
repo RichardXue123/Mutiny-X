@@ -4,7 +4,7 @@ import pathlib
 import shutil
 
 PROJECT = pathlib.Path(__file__).resolve().parents[2]
-ART_DIR = PROJECT / 'Docs/ReverseEngineering/Art'
+ART_DIR = PROJECT / 'Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Art'
 RASTER_SPRITES = ART_DIR / 'raster/sprites'
 DEST_DIR = PROJECT / 'Assets/Mutiny/Art/Characters/Preview'
 
@@ -49,4 +49,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

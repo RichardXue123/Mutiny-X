@@ -47,6 +47,8 @@ namespace Mutiny.Simulation
             base.Initialize(owner);
             PhysicsBody.State.Bounce = Bounce;
             PhysicsBody.State.Friction = Friction;
+            // Banana.as constructor: hitsBoxes = true.
+            PhysicsBody.State.HitsBoxes = true;
             m_LastNearestDistanceSquared = float.PositiveInfinity;
             m_PlayerDetonationRequested = false;
             PhysicsBody.OnSimulationStep -= AdvanceOriginalTick;

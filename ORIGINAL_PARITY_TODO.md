@@ -1,6 +1,5 @@
-# Mutiny 原版一致性任务
+# Mutiny 原版一致性入口
 
-新的可持续任务清单位于 [Docs/OriginalParity/TODO.md](Docs/OriginalParity/TODO.md)。
+项目文档已按职责重组，统一入口位于 [Docs/README.md](Docs/README.md)。
 
-旧的 `TODO.md` 记录的是功能是否存在，不能证明行为与原版一致。后续复刻进度以新清单为准；每项只有在原版证据、Unity 实现和验证结果齐全后才会标为完成。
-
+原版证据位于 `Docs/10-OriginalEvidence/`，实际验收与调试记录归入 `Docs/11-VerificationAndDebug/`。后续任务应写入对应模块，不再维护独立的全局复刻 TODO。

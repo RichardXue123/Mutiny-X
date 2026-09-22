@@ -140,10 +140,10 @@ namespace Mutiny.Simulation
             List<PhysicsBoxObstacle> boxes = null;
             if (State.HitsBoxes)
             {
-                // Controller.boxes contains both BoxWeapon subclasses. A barrel must
-                // therefore block tiles, characters, crates, and other barrels alike.
-                boxes = MutinyWoodenCrate.GetPhysicsObstacles(this);
-                boxes.AddRange(MutinyGunpowderBarrel.GetPhysicsObstacles(this));
+                // Controller.boxes is one shared level list in Flash. Querying the
+                // same registry here makes every hitsBoxes Solid (characters and
+                // thrown weapons included) collide with both BoxWeapon subtypes.
+                boxes = MutinyBoxRegistry.GetObstacles(this);
             }
             StepResult result = MutinyPhysics.Step(ref State, m_CachedTerrain, m_GridWidth, m_GridHeight, boxes, this);
 

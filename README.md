@@ -114,7 +114,7 @@ Parser 校验根节点、正整数尺寸与玩家数、层行数、RLE 名称和
 
 ## 批量扫描关卡
 
-在 Unity 菜单选择 **Mutiny → Levels → Scan All XML**。工具读取 `Assets/Mutiny/Data/Levels/level_*.xml`，重新生成 [Docs/LevelScan](Docs/LevelScan/README.md) 下的报告，Console 输出解析数量与错误数量。报告位于 Assets 外，不作为游戏资源导入。
+在 Unity 菜单选择 **Mutiny → Levels → Scan All XML**。工具读取 `Assets/Mutiny/Data/Levels/level_*.xml`，重新生成 [关卡扫描证据](Docs/10-OriginalEvidence/Artifacts/LevelScan/README.md)，Console 输出解析数量与错误数量。报告位于 Assets 外，不作为游戏资源导入。
 
 - `levels.csv`：各关元数据、对象数量、前景与背景种类数及 XML SHA256。
 - `tile-types.csv`、`tile-occurrences.csv`：全部非空标记、出现次数与每次出现的关卡、层、原版坐标。
@@ -126,13 +126,13 @@ Parser 校验根节点、正整数尺寸与玩家数、层行数、RLE 名称和
 
 ## SWF 反编译产物
 
-已完成脚本导出与自动去混淆，阅读入口见 [Docs/ReverseEngineering/Swf](Docs/ReverseEngineering/Swf/README.md)。默认 AS、去混淆 AS 与带 hex 的 pcode 各 494 份，逐路径匹配脚本索引；99 个包脚本恢复类声明。原始 SWF 保持不变。后续分析优先阅读 deobfuscated，重要公式与行为结合 pcode 核对；当前尚未完成规则语义验证或美术音频提取。
+已完成脚本导出与自动去混淆，阅读入口见 [SWF 证据](Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/README.md)。默认 AS、去混淆 AS 与带 hex 的 pcode 各 494 份，逐路径匹配脚本索引；99 个包脚本恢复类声明。原始 SWF 保持不变。后续分析优先阅读 deobfuscated，重要公式与行为结合 pcode 核对；当前尚未完成规则语义验证或美术音频提取。
 
 ## 进度维护
 
-原始美术资源与来源、动画、注册点清单见 [美术导出说明](Docs/ReverseEngineering/Art/README.md)。共保存 7417 PNG 和 6618 SVG；1963 个可绘制符号全部覆盖。资源暂留 Assets 外，下一阶段按 XML 标记筛选并配置 Unity Sprite；脚本驱动动画仍需另行重建。
+原始美术资源与来源、动画、注册点清单见 [美术导出说明](Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Art/README.md)。共保存 7417 PNG 和 6618 SVG；1963 个可绘制符号全部覆盖。资源暂留 Assets 外，下一阶段按 XML 标记筛选并配置 Unity Sprite；脚本驱动动画仍需另行重建。
 
-完整 AS2 类树、方法与依赖索引，以及加载、逐帧更新、回合和武器流程见 [AS2 分析文档](Docs/ReverseEngineering/AS2/README.md)。当前确认 32 像素网格与爆炸动画帧事件；部分反编译循环、空库存行为及 33 关程序与本地 18 XML 的范围差异仍待核对。
+完整 AS2 类树、方法与依赖索引，以及加载、逐帧更新、回合和武器流程见 [AS2 分析文档](Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/AS2/README.md)。当前确认 32 像素网格与爆炸动画帧事件；部分反编译循环、空库存行为及 33 关程序与本地 18 XML 的范围差异仍待核对。
 
 ### 在 Unity 中验证单个关卡
 

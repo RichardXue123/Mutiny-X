@@ -25,6 +25,7 @@ namespace Mutiny.Presentation
         private MutinyLevelRoot m_LevelRoot;
         private MutinyTeam m_PreviousTeam;
         private Transform m_TurnPanTarget;
+        private MutinyWeapon m_TrackedWeapon;
         private Vector2 m_EdgeVelocityPixelsPerSecond;
         private bool m_AirDropCameraWasLocked;
 
@@ -43,7 +44,48 @@ namespace Mutiny.Presentation
 
         public void PanToCharacter(MutinyCharacter character)
         {
+            // PiecesOfEight.next sets track=false before assigning
+            // panToCharacter. Keep that ordering explicit so a resolved coin can
+            // never win FindActionTarget while the camera is returning.
+            m_TrackedWeapon = null;
             m_TurnPanTarget = character != null ? character.transform : null;
+        }
+
+        public void TrackWeapon(MutinyWeapon weapon)
+        {
+            m_TrackedWeapon = weapon;
+            if (weapon != null)
+                m_TurnPanTarget = null;
+        }
+
+        public static void RequestTrackWeapon(MutinyWeapon weapon)
+        {
+            MutinyCameraController[] controllers = FindObjectsByType<MutinyCameraController>();
+            for (int i = 0; i < controllers.Length; i++)
+            {
+                if (controllers[i] != null)
+                    controllers[i].TrackWeapon(weapon);
+            }
+        }
+
+        public static void ReleaseWeaponTracking(MutinyWeapon weapon)
+        {
+            MutinyCameraController[] controllers = FindObjectsByType<MutinyCameraController>();
+            for (int i = 0; i < controllers.Length; i++)
+            {
+                if (controllers[i] != null && controllers[i].m_TrackedWeapon == weapon)
+                    controllers[i].m_TrackedWeapon = null;
+            }
+        }
+
+        public static void RequestPanToCharacter(MutinyCharacter character)
+        {
+            MutinyCameraController[] controllers = FindObjectsByType<MutinyCameraController>();
+            for (int i = 0; i < controllers.Length; i++)
+            {
+                if (controllers[i] != null)
+                    controllers[i].PanToCharacter(character);
+            }
         }
 
         private void LateUpdate()
@@ -120,11 +162,41 @@ namespace Mutiny.Presentation
                 TurnManager.CurrentPhase != TurnPhase.Settling)
                 return null;
 
+            // BoxWeapon.place calls Weapon.place (track=true) and then clears
+            // track again in the same call. While a human waits for the next box,
+            // the original therefore has no action target and falls straight
+            // through to ordinary edge/key scrolling. Resolve this before any
+            // stale explicit target from the preceding action can take priority.
+            if (IsAwaitingPlayerBoxPlacement())
+                return null;
+
+            // Weapon.track in the Flash original belongs to the currently
+            // equipped weapon, not to whichever fired object happens to be found
+            // first in the scene. Pieces of Eight explicitly refreshes this on
+            // every launch and clears it on every intermediate resolution.
+            if (m_TrackedWeapon != null)
+            {
+                if (m_TrackedWeapon.IsFired && !m_TrackedWeapon.IsFinished)
+                    return m_TrackedWeapon.transform;
+                m_TrackedWeapon = null;
+            }
+
+            // During the gap between coins, track=false and panToCharacter owns
+            // the camera. Once that pan completes there must be no action target,
+            // even if the owner is still settling from unrelated motion.
+            if (MutinyPiecesOfEight.HasPlayerAwaitingNextCoin(TurnManager.CurrentTeam))
+                return null;
+
             MutinyWeapon[] weapons = FindObjectsByType<MutinyWeapon>();
             for (int i = 0; i < weapons.Length; i++)
             {
                 if (weapons[i] is MutinyVoodooDoll doll && doll.CameraFocusTarget != null)
                     return doll.CameraFocusTarget;
+                // Cannon.update sets trackX/trackY from its child cannonball in the
+                // Flash game. Keep the placed cannon stationary and follow that
+                // separate projectile directly in Unity.
+                if (weapons[i] is MutinyCannon cannon && cannon.CameraFocusTarget != null)
+                    return cannon.CameraFocusTarget;
                 if (weapons[i] != null && weapons[i].IsFired && !weapons[i].IsFinished)
                     return weapons[i].transform;
             }
@@ -137,6 +209,20 @@ namespace Mutiny.Presentation
                 return selected.transform;
 
             return null;
+        }
+
+        internal Transform FindActionTargetForVerification() => FindActionTarget();
+        internal MutinyWeapon TrackedWeaponForVerification => m_TrackedWeapon;
+        internal void AdvanceCameraForVerification()
+        {
+            EnsureReferences();
+            if (m_TurnPanTarget != null &&
+                PanTowards(m_TurnPanTarget.position, OriginalTrackingPixelsPerTick))
+                m_TurnPanTarget = null;
+        }
+        internal bool CanAcceptManualScrollingForVerification()
+        {
+            return m_TurnPanTarget == null && FindActionTarget() == null && CanUseManualScrolling();
         }
 
         public bool HasReachedVoodooTarget(MutinyCharacter target)
@@ -185,7 +271,7 @@ namespace Mutiny.Presentation
 
         private void AdvanceEdgeScrolling()
         {
-            bool canScroll = TurnManager.CurrentPhase == TurnPhase.TurnActive &&
+            bool canScroll = CanUseManualScrolling() &&
                              TurnManager.CurrentTeam != null &&
                              !TurnManager.CurrentTeam.IsAiControlled &&
                              PlayerInput != null &&
@@ -194,20 +280,36 @@ namespace Mutiny.Presentation
 
             Vector2 direction = Vector2.zero;
             Mouse mouse = Mouse.current;
-            if (canScroll && mouse != null)
+            Keyboard keyboard = Keyboard.current;
+            if (canScroll)
             {
-                Vector2 position = mouse.position.ReadValue();
-                float horizontalEdge = Screen.width * (OriginalEdgePixels / OriginalHorizontalPixels);
-                float verticalEdge = Screen.height * (OriginalEdgePixels / OriginalVerticalPixels);
+                bool scrollLeft = keyboard != null && (keyboard.leftArrowKey.isPressed || keyboard.aKey.isPressed);
+                bool scrollRight = keyboard != null && (keyboard.rightArrowKey.isPressed || keyboard.dKey.isPressed);
+                bool scrollDown = keyboard != null && (keyboard.downArrowKey.isPressed || keyboard.sKey.isPressed);
+                bool scrollUp = keyboard != null && (keyboard.upArrowKey.isPressed || keyboard.wKey.isPressed);
 
-                if (position.x < horizontalEdge)
+                // Mobile builds expose pointer state for touch-driven UI, but
+                // there is no persistent hover cursor. Treating that pointer as
+                // a desktop mouse makes its idle/default position (commonly
+                // 0,0) continuously trigger the left and bottom edge zones.
+                if (ShouldUseMouseEdgeScrolling(Application.isMobilePlatform, mouse != null))
+                {
+                    Vector2 position = mouse.position.ReadValue();
+                    float horizontalEdge = Screen.width * (OriginalEdgePixels / OriginalHorizontalPixels);
+                    float verticalEdge = Screen.height * (OriginalEdgePixels / OriginalVerticalPixels);
+                    scrollLeft |= position.x < horizontalEdge;
+                    scrollRight |= position.x > Screen.width - horizontalEdge;
+                    scrollDown |= position.y < verticalEdge;
+                    scrollUp |= position.y > Screen.height - verticalEdge;
+                }
+
+                if (scrollLeft)
                     direction.x = -1f;
-                else if (position.x > Screen.width - horizontalEdge)
+                if (scrollRight)
                     direction.x = 1f;
-
-                if (position.y < verticalEdge)
+                if (scrollDown)
                     direction.y = -1f;
-                else if (position.y > Screen.height - verticalEdge)
+                if (scrollUp)
                     direction.y = 1f;
             }
 
@@ -224,6 +326,34 @@ namespace Mutiny.Presentation
             positionWorld.x += movementPixels.x / MutinyPhysics.PixelsPerUnit;
             positionWorld.y += movementPixels.y / MutinyPhysics.PixelsPerUnit;
             SetClampedPosition(positionWorld);
+        }
+
+        private bool CanUseManualScrolling()
+        {
+            if (TurnManager == null)
+                return false;
+
+            // The original camera has no blanket ActionExecuting lock. Once a
+            // Pieces of Eight coin resolves, track=false; after panToCharacter
+            // reaches the owner, ordinary edge/key scrolling is available while
+            // the same weapon waits for the next throw.
+            return TurnManager.CurrentPhase == TurnPhase.TurnActive ||
+                   MutinyPiecesOfEight.HasPlayerAwaitingNextCoin(TurnManager.CurrentTeam) ||
+                   IsAwaitingPlayerBoxPlacement();
+        }
+
+        private bool IsAwaitingPlayerBoxPlacement()
+        {
+            return TurnManager != null && TurnManager.CurrentTeam != null &&
+                   !TurnManager.CurrentTeam.IsAiControlled &&
+                   PlayerInput != null && PlayerInput.IsAwaitingBoxPlacement;
+        }
+
+        internal bool CanUseManualScrollingForVerification() => CanUseManualScrolling();
+
+        internal static bool ShouldUseMouseEdgeScrolling(bool isMobilePlatform, bool hasMouse)
+        {
+            return hasMouse && !isMobilePlatform;
         }
 
         private MutinyTreasureChest FindFallingChest()

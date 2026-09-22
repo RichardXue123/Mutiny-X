@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Mutiny.Diagnostics;
+using Mutiny.Presentation;
 using UnityEngine;
 
 namespace Mutiny.Simulation
@@ -10,7 +11,20 @@ namespace Mutiny.Simulation
         public const int IgnoreTicks = 10;
         public const int CountdownTicks = 60;
         public const float TriggerRadiusPixels = 60f;
+        public const int InThrowFrame = 1;
+        public const int ArmStartFrame = 11;
+        public const int ArmStopFrame = 16;
+        public const int WarnStartFrame = 21;
+        public const int WarnLastVisibleFrame = 29;
         private static readonly int[] BeepTimes = { 0, 15, 30, 38, 45, 49, 53, 55, 57, 59 };
+
+        private enum PresentationState
+        {
+            InThrow,
+            Arming,
+            Armed,
+            Warning
+        }
 
         private readonly List<Sprite> m_Frames = new();
         private int m_IgnoreTicks;
@@ -19,11 +33,16 @@ namespace Mutiny.Simulation
         private bool m_Stored;
         private bool m_Active;
         private bool m_Exploded;
+        private PresentationState m_PresentationState;
+        private int m_AnimationFrame;
 
         public bool IsStored => m_Stored;
         public bool IsActive => m_Active;
         public int CountdownRemaining => m_Countdown;
         public bool BlocksTurn => !m_Stored || m_Active;
+        public int CurrentAnimationFrame => m_AnimationFrame + 1;
+        public bool IsArmingAnimation => m_PresentationState == PresentationState.Arming;
+        public bool IsWarningAnimation => m_PresentationState == PresentationState.Warning;
 
         public static readonly Vector2 OriginalPivot = new Vector2(18f / 38f, 17f / 35f); // Symbol 1024: origin (18, 18) of 38x35
 
@@ -64,6 +83,8 @@ namespace Mutiny.Simulation
             m_Countdown = CountdownTicks;
             m_NextBeepIndex = 0;
             m_Stored = m_Active = m_Exploded = false;
+            m_PresentationState = PresentationState.InThrow;
+            SetAnimationFrame(InThrowFrame);
         }
 
         protected override void Update()
@@ -79,6 +100,8 @@ namespace Mutiny.Simulation
             if (!IsFired || IsFinished || PhysicsBody == null)
                 return;
 
+            AdvancePresentationTick();
+
             if (!m_Active)
                 CheckForProximity();
 
@@ -86,6 +109,8 @@ namespace Mutiny.Simulation
             if (!m_Stored && state.VelocityX == 0f && Mathf.Abs(state.VelocityY) < 0.2f)
             {
                 m_Stored = true;
+                if (!m_Active)
+                    StartArmAnimation();
                 MutinyDebugLog.Info("Mine", "stored and armed", this);
             }
 
@@ -119,19 +144,111 @@ namespace Mutiny.Simulation
                     MutinyCharacter character = characters[j];
                     if (character == null || !character.IsAlive || character.PhysicsBody == null)
                         continue;
-                    PhysicsBodyState target = character.PhysicsBody.State;
-                    bool stationary = target.VelocityX == 0f && Mathf.Abs(target.VelocityY) <= 0.2f;
-                    if (stationary) continue;
-                    float dx = target.X - PhysicsBody.State.X;
-                    float dy = target.Y + target.BottomExtent - PhysicsBody.State.Y;
-                    if (dx * dx + dy * dy < TriggerRadiusPixels * TriggerRadiusPixels)
-                    {
-                        m_Active = true;
-                        MutinyDebugLog.Info("Mine", $"warn triggered by={character.name}", this);
+                    if (TryActivateForCharacter(character, IsCharacterSelfThrowAiming(character)))
                         return;
-                    }
                 }
             }
+        }
+
+        /// <summary>
+        /// TileSystem.mouseDown assigns Controller.twanging before Controller advances
+        /// stored mines. Notify the mines from that same production input transition
+        /// so activation is not dependent on Unity component Update ordering.
+        /// </summary>
+        public static bool NotifyCharacterBeganSelfThrowAim(MutinyCharacter character)
+        {
+            bool activated = false;
+            MutinyMine[] mines = FindObjectsByType<MutinyMine>();
+            for (int i = 0; i < mines.Length; i++)
+            {
+                MutinyMine mine = mines[i];
+                if (mine != null && mine.m_IgnoreTicks <= 0)
+                    activated |= mine.TryActivateForCharacter(character, true);
+            }
+            return activated;
+        }
+
+        private bool TryActivateForCharacter(MutinyCharacter character, bool isSelfThrowAiming)
+        {
+            if (!IsFired || m_Active || m_Exploded || character == null ||
+                !character.IsAlive || character.PhysicsBody == null)
+                return false;
+
+            PhysicsBodyState target = character.PhysicsBody.State;
+            bool stationary = target.VelocityX == 0f && Mathf.Abs(target.VelocityY) <= 0.2f;
+            // Mine.as: an otherwise stationary character is ignored only when it
+            // is not Controller.twanging. Pulling Throw Self therefore qualifies.
+            if (stationary && !isSelfThrowAiming)
+                return false;
+
+            float dx = target.X - PhysicsBody.State.X;
+            float dy = target.Y + target.BottomExtent - PhysicsBody.State.Y;
+            if (dx * dx + dy * dy >= TriggerRadiusPixels * TriggerRadiusPixels)
+                return false;
+
+            m_Active = true;
+            StartWarningAnimation();
+            PlayInitialBeep();
+            MutinyDebugLog.Info("Mine",
+                $"warn triggered by={character.name} twanging={isSelfThrowAiming} velocity=({target.VelocityX:F2},{target.VelocityY:F2})",
+                this);
+            return true;
+        }
+
+        private static bool IsCharacterSelfThrowAiming(MutinyCharacter character)
+        {
+            MutinyPlayerInput[] inputs = FindObjectsByType<MutinyPlayerInput>();
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                if (inputs[i] != null && inputs[i].IsCharacterThrowDragInProgress(character))
+                    return true;
+            }
+            return false;
+        }
+
+        private void PlayInitialBeep()
+        {
+            if (m_NextBeepIndex != 0)
+                return;
+            MutinyAudioManager.Instance?.PlaySFX("mine_beep");
+            m_NextBeepIndex = 1;
+        }
+
+        private void StartArmAnimation()
+        {
+            m_PresentationState = PresentationState.Arming;
+            SetAnimationFrame(ArmStartFrame);
+        }
+
+        private void StartWarningAnimation()
+        {
+            m_PresentationState = PresentationState.Warning;
+            SetAnimationFrame(WarnStartFrame);
+        }
+
+        private void AdvancePresentationTick()
+        {
+            if (m_PresentationState == PresentationState.Arming)
+            {
+                if (CurrentAnimationFrame < ArmStopFrame)
+                    SetAnimationFrame(CurrentAnimationFrame + 1);
+                else
+                    m_PresentationState = PresentationState.Armed;
+            }
+            else if (m_PresentationState == PresentationState.Warning)
+            {
+                int next = CurrentAnimationFrame >= WarnLastVisibleFrame
+                    ? WarnStartFrame
+                    : CurrentAnimationFrame + 1;
+                SetAnimationFrame(next);
+            }
+        }
+
+        private void SetAnimationFrame(int oneBasedFrame)
+        {
+            m_AnimationFrame = Mathf.Clamp(oneBasedFrame - 1, 0, Mathf.Max(0, m_Frames.Count - 1));
+            if (SpriteRenderer != null && m_Frames.Count > 0)
+                SpriteRenderer.sprite = m_Frames[m_AnimationFrame];
         }
 
         public void Explode()

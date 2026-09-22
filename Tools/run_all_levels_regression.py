@@ -79,8 +79,8 @@ class Program
         sb.AppendLine($"- **AI 决策与回合闭环**：全部关卡 Team 2 电脑队伍均挂载 AI 决策控制器，具备完整行动能力。");
         sb.AppendLine($"- **关卡解锁与持久化**：存档系统 `MutinySaveSystem` 支持从 Level 1 顺序通关解锁至 Level 18。");
 
-        Directory.CreateDirectory("Docs/Verification");
-        File.WriteAllText("Docs/Verification/full-level-regression.md", sb.ToString(), Encoding.UTF8);
+        Directory.CreateDirectory("Docs/11-VerificationAndDebug/Reports");
+        File.WriteAllText("Docs/11-VerificationAndDebug/Reports/full-level-regression.md", sb.ToString(), Encoding.UTF8);
 
         Console.WriteLine($"REGRESSION COMPLETED: {passed} PASSED, {failed} FAILED.");
         return failed == 0 ? 0 : 1;
@@ -120,4 +120,3 @@ class Program
 
 if __name__ == '__main__':
     run_all_levels_regression()
-

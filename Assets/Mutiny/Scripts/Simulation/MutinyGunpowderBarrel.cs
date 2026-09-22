@@ -15,6 +15,9 @@ namespace Mutiny.Simulation
         public override bool AdvancesMotionWhileReady => false;
         // BoxWeapon constructor omits show(); each legal place() reveals one box.
         public override bool IsBodyVisibleWhileReady => false;
+        // Original BoxWeapon waits indefinitely for the follow-up placement.
+        // The Unity stuck-projectile watchdog must never expire this input state.
+        public override bool CanExpireFromTurnSafetyTimeout => false;
 
         public const float LeftExtentPixels = 16f;
         public const float RightExtentPixels = 15f;
@@ -24,7 +27,6 @@ namespace Mutiny.Simulation
         public const int AiPlaceDelayTicks = 40;
         public const int AiDelayAfterPlaceTicks = 10;
 
-        private static readonly List<MutinyGunpowderBarrel> PlacedCrates = new();
         private readonly List<Sprite> m_Frames = new();
         private MutinyGunpowderBarrel m_NextBox;
         private MutinyGunpowderBarrel m_ParentBox;
@@ -45,7 +47,7 @@ namespace Mutiny.Simulation
         public bool HasPlacedAny => IsFired;
         public bool HasPendingPlacement => !IsFinished && FindPendingBox() != null;
         public bool IsExploding => m_IsExploding;
-        public int PlacedCount => CountPlaced(this);
+        public int PlacedCount => CountPlaced(GetRootBox());
         public int CurrentAnimationFrame => m_AnimationFrame + 1;
         public bool IsAiPlacementActive => m_AiList != null;
 
@@ -86,7 +88,7 @@ namespace Mutiny.Simulation
             m_AiList = null;
             m_AiDelay = 0;
             m_AiDelayAfter = 0;
-            SetVisible(true);
+            SetVisible(false);
         }
 
         /// <summary>Routes a stage click to the first unplaced BoxWeapon child.</summary>
@@ -106,6 +108,13 @@ namespace Mutiny.Simulation
             if (firstPlacement)
                 FindAnyObjectByType<MutinyTurnManager>()?.NotifyActionStarted();
             return true;
+        }
+
+        /// <summary>Checks the same pending chain node that will receive the next click.</summary>
+        public bool CanPlaceNext(Vector2 pixelPosition)
+        {
+            MutinyGunpowderBarrel pending = FindPendingBox();
+            return pending != null && pending.CanPlace(pixelPosition);
         }
 
         /// <summary>Original BoxWeapon.canPlace, retaining raw pixel coordinates.</summary>
@@ -141,6 +150,8 @@ namespace Mutiny.Simulation
                 {
                     if (IsSolidTile(terrain, x, y, gridWidth, gridHeight))
                     {
+                        // Original canPlace accepts the first supporting column;
+                        // the complete barrel width does not need ground beneath it.
                         foundSolid = true;
                         break;
                     }
@@ -152,12 +163,10 @@ namespace Mutiny.Simulation
                 }
             }
 
-            for (int i = PlacedCrates.Count - 1; i >= 0; i--)
+            List<PhysicsBoxObstacle> boxes = MutinyBoxRegistry.GetObstacles(PhysicsBody);
+            for (int i = 0; i < boxes.Count; i++)
             {
-                MutinyGunpowderBarrel box = PlacedCrates[i];
-                if (box == null || !box.m_IsRegistered || box.PhysicsBody == null)
-                    continue;
-                PhysicsBodyState other = box.PhysicsBody.State;
+                PhysicsBodyState other = boxes[i].State;
                 if (other.X - other.LeftExtent <= px + LeftExtentPixels &&
                     other.X + other.RightExtent >= px - RightExtentPixels &&
                     other.Y + other.BottomExtent >= py - RightExtentPixels)
@@ -214,16 +223,9 @@ namespace Mutiny.Simulation
             MutinyDebugLog.Info("GunpowderBarrel", $"exploded pos={PhysicsBody?.State.X:F1},{PhysicsBody?.State.Y:F1}", this);
         }
 
-        public static List<PhysicsBoxObstacle> GetPhysicsObstacles(MutinyPhysicsBody requester)
+        public static List<PhysicsBoxObstacle> GetPhysicsObstacles(MutinyPhysicsBody requester = null)
         {
-            var obstacles = new List<PhysicsBoxObstacle>(PlacedCrates.Count);
-            for (int i = 0; i < PlacedCrates.Count; i++)
-            {
-                MutinyGunpowderBarrel crate = PlacedCrates[i];
-                if (crate != null && crate.m_IsRegistered && crate.PhysicsBody != null)
-                    obstacles.Add(new PhysicsBoxObstacle(crate.PhysicsBody, crate.PhysicsBody.State));
-            }
-            return obstacles;
+            return MutinyBoxRegistry.GetObstacles(requester);
         }
 
         protected override void Update()
@@ -242,6 +244,14 @@ namespace Mutiny.Simulation
             return m_NextBox != null ? m_NextBox.FindPendingBox() : null;
         }
 
+        private MutinyGunpowderBarrel GetRootBox()
+        {
+            MutinyGunpowderBarrel root = this;
+            while (root.m_ParentBox != null)
+                root = root.m_ParentBox;
+            return root;
+        }
+
         private void Place(Vector2 pixelPosition)
         {
             transform.position = MutinyPhysics.PixelToUnity(pixelPosition.x, pixelPosition.y);
@@ -254,7 +264,7 @@ namespace Mutiny.Simulation
             SetVisible(true);
             if (!m_IsRegistered)
             {
-                PlacedCrates.Add(this);
+                MutinyBoxRegistry.Register(PhysicsBody);
                 m_IsRegistered = true;
             }
             if (Owner != null)
@@ -448,7 +458,7 @@ namespace Mutiny.Simulation
         {
             if (!m_IsRegistered)
                 return;
-            PlacedCrates.Remove(this);
+            MutinyBoxRegistry.Unregister(PhysicsBody);
             m_IsRegistered = false;
         }
 

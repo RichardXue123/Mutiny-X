@@ -20,12 +20,19 @@ namespace Mutiny.Simulation
         private static readonly Dictionary<string, Sprite[]> s_FrameCache =
             new Dictionary<string, Sprite[]>(StringComparer.Ordinal);
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            s_FrameCache.Clear();
+        }
+
         private SpriteRenderer m_Renderer;
         private MutinyCharacter m_Character;
         private Sprite[] m_Frames;
         private int m_Frame = IdleFirstFrame;
         private bool m_HitRequested;
         private bool m_PlayingHitRecovery;
+        private int m_HitHoldTicks;
         private float m_TickAccumulator;
 
         internal int CurrentFrame => m_Frame;
@@ -74,6 +81,7 @@ namespace Mutiny.Simulation
             m_Frame = IdleFirstFrame;
             m_HitRequested = false;
             m_PlayingHitRecovery = false;
+            m_HitHoldTicks = 0;
             m_TickAccumulator = 0f;
             ApplyFrame();
             MutinyDebugLog.Info("Animation",
@@ -84,6 +92,7 @@ namespace Mutiny.Simulation
         {
             m_HitRequested = true;
             m_PlayingHitRecovery = false;
+            m_HitHoldTicks = 0;
             m_Frame = HitFirstFrame;
             ApplyFrame();
         }
@@ -93,7 +102,13 @@ namespace Mutiny.Simulation
             if (m_Character == null)
                 m_Character = GetComponent<MutinyCharacter>();
 
-            if (m_Frames == null || m_Frames.Length == 0 || (m_Character != null && !m_Character.IsAlive))
+            if (m_Frames == null || m_Frames.Length == 0)
+            {
+                if (!EnsureInitialized())
+                    return;
+            }
+
+            if (m_Character != null && !m_Character.IsAlive)
                 return;
 
             m_TickAccumulator += Time.deltaTime;
@@ -108,8 +123,9 @@ namespace Mutiny.Simulation
         {
             if (m_HitRequested)
             {
+                m_HitHoldTicks++;
                 bool moving = m_Character != null && m_Character.PhysicsBody != null && !m_Character.PhysicsBody.IsAtRest;
-                if (moving)
+                if (moving && m_HitHoldTicks < 50)
                 {
                     // Character.advance repeatedly jumps to the "hit" label while the
                     // body is moving, holding the first hit pose.
@@ -119,6 +135,7 @@ namespace Mutiny.Simulation
                 {
                     m_HitRequested = false;
                     m_PlayingHitRecovery = true;
+                    m_HitHoldTicks = 0;
                 }
             }
 
@@ -196,7 +213,11 @@ namespace Mutiny.Simulation
             if (string.IsNullOrEmpty(characterType))
                 return Array.Empty<Sprite>();
             if (s_FrameCache.TryGetValue(characterType, out Sprite[] cached) && cached != null && cached.Length > 0)
-                return cached;
+            {
+                if (cached[0] != null)
+                    return cached;
+                s_FrameCache.Remove(characterType);
+            }
 
             Vector2 pivot = GetCharacterPivot(characterType);
             var frameList = new List<Sprite>(OriginalCharacterFrameCount);
@@ -331,9 +352,15 @@ namespace Mutiny.Simulation
             }
         }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            s_Frames = null;
+        }
+
         private static void EnsureFramesLoaded()
         {
-            if (s_Frames != null && s_Frames.Length > 0)
+            if (s_Frames != null && s_Frames.Length > 0 && s_Frames[0] != null)
                 return;
 
             var frameList = new List<Sprite>(OriginalFrameCount);

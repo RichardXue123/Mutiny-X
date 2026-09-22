@@ -79,6 +79,8 @@ namespace Mutiny.Simulation
             PhysicsBody.State.TopExtent = 11f;
             PhysicsBody.State.BottomExtent = 11f;
             PhysicsBody.State.Bounce = 0.2f;
+            // Dynamite.as constructor: hitsBoxes = true.
+            PhysicsBody.State.HitsBoxes = true;
         }
 
         protected override void OnWaterSubmerged()

@@ -178,14 +178,12 @@ namespace Mutiny.Simulation
                 }
             }
 
-            MutinyWeapon[] weapons = FindObjectsByType<MutinyWeapon>();
-            for (int i = 0; i < weapons.Length; i++)
+            List<PhysicsBoxObstacle> boxes = MutinyBoxRegistry.GetObstacles();
+            for (int i = 0; i < boxes.Count; i++)
             {
-                if ((weapons[i] is MutinyWoodenCrate || weapons[i] is MutinyGunpowderBarrel) &&
-                    weapons[i].PhysicsBody != null &&
-                    Mathf.Abs(weapons[i].PhysicsBody.State.X - x) < 32f)
+                if (Mathf.Abs(boxes[i].State.X - x) < 32f)
                 {
-                    blockedBy = $"box:{weapons[i].name}";
+                    blockedBy = $"box:{boxes[i].Body.name}";
                     return false;
                 }
             }

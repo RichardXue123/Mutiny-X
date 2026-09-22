@@ -28,6 +28,22 @@ namespace Mutiny.Simulation
         public bool IsAwaitingNextCoin => !IsFinished && !IsFired && TimesFired > 0 && TimesFired < TotalCoins;
         public bool CanFireNextCoin => !IsFinished && !IsFired && TimesFired < TotalCoins;
 
+        public static bool HasPlayerAwaitingNextCoin(MutinyTeam team)
+        {
+            if (team == null || team.IsAiControlled || team.SelectedCharacter == null)
+                return false;
+
+            MutinyPiecesOfEight[] sequences = FindObjectsByType<MutinyPiecesOfEight>();
+            for (int i = 0; i < sequences.Length; i++)
+            {
+                MutinyPiecesOfEight sequence = sequences[i];
+                if (sequence != null && sequence.IsAwaitingNextCoin &&
+                    sequence.Owner == team.SelectedCharacter)
+                    return true;
+            }
+            return false;
+        }
+
         public static readonly Vector2 OriginalPivot = new Vector2(7f / 15f, 8f / 15f); // Symbol 884: origin (7, 7) of 15x15
 
         protected override void Awake()
@@ -92,6 +108,10 @@ namespace Mutiny.Simulation
             m_OverWater = true;
             m_AiWaitTicks = 0;
             PhysicsBody.IsActive = true;
+            // Weapon.fire sets track=true in the original. Register the exact
+            // reusable coin instance rather than asking the camera to infer it
+            // from an unordered scene-wide weapon scan.
+            MutinyCameraController.RequestTrackWeapon(this);
             MutinyDebugLog.Info("PiecesOfEight",
                 $"coin fired index={TimesFired + 1}/{TotalCoins} velocity=({PhysicsBody.State.VelocityX:F2},{PhysicsBody.State.VelocityY:F2})", this);
         }
@@ -181,6 +201,10 @@ namespace Mutiny.Simulation
                 // Preserve the impact position for the remainder of this tick.
                 PhysicsBody.IsActive = true;
                 Owner.WeaponLocked = true;
+                // Original PiecesOfEight.next clears weapon tracking and assigns
+                // TileSystem.panToCharacter to the owner after coins 1..7.
+                MutinyCameraController.ReleaseWeaponTracking(this);
+                MutinyCameraController.RequestPanToCharacter(Owner);
                 if (TryGetOwnerTeam(out MutinyTeam team) && team.IsAiControlled)
                     m_AiWaitTicks = AiReaimDelayTicks;
 
@@ -190,6 +214,7 @@ namespace Mutiny.Simulation
             }
 
             Finish();
+            MutinyCameraController.ReleaseWeaponTracking(this);
             if (PhysicsBody != null)
                 PhysicsBody.IsActive = false;
             if (SpriteRenderer != null)

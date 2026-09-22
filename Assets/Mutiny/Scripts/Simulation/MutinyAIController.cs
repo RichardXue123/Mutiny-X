@@ -478,21 +478,39 @@ namespace Mutiny.Simulation
             ref int candidateCount)
         {
             // Cannon.randomThrows: choose a point within dragRange / 2 about
-            // owner+(0,-100), then simulate a 30-force weight-zero cannonball.
-            // Cannon.aiPerform later applies that exact placement, angle and vector.
+            // owner+(0,-100), advance the 10px cannon body through Solid collision,
+            // then simulate a 30-force weight-zero cannonball from the corrected spot.
+            // Cannon.aiPerform later repeats the same collision-aware body move.
             Vector2 owner = PositionOf(shooter);
+            List<PhysicsBoxObstacle> placementBoxes = MutinyBoxRegistry.GetObstacles();
             int count = Mathf.Max(0, samples);
             for (int i = 0; i < count; i++)
             {
-                int angle = UnityEngine.Random.Range(0, 360);
+                int placementAngle = UnityEngine.Random.Range(0, 360);
                 float distance = UnityEngine.Random.value * 65f; // Weapon.dragRange / 2
-                float angleRadians = angle * Mathf.Deg2Rad;
-                Vector2 placement = owner + new Vector2(
-                    Mathf.Cos(angleRadians) * distance,
-                    MutinyCannon.PlacementOffsetY + Mathf.Sin(angleRadians) * distance);
-                Vector2 velocity = new Vector2(Mathf.Cos(angleRadians), Mathf.Sin(angleRadians)) * MutinyCannon.FireStrength;
+                float placementRadians = placementAngle * Mathf.Deg2Rad;
+                Vector2 requestedPlacement = owner + new Vector2(
+                    Mathf.Cos(placementRadians) * distance,
+                    MutinyCannon.PlacementOffsetY + Mathf.Sin(placementRadians) * distance);
 
-                PhysicsBodyState ball = PhysicsBodyState.CreateDefault(placement.x, placement.y);
+                // Cannon.randomThrows samples a second independent angle after
+                // resolving placement. The placement direction does not aim the shot.
+                int firingAngle = UnityEngine.Random.Range(0, 360);
+                float firingRadians = firingAngle * Mathf.Deg2Rad;
+                Vector2 velocity = new Vector2(Mathf.Cos(firingRadians), Mathf.Sin(firingRadians)) * MutinyCannon.FireStrength;
+
+                PhysicsBodyState cannonBody = PhysicsBodyState.CreateDefault(
+                    owner.x, owner.y + MutinyCannon.InitialEquipmentOffsetY);
+                cannonBody.Weight = 0f;
+                cannonBody.HitsBoxes = true;
+                cannonBody.LeftExtent = cannonBody.RightExtent =
+                    cannonBody.TopExtent = cannonBody.BottomExtent = 10f;
+                cannonBody.VelocityX = requestedPlacement.x - cannonBody.X;
+                cannonBody.VelocityY = requestedPlacement.y - cannonBody.Y;
+                MutinyPhysics.Step(ref cannonBody, terrainGrid, gridW, gridH, placementBoxes);
+                Vector2 resolvedPlacement = new Vector2(cannonBody.X, cannonBody.Y);
+
+                PhysicsBodyState ball = PhysicsBodyState.CreateDefault(resolvedPlacement.x, resolvedPlacement.y);
                 ball.Weight = 0f;
                 ball.HitsBoxes = true;
                 ball.LeftExtent = ball.RightExtent = ball.TopExtent = ball.BottomExtent = 10f;
@@ -506,8 +524,10 @@ namespace Mutiny.Simulation
                     Character = shooter,
                     WeaponType = "cannon",
                     LaunchVelocity = velocity,
-                    TargetPosition = placement,
-                    CannonRotationDegrees = angle,
+                    // aiPerform receives the requested point and resolves it through
+                    // the live cannon body against the current terrain/boxes again.
+                    TargetPosition = requestedPlacement,
+                    CannonRotationDegrees = firingAngle,
                     Score = score
                 }, ref candidateCount);
             }

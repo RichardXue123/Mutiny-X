@@ -50,6 +50,8 @@ namespace Mutiny.Simulation
         public override void Initialize(MutinyCharacter owner)
         {
             base.Initialize(owner);
+            // RumBottle.as constructor: hitsBoxes = true.
+            PhysicsBody.State.HitsBoxes = true;
             m_CurrentFrame = 0;
             PhysicsBody.OnSimulationStep -= AdvanceOriginalPresentationTick;
             PhysicsBody.OnSimulationStep += AdvanceOriginalPresentationTick;

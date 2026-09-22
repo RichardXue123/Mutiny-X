@@ -526,8 +526,11 @@ namespace Mutiny.Simulation
             float after = MutinyRotationRules.SettleCharacterFloorAngle(before);
             m_RotationState.SetAngle(PhysicsBody.SimulationTickCount, after);
 
-            MutinyDebugLog.Info("Rotation",
-                $"character floor damping tick={PhysicsBody.SimulationTickCount} name={name} angle={before:F2}->{after:F2} vx={PhysicsBody.State.VelocityX:F2}", this);
+            if (!Mathf.Approximately(before, after))
+            {
+                MutinyDebugLog.Info("Rotation",
+                    $"character floor damping tick={PhysicsBody.SimulationTickCount} name={name} angle={before:F2}->{after:F2} vx={PhysicsBody.State.VelocityX:F2}", this);
+            }
 
             if (!Mathf.Approximately(before, 0f) && Mathf.Approximately(after, 0f))
             {

@@ -198,35 +198,30 @@ namespace Mutiny.Simulation
             // Flash Explosion.hit checks every Controller.boxes entry against the
             // nearest point on its asymmetric AABB. Wooden crates remove themselves
             // from that registry when their `explode` timeline starts.
-            var crates = FindObjectsByType<MutinyWoodenCrate>();
-            for (int i = 0; i < crates.Length; i++)
+            List<PhysicsBoxObstacle> boxes = MutinyBoxRegistry.GetObstacles();
+            for (int i = 0; i < boxes.Count; i++)
             {
-                MutinyWoodenCrate crate = crates[i];
-                if (crate == null || !crate.HasPlacedAny || crate.PhysicsBody == null)
+                MutinyPhysicsBody boxBody = boxes[i].Body;
+                if (boxBody == null)
                     continue;
 
-                PhysicsBodyState box = crate.PhysicsBody.State;
+                PhysicsBodyState box = boxes[i].State;
                 float nearestX = Mathf.Clamp(PixelX, box.X - box.LeftExtent, box.X + box.RightExtent);
                 float nearestY = Mathf.Clamp(PixelY, box.Y - box.TopExtent, box.Y + box.BottomExtent);
                 float dx = PixelX - nearestX;
                 float dy = PixelY - nearestY;
-                if (dx * dx + dy * dy <= Radius * Radius)
+                if (dx * dx + dy * dy > Radius * Radius)
+                    continue;
+
+                MutinyWoodenCrate crate = boxBody.GetComponent<MutinyWoodenCrate>();
+                if (crate != null)
                     crate.Explode();
-            }
-
-            var barrels = FindObjectsByType<MutinyGunpowderBarrel>();
-            for (int i = 0; i < barrels.Length; i++)
-            {
-                MutinyGunpowderBarrel barrel = barrels[i];
-                if (barrel == null || !barrel.HasPlacedAny || barrel.PhysicsBody == null)
-                    continue;
-                PhysicsBodyState box = barrel.PhysicsBody.State;
-                float nearestX = Mathf.Clamp(PixelX, box.X - box.LeftExtent, box.X + box.RightExtent);
-                float nearestY = Mathf.Clamp(PixelY, box.Y - box.TopExtent, box.Y + box.BottomExtent);
-                float dx = PixelX - nearestX;
-                float dy = PixelY - nearestY;
-                if (dx * dx + dy * dy <= Radius * Radius)
-                    barrel.Explode();
+                else
+                {
+                    MutinyGunpowderBarrel barrel = boxBody.GetComponent<MutinyGunpowderBarrel>();
+                    if (barrel != null)
+                        barrel.Explode();
+                }
             }
         }
     }

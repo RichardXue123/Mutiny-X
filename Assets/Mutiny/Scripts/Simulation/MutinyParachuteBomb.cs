@@ -24,8 +24,10 @@ namespace Mutiny.Simulation
         // DefineSprite 939: closed frame 1, opening label at frame 11, open label
         // at frame 26, and frame 30 calls gotoAndPlay("open"). Indices are zero-based.
         private const int OriginalFrameCount = 30;
+        private const int ClosedFuseFrameCount = 4;
         private const int OpeningFrameIndex = 10;
         private const int OpenLoopFrameIndex = 25;
+        private const int OpenLoopActionFrameIndex = 29;
 
         private readonly List<Sprite> m_Frames = new List<Sprite>(OriginalFrameCount);
         private int m_FramesFromFire;
@@ -34,12 +36,14 @@ namespace Mutiny.Simulation
         private bool? m_VerificationFanHeld;
         private float m_VerificationMousePixelX;
         private bool m_ChuteOpenedThisTick;
+        private float m_ClosedFuseTickAccumulator;
 
         [Header("Parachute State")]
         public bool ChuteOpen { get; private set; }
         public bool IsFanActive { get; private set; }
         public int FramesFromFire => m_FramesFromFire;
         public int CurrentAnimationFrame => m_CurrentFrame + 1;
+        public override bool CanExpireFromTurnSafetyTimeout => false;
 
         protected override void Awake()
         {
@@ -74,6 +78,7 @@ namespace Mutiny.Simulation
             m_OverWater = true;
             m_VerificationFanHeld = null;
             m_ChuteOpenedThisTick = false;
+            m_ClosedFuseTickAccumulator = 0f;
             ApplyFrame();
         }
 
@@ -104,6 +109,8 @@ namespace Mutiny.Simulation
 
         protected override void Update()
         {
+            AdvanceClosedFusePresentation(Time.deltaTime);
+
             // ParachuteBomb inherits Weapon.advance, whose only lifecycle exits are
             // map-bottom and exact rest. The common Unity water timeout/safety timer
             // would incorrectly remove it or turn a splash into an explosion.
@@ -246,9 +253,62 @@ namespace Mutiny.Simulation
                 return;
 
             m_CurrentFrame++;
-            if (m_CurrentFrame >= OriginalFrameCount)
+            // Frame 30 only contains gotoAndPlay("open"). Flash executes that
+            // action before rendering, so presenting the exported transparent
+            // frame causes the periodic one-tick disappearance seen in Unity.
+            if (m_CurrentFrame >= OpenLoopActionFrameIndex)
                 m_CurrentFrame = OpenLoopFrameIndex;
             ApplyFrame();
+        }
+
+        private void AdvanceClosedFusePresentation(float deltaTime)
+        {
+            if (IsFinished || ChuteOpen || m_Frames.Count == 0)
+                return;
+
+            m_ClosedFuseTickAccumulator += deltaTime;
+            while (m_ClosedFuseTickAccumulator >= MutinyPhysics.TimeStep)
+            {
+                m_ClosedFuseTickAccumulator -= MutinyPhysics.TimeStep;
+                AdvanceClosedFuseFrame();
+            }
+        }
+
+        private void AdvanceClosedFuseFrame()
+        {
+            // The outer parachuteBomb clip stops on frame 1, while its nested
+            // DefineSprite 930 fuse keeps looping through four frames. Composite
+            // exports 1..4 reproduce that nested animation without advancing the
+            // stopped outer timeline into the opening sequence.
+            m_CurrentFrame = (m_CurrentFrame + 1) % ClosedFuseFrameCount;
+            ApplyFrame();
+        }
+
+        internal void AdvanceClosedFuseFrameForVerification()
+        {
+            if (!ChuteOpen && !IsFinished)
+                AdvanceClosedFuseFrame();
+        }
+
+        public static MutinyParachuteBomb FindPlayerActiveFlight(MutinyTeam inputTeam)
+        {
+            if (inputTeam == null || inputTeam.IsAiControlled)
+                return null;
+
+            MutinyParachuteBomb[] bombs = Object.FindObjectsByType<MutinyParachuteBomb>();
+            for (int i = 0; i < bombs.Length; i++)
+            {
+                MutinyParachuteBomb bomb = bombs[i];
+                if (bomb != null && bomb.IsFired && !bomb.IsFinished && bomb.Owner != null &&
+                    inputTeam.Characters.Contains(bomb.Owner))
+                    return bomb;
+            }
+            return null;
+        }
+
+        public static bool HasPlayerActiveFlight(MutinyTeam inputTeam)
+        {
+            return FindPlayerActiveFlight(inputTeam) != null;
         }
 
         public static readonly Vector2 OriginalPivot = new Vector2(18f / 36f, 14f / 60f); // Symbol 939: origin (18, 46) of 36x60

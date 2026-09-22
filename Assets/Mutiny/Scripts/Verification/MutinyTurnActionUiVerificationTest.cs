@@ -54,6 +54,7 @@ namespace Mutiny.Verification
             VerifyLandDeath(result);
             VerifyCharacterTimeline(result);
             VerifyFrontendFlow(result);
+            VerifyAndroidAdaptation(result);
             VerifyBattleHud(result);
             VerifyCornerLevelControls(result);
             VerifyGameEndPopup(result);
@@ -77,6 +78,42 @@ namespace Mutiny.Verification
             VerifyGMManager(result);
             VerifySpritePivots(result);
             return result;
+        }
+
+        private static void VerifyAndroidAdaptation(MutinyLevel1VerificationResult result)
+        {
+            result.Assert(
+                !MutinyCameraController.ShouldUseMouseEdgeScrolling(true, true) &&
+                MutinyCameraController.ShouldUseMouseEdgeScrolling(false, true) &&
+                !MutinyCameraController.ShouldUseMouseEdgeScrolling(false, false),
+                "AND-CAM-01 mobile pointer state cannot trigger desktop hover-edge scrolling");
+
+            MutinyPlayerInput.PointerFrameState began =
+                MutinyPlayerInput.TouchPhaseToPointerStateForVerification(
+                    UnityEngine.InputSystem.TouchPhase.Began);
+            MutinyPlayerInput.PointerFrameState moved =
+                MutinyPlayerInput.TouchPhaseToPointerStateForVerification(
+                    UnityEngine.InputSystem.TouchPhase.Moved);
+            MutinyPlayerInput.PointerFrameState stationary =
+                MutinyPlayerInput.TouchPhaseToPointerStateForVerification(
+                    UnityEngine.InputSystem.TouchPhase.Stationary);
+            MutinyPlayerInput.PointerFrameState ended =
+                MutinyPlayerInput.TouchPhaseToPointerStateForVerification(
+                    UnityEngine.InputSystem.TouchPhase.Ended);
+            MutinyPlayerInput.PointerFrameState canceled =
+                MutinyPlayerInput.TouchPhaseToPointerStateForVerification(
+                    UnityEngine.InputSystem.TouchPhase.Canceled);
+            result.Assert(
+                began.PressedThisFrame && began.IsPressed && !began.ReleasedThisFrame &&
+                !began.CanceledThisFrame && !moved.PressedThisFrame && moved.IsPressed &&
+                stationary.IsPressed && ended.ReleasedThisFrame && !ended.IsPressed &&
+                !canceled.ReleasedThisFrame && canceled.CanceledThisFrame,
+                "AND-INP-01/03 touch phases map to press, hold, release, and non-firing cancellation");
+            result.Assert(
+                MutinyPlayerInput.ShouldAcquireTouchForVerification(false, true) &&
+                !MutinyPlayerInput.ShouldAcquireTouchForVerification(true, true) &&
+                !MutinyPlayerInput.ShouldAcquireTouchForVerification(false, false),
+                "AND-INP-02 only a fresh touch can acquire an otherwise unowned gesture");
         }
 
         public static MutinyLevel1VerificationResult RunBattleHud()
@@ -262,12 +299,20 @@ namespace Mutiny.Verification
                     "WPN-06-INT-02 production click rejects a terrain-overlapping barrel without consuming inventory");
 
                 bool first = input.TryActivateClickWeaponForVerification(character, new Vector2(64f, 96f));
+                bool barrelWaitHasNoSafetyTimeout = !root.CanExpireFromTurnSafetyTimeout;
+                input.UpdateBoxPlacementCursorForVerification(new Vector2(64f, 96f));
+                bool placedRootNowShowsCross = input.SpecialWeaponCursorModeForVerification == "Cross";
+                int countBeforeOverlapClick = root.PlacedCount;
+                bool overlapClickConsumed = input.TryActivateClickWeaponForVerification(
+                    character, new Vector2(64f, 96f));
+                bool overlapClickRejected = overlapClickConsumed && root.PlacedCount == countBeforeOverlapClick;
                 MutinyGunpowderBarrel child = root.NextBox;
                 bool second = input.TryActivateClickWeaponForVerification(character, new Vector2(128f, 96f));
-                result.Assert(first && second && root.PlacedCount == MutinyGunpowderBarrel.OriginalPlacementCount &&
+                result.Assert(first && barrelWaitHasNoSafetyTimeout && placedRootNowShowsCross && overlapClickRejected && second &&
+                              root.PlacedCount == MutinyGunpowderBarrel.OriginalPlacementCount &&
                               child != null && root.IsFinished && !character.HasWeapon("gunpowderBarrel") &&
                               !character.CanThrow && !character.CanShoot && manager.CurrentPhase == TurnPhase.ActionExecuting,
-                    "WPN-06-INT-01/03 production input consumes one inventory item and places exactly two barrels");
+                    "WPN-06-INT-01/03/BOX-PLC-01 cursor and click both reject the placed root, then one inventory item places exactly two barrels");
                 result.Assert(MutinyGunpowderBarrel.GetPhysicsObstacles(null).Count == 2 &&
                               Mathf.Approximately(root.PhysicsBody.State.LeftExtent, 16f) &&
                               Mathf.Approximately(root.PhysicsBody.State.RightExtent, 15f) &&
@@ -310,6 +355,7 @@ namespace Mutiny.Verification
             GameObject characterObject = null;
             GameObject inputObject = null;
             GameObject explosionObject = null;
+            GameObject cameraObject = null;
             try
             {
                 teamObject = new GameObject("WoodenCrateVerification_Team");
@@ -344,35 +390,128 @@ namespace Mutiny.Verification
                     terrain[4, c] = "ground";
                 root.PhysicsBody.SetTerrain(terrain, 12, 6);
 
+                string[,] partialSupportTerrain = new string[6, 12];
+                for (int r = 0; r < 6; r++)
+                    for (int c = 0; c < 12; c++)
+                        partialSupportTerrain[r, c] = "-";
+                // (192,80) spans columns 5..6, but only column 5 has support.
+                partialSupportTerrain[4, 5] = "ground";
+                bool partialSupportIsLegal = root.CanPlace(
+                    new Vector2(192f, 80f), partialSupportTerrain, 12, 6);
+
                 bool illegalClick = input.TryActivateClickWeaponForVerification(character, new Vector2(64f, 112f));
                 result.Assert(selected && illegalClick && root.PlacedCount == 0 && character.HasWeapon("woodenCrate"),
                     "WPN-14-INT-02 production click rejects terrain overlap without consuming the crate inventory");
 
-                bool first = input.TryActivateClickWeaponForVerification(character, new Vector2(64f, 96f));
+                bool first = input.TryActivateClickWeaponForVerification(
+                    character, new Vector2(64f, 96f));
+                for (int waitTick = 0; waitTick <= 150; waitTick++)
+                    manager.AdvanceSimulationTick();
+                bool pendingPlacementSurvivedSafetyThreshold =
+                    !root.CanExpireFromTurnSafetyTimeout &&
+                    !root.IsFinished && root.HasPendingPlacement &&
+                    input.ArmedWoodenCrate == root;
+                cameraObject = new GameObject("WoodenCrateVerification_Camera");
+                cameraObject.AddComponent<Camera>();
+                MutinyCameraController camera = cameraObject.AddComponent<MutinyCameraController>();
+                camera.TurnManager = manager;
+                camera.PlayerInput = input;
+                bool pendingPlacementAllowsManualCamera =
+                    camera.FindActionTargetForVerification() == null &&
+                    camera.CanUseManualScrollingForVerification() &&
+                    camera.CanAcceptManualScrollingForVerification();
+                input.UpdateBoxPlacementCursorForVerification(new Vector2(64f, 96f));
+                bool placedRootNowShowsCross = input.SpecialWeaponCursorModeForVerification == "Cross";
+                int countBeforeInvalidRequest = root.PlacedCount;
+                bool invalidRequestConsumed = input.TryActivateClickWeaponForVerification(
+                    character, new Vector2(64f, 96f));
+                bool invalidRequestPreservedPlacedBoxes = invalidRequestConsumed &&
+                    root.PlacedCount == countBeforeInvalidRequest &&
+                    MutinyBoxRegistry.Count == countBeforeInvalidRequest &&
+                    root.NextBox != null;
+                bool heldButtonCannotRetryPlacement =
+                    !MutinyPlayerInput.ShouldHandleWeaponReadyPrimaryInput(false, true) &&
+                    MutinyPlayerInput.ShouldHandleWeaponReadyPrimaryInput(true, true);
                 bool second = input.TryActivateClickWeaponForVerification(character, new Vector2(96f, 96f));
                 bool third = input.TryActivateClickWeaponForVerification(character, new Vector2(128f, 96f));
-                result.Assert(first && second && third && root.PlacedCount == 3 &&
+                result.Assert(partialSupportIsLegal && first && placedRootNowShowsCross &&
+                              pendingPlacementSurvivedSafetyThreshold &&
+                              pendingPlacementAllowsManualCamera &&
+                              invalidRequestPreservedPlacedBoxes && heldButtonCannotRetryPlacement &&
+                              second && third && root.PlacedCount == 3 &&
                               !character.HasWeapon("woodenCrate") &&
                               !character.CanThrow && !character.CanShoot && manager.CurrentPhase == TurnPhase.ActionExecuting,
-                    "WPN-14-INT-01/03 production selection commits one inventory item and places exactly three raw-coordinate crates");
+                    "WPN-14-INT-01/03/BOX-PLC-01/02/BOX-SUP-01/BOX-WAIT-01/BOX-CAM-01 pending placement survives 150 ticks, permits manual camera scrolling, preserves invalid input, and later valid clicks place exactly three crates");
                 result.Assert(Mathf.Approximately(root.PhysicsBody.State.LeftExtent, 16f) &&
                               Mathf.Approximately(root.PhysicsBody.State.RightExtent, 15f) &&
                               root.PhysicsBody.State.HitsBoxes,
                     "WPN-14-EFF-01 crate retains original 16/15 extents and participates in BoxWeapon collisions");
 
+                // Reproduce the corner case behind characters occasionally being
+                // pushed underground: a settled crate overlaps a floor-standing
+                // character that begins an upward tick. The raw box correction is
+                // y=136, inside terrain row 4; production physics must retain the
+                // terrain-safe axis start while still reporting the ceiling hit.
+                PhysicsBodyState rootStateBeforePenetrationCheck = root.PhysicsBody.State;
+                PhysicsBodyState settledRootState = rootStateBeforePenetrationCheck;
+                settledRootState.Y = 112.9f;
+                root.PhysicsBody.State = settledRootState;
+                PhysicsBodyState pinchedCharacterState = PhysicsBodyState.CreateDefault(64f, 119.9f);
+                pinchedCharacterState.Weight = 0f;
+                pinchedCharacterState.VelocityY = -4f;
+                pinchedCharacterState.HitsBoxes = true;
+                character.PhysicsBody.State = pinchedCharacterState;
+                character.PhysicsBody.SetTerrain(terrain, 12, 6);
+                StepResult pinchedResult = character.PhysicsBody.AdvanceSimulationTick();
+                bool boxCorrectionStayedAboveTerrain =
+                    pinchedResult.HitCeiling &&
+                    Mathf.Approximately(character.PhysicsBody.State.Y, 119.9f) &&
+                    character.PhysicsBody.State.Y + character.PhysicsBody.State.BottomExtent < 128f;
+                root.PhysicsBody.State = rootStateBeforePenetrationCheck;
+                result.Assert(boxCorrectionStayedAboveTerrain,
+                    "BOX-COL-02/CRT-BOX-02 production box correction cannot push an overlapped character into its supporting terrain");
+
                 explosionObject = new GameObject("WoodenCrateVerification_Explosion");
                 MutinyExplosion explosion = explosionObject.AddComponent<MutinyExplosion>();
                 explosion.PixelX = 48f;
-                explosion.PixelY = 96f;
+                explosion.PixelY = 128f;
                 explosion.Radius = 20f;
                 explosion.PlayPopOnHit = false;
+                PhysicsBodyState blastTargetState = character.PhysicsBody.State;
+                blastTargetState.X = 48f;
+                blastTargetState.Y = 112f;
+                blastTargetState.VelocityX = 0f;
+                blastTargetState.VelocityY = 0f;
+                character.PhysicsBody.State = blastTargetState;
+                float targetYBeforeBlastMotion = blastTargetState.Y;
+                int boxesBeforeBlast = MutinyBoxRegistry.Count;
                 explosion.ApplyHit();
-                result.Assert(root.IsExploding && root.NextBox != null && !root.NextBox.IsExploding,
-                    "WPN-14-EFF-02 production explosion uses nearest crate-AABB distance and removes only the in-range crate");
+                bool hitSettledInOriginalOrder =
+                    character.PhysicsBody.State.VelocityY < 0f &&
+                    root.IsExploding &&
+                    root.TimelineFrameForVerification == MutinyWoodenCrate.OriginalExplodeFirstFrame &&
+                    MutinyBoxRegistry.Count == boxesBeforeBlast - 1 &&
+                    root.NextBox != null && !root.NextBox.IsExploding;
+                character.PhysicsBody.AdvanceSimulationTick();
+                root.AdvanceExplosionTimelineFrameForVerification();
+                bool movementAndBreakRunTogether =
+                    character.PhysicsBody.State.Y < targetYBeforeBlastMotion &&
+                    root.TimelineFrameForVerification == MutinyWoodenCrate.OriginalExplodeFirstFrame + 1;
+                for (int frame = MutinyWoodenCrate.OriginalExplodeFirstFrame + 1;
+                     frame < MutinyWoodenCrate.OriginalDestroyFrame;
+                     frame++)
+                {
+                    root.AdvanceExplosionTimelineFrameForVerification();
+                }
+                result.Assert(hitSettledInOriginalOrder && movementAndBreakRunTogether &&
+                              root.TimelineFrameForVerification == MutinyWoodenCrate.OriginalDestroyFrame &&
+                              !root.IsVisibleForVerification,
+                    "CRT-EXP-01/02 frame-3 hit launches the character, unregisters only the struck crate, starts crate frame 11 immediately, and runs movement alongside frames 11..18");
             }
             finally
             {
                 DestroyNow(explosionObject);
+                DestroyNow(cameraObject);
                 DestroyNow(inputObject);
                 DestroyNow(characterObject);
                 DestroyNow(managerObject);
@@ -475,6 +614,12 @@ namespace Mutiny.Verification
                 bool equipmentPosition = cannon != null &&
                     Mathf.Approximately(cannon.PhysicsBody.State.Y, 190f) && cannon.PhysicsBody.State.HitsBoxes;
                 cannon.TryBeginPinDrag(new Vector2(cannon.PhysicsBody.State.X + cannon.PinX, cannon.PhysicsBody.State.Y));
+                cannon.DragPinTo(new Vector2(cannon.PhysicsBody.State.X - 40f, cannon.PhysicsBody.State.Y));
+                cannon.CancelPointer();
+                bool canceledPinDoesNotCommit = !cannon.IsDraggingPin &&
+                    Mathf.Approximately(cannon.PinX, MutinyCannon.PinRestX) &&
+                    owner.CanShoot && owner.CanThrow && manager.CurrentPhase == TurnPhase.TurnActive;
+                cannon.TryBeginPinDrag(new Vector2(cannon.PhysicsBody.State.X + cannon.PinX, cannon.PhysicsBody.State.Y));
                 cannon.DragPinTo(new Vector2(cannon.PhysicsBody.State.X - 30f, cannon.PhysicsBody.State.Y));
                 bool equalThresholdDoesNotCommit = !cannon.ReleasePointer(manager) && owner.CanShoot;
                 cannon.TryBeginPinDrag(new Vector2(cannon.PhysicsBody.State.X + cannon.PinX, cannon.PhysicsBody.State.Y));
@@ -503,10 +648,10 @@ namespace Mutiny.Verification
                                                  aiCannon.Cannonball != null &&
                                                  Mathf.Approximately(aiCannon.Cannonball.PhysicsBody.State.VelocityY, 30f);
                 DestroyNow(aiCannonObject);
-                result.Assert(equipmentPosition && equalThresholdDoesNotCommit && committed &&
+                result.Assert(equipmentPosition && canceledPinDoesNotCommit && equalThresholdDoesNotCommit && committed &&
                               fullForceBall && waitsForCannonballAndFades && finishesAfterBallAndTwentyFadeTicks &&
                               aiWaitsTwentyFourTicks && aiFiresOnTwentyFifthTick,
-                    "WPN-05-INT/ANI/AI production Cannon keeps a 30-force ball above its body, completes its lifecycle, and AI fires after 25 ticks");
+                    "WPN-05-INT/ANI/AI and AND-INP-03 production Cannon cancels without firing, keeps a 30-force ball above its body, completes its lifecycle, and AI fires after 25 ticks");
             }
             finally
             {
@@ -1821,6 +1966,10 @@ namespace Mutiny.Verification
             for (int i = 0; i < WeaponIconResources.Length; i++)
                 AssertTexture(result, $"UI/WeaponIcons/{WeaponIconResources[i]}", 18, 17);
             AssertTexture(result, "UI/weapon_ammo_infinite", 18, 9);
+            AssertTexture(result, "UI/Frontend/button_small_over", 163, 24);
+            AssertTexture(result, "UI/Frontend/button_wide_over", 200, 24);
+            AssertTexture(result, "UI/Frontend/button_back_over", 140, 24);
+            AssertTexture(result, "UI/Frontend/level_slot_over", 51, 77);
             AssertTexture(result, "Art/Effects/Water/1", 1024, 384);
             AssertTexture(result, "Art/Effects/Splash/1", 48, 44);
             result.Assert(Resources.Load<AudioClip>("Audio/SFX/splash") != null,
@@ -2070,6 +2219,11 @@ namespace Mutiny.Verification
                               RectApproximately(MutinyGameHUD.ResolveOriginalTeam2PortraitRect(),
                                   new Rect(505.85f, 337f, 40f, 58f)),
                     "HUD-POS-04 both portraits retain the original offsets from their team panels");
+                result.Assert(
+                    RectApproximately(MutinyGameHUD.ResolveWeaponSlotAmmoNumberRect(0, 0), new Rect(112f, 50f, 24f, 12f)) &&
+                    RectApproximately(MutinyGameHUD.ResolveWeaponSlotInfiniteAmmoRect(0, 0), new Rect(115f, 52f, 18f, 9f)) &&
+                    RectApproximately(MutinyGameHUD.ResolveWeaponSlotInfiniteAmmoRect(4, 2), new Rect(239f, 138f, 18f, 9f)),
+                    "HUD-POS-05 weapon slot ammo text and infinite ammo symbol retain authentic Flash SWF 1831 twip offsets (540-80=460 twips -> y=23px)");
             }
             finally
             {
@@ -2932,6 +3086,9 @@ namespace Mutiny.Verification
                     "GM-03 UnlockWeapons sets ammunition to -1 (infinite) for all weapons");
                 result.Assert(character.CanShoot,
                     "GM-04 UnlockWeapons enables CanShoot on target character");
+                result.Assert(Mathf.Approximately(MutinyGMManager.ButtonSize, 60f) &&
+                              RectApproximately(MutinyGMManager.ResolveButtonRect(400f), new Rect(8f, 170f, 60f, 60f)),
+                    "GM-05 GM button size is 60px (reduced to 1/3 from 180px) and centered on screen height");
             }
             finally
             {

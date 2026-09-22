@@ -6,10 +6,10 @@ import pathlib
 import shutil
 
 PROJECT = pathlib.Path(__file__).resolve().parents[2]
-DOCS = PROJECT / 'Docs'
-ART_DOCS = DOCS / 'ReverseEngineering/Art'
-LEVEL_SCAN = DOCS / 'LevelScan'
-OUTPUT_DOCS = DOCS / 'ReverseEngineering/Tiles'
+EVIDENCE = PROJECT / 'Docs/10-OriginalEvidence/Artifacts'
+ART_DOCS = EVIDENCE / 'ReverseEngineering/Art'
+LEVEL_SCAN = EVIDENCE / 'LevelScan'
+OUTPUT_DOCS = EVIDENCE / 'ReverseEngineering/Tiles'
 ASSETS_TILES = PROJECT / 'Assets/Mutiny/Art/Tiles'
 ASSETS_DATA_TILES = PROJECT / 'Assets/Mutiny/Data/Tiles'
 

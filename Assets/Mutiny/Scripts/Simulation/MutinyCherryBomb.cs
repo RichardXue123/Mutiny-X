@@ -21,6 +21,13 @@ namespace Mutiny.Simulation
             LoadSprites();
         }
 
+        public override void Initialize(MutinyCharacter owner)
+        {
+            base.Initialize(owner);
+            // CherryBomb.as constructor: hitsBoxes = true.
+            PhysicsBody.State.HitsBoxes = true;
+        }
+
         public static readonly Vector2 OriginalPivot = new Vector2(10f / 20f, 10f / 32f); // Symbol 844: origin (10, 22) of 20x32
 
         private void LoadSprites()

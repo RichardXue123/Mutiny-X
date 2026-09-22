@@ -48,6 +48,13 @@ namespace Mutiny.Simulation
         /// </summary>
         public virtual bool IsBodyVisibleWhileReady => true;
 
+        /// <summary>
+        /// Unity keeps a recovery path for genuinely stuck weapon blockers. Long-running
+        /// source-authentic weapons can opt out when their original lifecycle already
+        /// defines the only valid finish conditions.
+        /// </summary>
+        public virtual bool CanExpireFromTurnSafetyTimeout => true;
+
         /// <summary>Matches Controller.twanging == this for pre-fire overrides.</summary>
         public bool IsBeingAimed { get; private set; }
 

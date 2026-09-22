@@ -62,6 +62,8 @@ namespace Mutiny.Simulation
             m_PhysicsBody.State.BottomExtent = OriginalExtent;
             m_PhysicsBody.State.Weight = OriginalWeight;
             m_PhysicsBody.State.HitsTiles = true;
+            // Seagull.as assigns hitsBoxes=true to every spawned fire projectile.
+            m_PhysicsBody.State.HitsBoxes = true;
             m_PhysicsBody.SetVelocity(velocityX, 0f);
 
             if (parent != null && parent.PhysicsBody != null)
