@@ -35,7 +35,7 @@
 | 像素风格 | SWF 矢量/位图组合 | PNG 序列 + `SpriteRenderer`，运行生成 Sprite 时使用 `FilterMode.Point` 与 32 PPU | 大部分已接入 |
 | 角色 | 每种角色 35 帧复合时间轴 | 27 种角色各 35 张 PNG，`MutinyCharacterAnimator` 直接换帧 | 已实现，待 Play Mode |
 | 通用特效 | MovieClip 帧脚本在特定帧调用逻辑 | `MutinyExplosion`、`MutinySplashEffect`、`MutinySweepingFlame` 等各自推进帧序列 | 爆炸/火焰已实现；水花时长有差异 |
-| 世界画面 | 水面颜色标签、背景多层视差、部分地形 MovieClip | `MutinyWaterSurface` 换帧；关卡背景/地形以 SpriteRenderer 组装 | 水面已接入；视差和地形换帧未实现 |
+| 世界画面 | 水面颜色标签、背景多层视差、部分地形 MovieClip | `MutinyWaterSurface` 换帧；`MutinyBattleBackground` 分层视差；关卡地形以 SpriteRenderer 组装 | 背景视差已接入，待 Unity 运行验证；地形换帧未实现 |
 | UI | 根时间轴、SimpleButton 状态和颜色变换 | `MutinyGameHUD` / `MutinyFrontendController` 在 550×400 逻辑画布上绘制 | HUD 淡入、血条滑动、按钮态已实现 |
 | 镜头 | `TileSystem.advanceScrolling` 跟随、回移、边缘滚动和边界 | `MutinyCameraController` | 已实现主要分支，待运行/真机验证 |
 
@@ -45,9 +45,9 @@
 | --- | --- | --- | --- | --- | --- |
 | VIS-WATER-01 | 水面按 `skyColour` 选 `water1..3`；每种颜色使用独立循环帧 | `Water.as::Water`、`Controller.setSkyColour`；water 时间轴 | `MutinyWaterSurface.Initialize` | 分别构建三种天色，逐 tick 对照原版帧序及循环点 | Unity 已实现每色 10 帧循环，但 `BuildWater` 当前固定传 `skyColour=1`；待修复与运行验证 |
 | VIS-SPLASH-01 | Solid 跨越水线时创建 splash，按天色选标签；三段在全局帧 19/43/67 调用 `cl.destroy()` | `Solid.as::splashCheck`；symbol 1780 帧脚本 | `MutinyWaterSurface.SpawnSplash`、`MutinySplashEffect` | 三种天色从对应标签播放，确认销毁帧不被当作可见帧 | Unity 当前每色固定播放 24 张导出图，比原版销毁点长；已知差异 |
-| VIS-BG-01 | 战斗背景的 cloudBase/hills/frontClouds/backClouds 根据镜头 X/Y 以不同系数位移，水底背景跟随水面 | `Water.as::advance:18-31` | 当前无对应视差组件 | 移动镜头至关卡四角，对照各层坐标和循环周期 | 未实现 |
+| VIS-BG-01 | 战斗背景的 cloudBase/hills/frontClouds/backClouds 根据镜头 X/Y 以不同系数位移，水底背景跟随水面 | `Water.as::advance:18-31`、`Global.negativeModulo`、symbol 1998 的三色图层 | `MutinyBattleBackground`、`MutinyOriginalBackground.BattleLayerPosition` | 在关卡 1/6/11/16 移动镜头至四角，逐帧比较注册点、层级、位移和循环边界 | 已接入；原版首帧图层重组像素一致；待 Unity Play Mode 对照 |
 | VIS-TILE-01 | `boat_ripple_*` 和 `tile_ripple_*` 是 16 帧地形 MovieClip | `tile-mapping.csv`及对应 SWF 符号 | `MutinyTileDefinition.FrameCount`、`MutinyLevelBuilder.ResolveTileSprite` | 构建含 ripple 的关卡，连续 16 tick 对照帧序 | 资源已导入，运行时只加载 frame 1；未实现换帧 |
-| VIS-FRONT-01 | 菜单水面每帧 X-8 并在 -64 循环；云和山以 -1/-2/-4 不同速度循环 | `MenuBackgroundAnim.as::onEnterFrame` | `MutinyFrontendController` | 标题页连续录制至各层首次循环，核对每帧位移 | 当前只绘制静态 `UI/Frontend/background`；未实现 |
+| VIS-FRONT-01 | 菜单水面每帧 X-8 并在 -64 循环；后云 -1/900、山 -2/840、前云 -4/1000、云底 -2/550 各自回卷 | `MenuBackgroundAnim.as::onEnterFrame`；symbols 191/187/190 | `MutinyFrontendController.Update/DrawAnimatedBackground` | 标题、模式及关卡选择页连续录制至各层首次循环，核对每帧位移 | 已接入；原版首帧图层重组像素一致；待 Unity Play Mode 对照 |
 
 ## 表现事件与权威状态
 
@@ -66,12 +66,12 @@
 
 | 优先级 | ID | 差异 | 影响 |
 | --- | --- | --- | --- |
-| P0 | VIS-BG-01 | 战斗背景视差未实现 | 镜头移动时场景纵深与原版明显不同 |
+| P0 | VIS-BG-01 | 已接入原版分层资源与视差公式，待 Unity Play Mode 核对 | 镜头移动与不同屏幕比例下的实际画面尚未确认 |
 | P0 | VIS-TILE-01 | 7 组 ripple 地形有 16 帧资源但只显示首帧 | 关卡环境动态缺失 |
 | P1 | VIS-SPLASH-01 | 水花按 24 帧播放，未按原版销毁动作帧截断 | 水花寿命和尾帧不一致 |
 | P1 | VIS-WATER-01 | 关卡水面固定使用 sky 1 | 后段关卡配色错误 |
 | P1 | VIS-SMOKE-01 | 烟迹类已写，但 `Art/Effects/CannonSmokeTrail` 资源不存在；Cannonball/ParachuteBomb/RumBottle 的调用因此为空，CherryBomb/Dynamite 还未调用 | 五种投射物的原版烟迹均不可见 |
-| P1 | VIS-FRONT-01 | 前端背景为静态合成图 | 菜单水面/云层/山体不动 |
+| P1 | VIS-FRONT-01 | 已接入原版分层资源和 25 Hz 循环，待 Unity Play Mode 核对 | 各层回卷时的实际画面尚未确认 |
 | P2 | VIS-MAT-01 | Anchor 白化受 Unity 默认 Sprite 材质限制 | 落地结束的颜色过渡不能保证像素级一致 |
 
 ## 验收口径
@@ -86,5 +86,5 @@
 1. 补齐关卡天色传递、水面与 splash 标签范围。
 2. 为动画地形添加共享 25 Hz 换帧器，保留现有碰撞边界。
 3. 补导出烟迹资源，恢复 Cannonball/ParachuteBomb/RumBottle 现有调用，再在 CherryBomb/Dynamite 原始调用点接入。
-4. 实现战斗背景视差，再处理前端 `MenuBackgroundAnim`。
+4. 在 Unity 中对照战斗背景视差和前端 `MenuBackgroundAnim` 的完整循环录像；逐色检查原版图层。
 5. 建立原版与 Unity 同尺寸逐帧录像/截帧对照，完成后才更新为“实际测试通过”。

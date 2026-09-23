@@ -1,5 +1,6 @@
 using Mutiny.Levels;
 using Mutiny.Persistence;
+using Mutiny.Simulation;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -15,6 +16,11 @@ namespace Mutiny.Presentation
 
         private readonly MutinyFrontendFlow m_Flow = new MutinyFrontendFlow();
         private readonly Texture2D[] m_LevelPreviews = new Texture2D[SinglePlayerLevelCount];
+        // Flash menu_background_anim: bg children in display-depth order, then water.
+        private readonly Texture2D[] m_BackgroundLayers = new Texture2D[7];
+        private readonly float[] m_BackgroundOffsets = new float[5];
+        private float m_BackgroundTickAccumulator;
+        private bool m_HasAnimatedBackground;
 
         private MutinyLevelController m_LevelController;
         private Texture2D m_Background;
@@ -81,6 +87,15 @@ namespace Mutiny.Presentation
         private void LoadResources()
         {
             m_Background = Resources.Load<Texture2D>("UI/Frontend/background");
+            string[] layerNames = { "sky", "backClouds1", "hills1", "frontClouds1",
+                "cloudBase1", "waterBackground1", "water" };
+            m_HasAnimatedBackground = true;
+            for (int i = 0; i < layerNames.Length; i++)
+            {
+                m_BackgroundLayers[i] = LoadPointTexture(MutinyOriginalBackground.ResourcePath + layerNames[i]);
+                if (m_BackgroundLayers[i] == null)
+                    m_HasAnimatedBackground = false;
+            }
             m_TitleLogo = Resources.Load<Texture2D>("UI/Frontend/title_logo");
             m_GameSelectPanel = Resources.Load<Texture2D>("UI/Frontend/game_select_panel");
             m_LevelSelectPanel = Resources.Load<Texture2D>("UI/Frontend/level_select_panel");
@@ -114,6 +129,58 @@ namespace Mutiny.Presentation
             return texture;
         }
 
+        private void Update()
+        {
+            if (m_Flow.CurrentPage == MutinyFrontendPage.Gameplay)
+                return;
+
+            m_BackgroundTickAccumulator += Time.unscaledDeltaTime;
+            while (m_BackgroundTickAccumulator >= MutinyPhysics.TimeStep)
+            {
+                m_BackgroundTickAccumulator -= MutinyPhysics.TimeStep;
+                // MenuBackgroundAnim.onEnterFrame: water, back clouds, hills,
+                // front clouds and cloud base have independent Flash wrap widths.
+                AdvanceBackgroundOffset(0, 8f, 64f);
+                AdvanceBackgroundOffset(1, 1f, 900f);
+                AdvanceBackgroundOffset(2, 2f, 840f);
+                AdvanceBackgroundOffset(3, 4f, 1000f);
+                AdvanceBackgroundOffset(4, 2f, 550f);
+            }
+        }
+
+        private void AdvanceBackgroundOffset(int index, float speed, float width)
+        {
+            m_BackgroundOffsets[index] -= speed;
+            if (m_BackgroundOffsets[index] <= -width)
+                m_BackgroundOffsets[index] = 0f;
+        }
+
+        private void DrawAnimatedBackground()
+        {
+            if (!m_HasAnimatedBackground)
+            {
+                DrawTexture(new Rect(0f, 0f, CanvasWidth, CanvasHeight), m_Background);
+                return;
+            }
+
+            GUI.BeginGroup(new Rect(0f, 0f, CanvasWidth, CanvasHeight));
+            DrawBackgroundLayer(0, 0f, 0f);
+            // Original sprite registration offsets, from sprite-origins.csv.
+            DrawBackgroundLayer(1, m_BackgroundOffsets[1] + 197f, 12f);
+            DrawBackgroundLayer(2, m_BackgroundOffsets[2], 53f);
+            DrawBackgroundLayer(3, m_BackgroundOffsets[3] + 71f, 6f);
+            DrawBackgroundLayer(4, m_BackgroundOffsets[4], 275.95f);
+            DrawBackgroundLayer(5, 0f, 360f);
+            DrawBackgroundLayer(6, m_BackgroundOffsets[0], 332f);
+            GUI.EndGroup();
+        }
+
+        private void DrawBackgroundLayer(int index, float x, float y)
+        {
+            Texture2D texture = m_BackgroundLayers[index];
+            DrawTexture(new Rect(x, y, texture.width, texture.height), texture);
+        }
+
         private void OnGUI()
         {
             if (m_Flow.CurrentPage == MutinyFrontendPage.Gameplay)
@@ -131,7 +198,7 @@ namespace Mutiny.Presentation
             GUI.color = Color.black;
             GUI.DrawTexture(new Rect(-left / scale, -top / scale, Screen.width / scale, Screen.height / scale), Texture2D.whiteTexture);
             GUI.color = Color.white;
-            DrawTexture(new Rect(0f, 0f, CanvasWidth, CanvasHeight), m_Background);
+            DrawAnimatedBackground();
 
             switch (m_Flow.CurrentPage)
             {

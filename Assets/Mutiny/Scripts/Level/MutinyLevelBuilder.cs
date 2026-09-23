@@ -27,7 +27,7 @@ namespace Mutiny.Levels
             return CharacterSortingOrder + Mathf.Max(0, originalCreationIndex) * CharacterSortingStride;
         }
 
-        public static GameObject BuildLevel(MutinyLevelData levelData, Transform parent = null)
+        public static GameObject BuildLevel(MutinyLevelData levelData, Transform parent = null, int levelIndex = 1)
         {
             if (levelData == null)
                 throw new ArgumentNullException(nameof(levelData));
@@ -68,6 +68,8 @@ namespace Mutiny.Levels
             waterObj.transform.SetParent(levelRootObj.transform, false);
             levelRoot.WaterHolder = waterObj.transform;
             levelRoot.WaterLevelY = BuildWater(levelData, waterObj.transform);
+            bgObj.AddComponent<MutinyBattleBackground>().Initialize(levelRoot,
+                MutinyOriginalBackground.SkyColourForLevel(levelIndex));
 
             // 4. Objects (Characters & Items)
             GameObject objectsObj = new GameObject("Objects");

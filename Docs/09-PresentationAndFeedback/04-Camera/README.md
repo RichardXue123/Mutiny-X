@@ -12,6 +12,8 @@
 
 ## 行为规格
 
+战斗背景由 `MutinyBattleBackground` 在镜头定位之后读取实际摄像机位置，以原版 550×400 舞台、32 PPU 和 `Water.as::advance` 的分层取模公式更新；镜头本身仍只修改视图，不修改物理坐标。三套图层按 `TileSystem.as` 的关卡编号分组选择。`VIS-BG-01` 已接入，待 Unity Play Mode 在关卡 1/6/11/16 逐帧核对。
+
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 当前结果 |
 | --- | --- | --- | --- | --- |
 | CAM-POE-01 | Pieces of Eight 每枚发射显式接管钱币跟随；前 7 枚结算立即释放跟随并自动回使用者；抵达后连续武器仍处于执行阶段也允许鼠标边缘、方向键和 WASD 滚屏；下一枚发射再次接管 | `Weapon.as::fire/twang`；`PiecesOfEight.as::next`；`TileSystem.as::advanceScrolling:455-493` | `RequestTrackWeapon`、`ReleaseWeaponTracking`、`RequestPanToCharacter`、`AdvanceEdgeScrolling` | 已实现；C# 编译通过，待 Unity 运行验证 |

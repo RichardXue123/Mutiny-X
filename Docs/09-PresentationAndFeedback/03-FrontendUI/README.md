@@ -55,7 +55,7 @@ GUI.matrix = Matrix4x4.TRS(new Vector3(left, top, 0f), Quaternion.identity, new 
 ### 1. 主标题页 (`DrawTitle`)
 
 - **背景与 Logo**：
-  - 全屏背景：`UI/Frontend/background` (550×400)
+  - 全屏背景：`MutinyFrontendController.DrawAnimatedBackground` 按原版 symbol 191/187 的七层资源绘制；资源缺失时回退至 `UI/Frontend/background` (550×400)。水面以 8 px/tick 左移，后云/山/前云/云底各以 1/2/4/2 px/tick 左移，在 -64/-900/-840/-1000/-550 处回卷。已接入，待 Unity Play Mode 验证。
   - 标题 Logo：`UI/Frontend/title_logo` 矩形 `(54, 36)` 大小 `452×154`
 - **按钮清单**（均使用 `button_small` 163×24，PirateFont 居中绘制）：
   - `play`：`(193, 187)` → 进入 `GameSelect`

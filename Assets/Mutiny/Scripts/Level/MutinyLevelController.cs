@@ -184,7 +184,7 @@ namespace Mutiny.Levels
             try
             {
                 MutinyLevelData levelData = MutinyLevelXmlParser.Parse(m_LevelXml.text, m_LevelXml.name);
-                GameObject levelObj = MutinyLevelBuilder.BuildLevel(levelData, transform);
+                GameObject levelObj = MutinyLevelBuilder.BuildLevel(levelData, transform, CurrentLevelIndex);
                 m_CurrentLevel = levelObj.GetComponent<MutinyLevelRoot>();
                 BindLevelController(m_CurrentLevel, this);
                 Debug.Log($"[MutinyLevelController] Built level '{levelData.Name}': {levelData.Width}x{levelData.Height}, {m_CurrentLevel.Characters.Count} characters.");
