@@ -46,6 +46,7 @@ namespace Mutiny.Verification
             VerifyVisualStateMapping(result);
             VerifyPanelTiming(result);
             VerifyRuntimeResources(result);
+            VerifyOriginalWaterSurface(result);
             VerifyOriginalPanelCopy(result);
             VerifyOriginalRotation(result);
             VerifyCharacterCollisionAudio(result);
@@ -2290,6 +2291,95 @@ namespace Mutiny.Verification
             AssertTexture(result, "Art/Effects/Splash/1", 48, 44);
             result.Assert(Resources.Load<AudioClip>("Audio/SFX/splash") != null,
                 "WATER-03 original splash audio loads from Resources");
+        }
+
+        private static void VerifyOriginalWaterSurface(MutinyLevel1VerificationResult result)
+        {
+            int[] levelIndices = { 1, 6, 11 };
+            var level = new MutinyLevelData
+            {
+                Name = "WaterSurfaceVerification",
+                Width = 64, // Wider than the source's 1024 px water sprite.
+                Height = 16,
+                Players = 2,
+                Terrain = new string[16, 64],
+                Background = new string[16, 64]
+            };
+
+            for (int sky = 1; sky <= 3; sky++)
+            {
+                GameObject levelObject = null;
+                try
+                {
+                    levelObject = MutinyLevelBuilder.BuildLevel(level, levelIndex: levelIndices[sky - 1]);
+                    MutinyLevelRoot root = levelObject.GetComponent<MutinyLevelRoot>();
+                    MutinyWaterSurface surface = root.WaterHolder.GetComponent<MutinyWaterSurface>();
+                    SpriteRenderer backdrop = surface.BackdropRenderer;
+                    Texture2D expectedWater = Resources.Load<Texture2D>($"Art/Effects/Water/{(sky - 1) * 10 + 1}");
+                    Texture2D expectedBackdrop = Resources.Load<Texture2D>($"Art/Background/waterBackground{sky}");
+                    float stride = MutinyWaterSurface.VisibleWidthPixels / MutinyPhysics.PixelsPerUnit;
+                    bool continuous = true;
+                    float lastX = float.NaN;
+                    float rightEdge = float.NegativeInfinity;
+                    int segments = 0;
+                    foreach (SpriteRenderer renderer in root.WaterHolder.GetComponentsInChildren<SpriteRenderer>(true))
+                    {
+                        if (!renderer.name.StartsWith("WaterSurface_"))
+                            continue;
+                        segments++;
+                        float x = renderer.transform.localPosition.x;
+                        continuous &= renderer.sprite != null && renderer.sprite.texture == expectedWater &&
+                                      Mathf.Approximately(renderer.sprite.rect.width, MutinyWaterSurface.VisibleWidthPixels) &&
+                                      renderer.sortingOrder == MutinyLevelBuilder.WaterSortingOrder;
+                        if (!float.IsNaN(lastX))
+                            continuous &= Mathf.Abs(x - lastX - stride) < 0.001f;
+                        lastX = x;
+                        rightEdge = x + stride;
+                    }
+
+                    result.Assert(root.SkyColour == sky && surface.CurrentSkyColour == sky &&
+                                  surface.LoadedFrameCount == 10 && segments >= 3 && continuous &&
+                                  rightEdge >= level.Width * MutinyLevelBuilder.CellSize &&
+                                  backdrop != null && backdrop.sprite != null &&
+                                  backdrop.sprite.texture == expectedBackdrop &&
+                                  backdrop.sortingOrder < MutinyLevelBuilder.BackgroundSortingOrder &&
+                                  backdrop.transform.localPosition.x < 0f &&
+                                  backdrop.transform.localPosition.x +
+                                  backdrop.sprite.rect.width / MutinyPhysics.PixelsPerUnit *
+                                  backdrop.transform.localScale.x > level.Width * MutinyLevelBuilder.CellSize,
+                        $"VIS-WATER-01 level {levelIndices[sky - 1]} uses sky {sky}, 980 px seamless water and full-width original-colour backdrop");
+                }
+                finally
+                {
+                    DestroyNow(levelObject);
+                }
+            }
+
+            GameObject bakedRootObject = new GameObject("WaterSurfaceVerification_BakedRoot");
+            TextAsset bakedXml = null;
+            try
+            {
+                MutinyLevelRoot bakedRoot = bakedRootObject.AddComponent<MutinyLevelRoot>();
+                MutinyLevelController controller = bakedRootObject.AddComponent<MutinyLevelController>();
+                bakedXml = new TextAsset("<level/>");
+                controller.LevelXml = bakedXml;
+                controller.CurrentLevelIndex = 6;
+                bakedRoot.Width = level.Width;
+                bakedRoot.WaterLevelY = -14f;
+                GameObject waterObject = new GameObject("Water");
+                waterObject.transform.SetParent(bakedRootObject.transform, false);
+                bakedRoot.WaterHolder = waterObject.transform;
+                bakedRoot.EnsureRuntimeWater();
+                result.Assert(bakedRoot.SkyColour == 2 &&
+                              waterObject.GetComponent<MutinyWaterSurface>()?.CurrentSkyColour == 2,
+                    "VIS-WATER-01 baked level derives its missing sky colour from the original level index");
+            }
+            finally
+            {
+                DestroyNow(bakedRootObject);
+                if (bakedXml != null)
+                    Object.DestroyImmediate(bakedXml);
+            }
         }
 
         private static void VerifyCornerLevelControls(MutinyLevel1VerificationResult result)

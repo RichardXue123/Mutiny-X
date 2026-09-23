@@ -72,7 +72,7 @@ namespace Mutiny.Levels
             GameObject waterObj = new GameObject("Water");
             waterObj.transform.SetParent(levelRootObj.transform, false);
             levelRoot.WaterHolder = waterObj.transform;
-            levelRoot.WaterLevelY = BuildWater(levelData, waterObj.transform);
+            levelRoot.WaterLevelY = BuildWater(levelData, waterObj.transform, levelRoot.SkyColour);
             bgObj.AddComponent<MutinyBattleBackground>().Initialize(levelRoot,
                 levelRoot.SkyColour);
 
@@ -171,7 +171,7 @@ namespace Mutiny.Levels
             }
         }
 
-        private static float BuildWater(MutinyLevelData levelData, Transform parent)
+        private static float BuildWater(MutinyLevelData levelData, Transform parent, int skyColour)
         {
             float waterY = -14f; // Default for level 1
             if (levelData.Objects != null)
@@ -195,7 +195,7 @@ namespace Mutiny.Levels
             collider.size = new Vector2(levelData.Width * CellSize + 20f, 10f);
 
             MutinyWaterSurface surface = parent.gameObject.AddComponent<MutinyWaterSurface>();
-            surface.Initialize(levelData.Width * CellSize, waterY, 1);
+            surface.Initialize(levelData.Width * CellSize, waterY, skyColour);
 
             return waterY;
         }
@@ -316,23 +316,32 @@ namespace Mutiny.Levels
     public sealed class MutinyWaterSurface : MonoBehaviour
     {
         private const int FramesPerColour = 10;
+        // Symbol 1651 is exported to 1024 px, but the underwater fill ends at
+        // x=980 (20 original 49 px wave periods). The final 44 px are transparent.
+        public const int VisibleWidthPixels = 980;
+        private const int WaterBackgroundWidthPixels = 550;
         private readonly List<SpriteRenderer> m_Renderers = new List<SpriteRenderer>();
         private Sprite[] m_Frames = Array.Empty<Sprite>();
+        private SpriteRenderer m_Backdrop;
         private float m_Accumulator;
         private int m_FrameIndex;
 
         public int LoadedFrameCount => m_Frames.Length;
+        public int CurrentSkyColour { get; private set; } = 1;
+        public SpriteRenderer BackdropRenderer => m_Backdrop;
 
         public void Initialize(float levelWidth, float waterUnityY, int skyColour)
         {
-            m_Frames = LoadFrameRange("Art/Effects/Water", (Mathf.Clamp(skyColour, 1, 3) - 1) * FramesPerColour + 1,
-                FramesPerColour, new Vector2(0f, 1f - 30f / 384f));
+            CurrentSkyColour = Mathf.Clamp(skyColour, 1, 3);
+            m_Frames = LoadFrameRange("Art/Effects/Water", (CurrentSkyColour - 1) * FramesPerColour + 1,
+                FramesPerColour, new Vector2(0f, 1f - 30f / 384f), VisibleWidthPixels);
             if (m_Frames.Length == 0)
             {
                 Debug.LogError("[Mutiny:Water] Original water frames are missing from Resources.", this);
                 return;
             }
 
+            CreateOriginalBackdrop(levelWidth, waterUnityY);
             float spriteWidth = m_Frames[0].rect.width / MutinyPhysics.PixelsPerUnit;
             float startX = -spriteWidth;
             int rendererCount = Mathf.CeilToInt((levelWidth + spriteWidth * 2f) / spriteWidth);
@@ -348,7 +357,31 @@ namespace Mutiny.Levels
             }
 
             Mutiny.Diagnostics.MutinyDebugLog.Info("Water",
-                $"surface initialized waterY={-waterUnityY * MutinyPhysics.PixelsPerUnit:F0}px frames={m_Frames.Length} segments={rendererCount}", this);
+                $"surface initialized waterY={-waterUnityY * MutinyPhysics.PixelsPerUnit:F0}px sky={CurrentSkyColour} frames={m_Frames.Length} segments={rendererCount}", this);
+        }
+
+        private void CreateOriginalBackdrop(float levelWidth, float waterUnityY)
+        {
+            Texture2D texture = Resources.Load<Texture2D>($"Art/Background/waterBackground{CurrentSkyColour}");
+            if (texture == null)
+            {
+                Debug.LogError("[Mutiny:Water] Original water background is missing from Resources.", this);
+                return;
+            }
+
+            texture.filterMode = FilterMode.Point;
+            GameObject backdrop = new GameObject("WaterBackdrop");
+            backdrop.transform.SetParent(transform, false);
+            // The original 550x400 background is a single solid colour and follows
+            // Water.y. Extend it across the level for views wider than Flash's
+            // 550 px stage; the visible game viewport retains the original colour.
+            float margin = WaterBackgroundWidthPixels / MutinyPhysics.PixelsPerUnit;
+            backdrop.transform.localPosition = new Vector3(-margin, waterUnityY, 0f);
+            backdrop.transform.localScale = new Vector3((levelWidth + 2f * margin) / margin, 1f, 1f);
+            m_Backdrop = backdrop.AddComponent<SpriteRenderer>();
+            m_Backdrop.sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height),
+                new Vector2(0f, 1f), MutinyPhysics.PixelsPerUnit);
+            m_Backdrop.sortingOrder = MutinyLevelBuilder.BackgroundSortingOrder - 9;
         }
 
         private void Update()
@@ -400,7 +433,8 @@ namespace Mutiny.Levels
             splash.AddComponent<MutinySplashEffect>().Initialize(skyColour);
         }
 
-        internal static Sprite[] LoadFrameRange(string resourcePath, int firstFrame, int frameCount, Vector2 pivot)
+        internal static Sprite[] LoadFrameRange(string resourcePath, int firstFrame, int frameCount,
+            Vector2 pivot, int visibleWidth = 0)
         {
             var sprites = new List<Sprite>(frameCount);
             for (int i = 0; i < frameCount; i++)
@@ -411,7 +445,8 @@ namespace Mutiny.Levels
 
                 texture.filterMode = FilterMode.Point;
                 texture.wrapMode = TextureWrapMode.Clamp;
-                sprites.Add(Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), pivot,
+                int width = visibleWidth > 0 ? Mathf.Min(visibleWidth, texture.width) : texture.width;
+                sprites.Add(Sprite.Create(texture, new Rect(0f, 0f, width, texture.height), pivot,
                     MutinyPhysics.PixelsPerUnit));
             }
             return sprites.ToArray();
