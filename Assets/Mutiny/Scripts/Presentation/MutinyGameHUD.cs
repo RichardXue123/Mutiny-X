@@ -203,15 +203,22 @@ namespace Mutiny.Presentation
             }
         }
 
+        public static Rect ResolveOriginalCornerBubbleRect(MutinyCornerControl control)
+        {
+            Rect visualRect = ResolveOriginalCornerVisualRect(control);
+            return new Rect(visualRect.x, visualRect.y + 17f, visualRect.width, 17f);
+        }
+
         public static bool IsCornerHovered(MutinyCornerControl control, Vector2 canvasMouse, bool currentlyHovered)
         {
             Rect hitRect = ResolveOriginalCornerHitRect(control);
-            Rect visualRect = ResolveOriginalCornerVisualRect(control);
+            Rect bubbleRect = ResolveOriginalCornerBubbleRect(control);
             // When already hovered, the tooltip bubble is visible below the button, so hovering over
-            // either the icon (hitRect) or the speech bubble (visualRect) maintains the hovered state,
-            // matching Flash MovieClip bounding box behavior during the 'over' frame.
+            // either the icon (hitRect) or the speech bubble below (bubbleRect) maintains the hovered state.
+            // Using bubbleRect rather than the full AABB bounding box (visualRect) ensures the empty
+            // transparent space above the bubble (which overlays adjacent controls like Music) does not keep hover active.
             return currentlyHovered
-                ? (hitRect.Contains(canvasMouse) || visualRect.Contains(canvasMouse))
+                ? (hitRect.Contains(canvasMouse) || bubbleRect.Contains(canvasMouse))
                 : hitRect.Contains(canvasMouse);
         }
 
@@ -681,15 +688,18 @@ namespace Mutiny.Presentation
                     ResolveCornerToggleTexture(false, audio != null && audio.SfxEnabled, true), true, MutinyCornerControl.Sfx);
 
             // While hovered, clicking either the icon or the speech bubble below activates the button
-            Rect sfxClickRect = sfxHovered ? sfxVisualRect : sfxHitRect;
-            Rect musicClickRect = musicHovered ? musicVisualRect : musicHitRect;
-            Rect quitClickRect = quitHovered ? quitVisualRect : quitHitRect;
+            Rect sfxBubbleRect = ResolveOriginalCornerBubbleRect(MutinyCornerControl.Sfx);
+            Rect musicBubbleRect = ResolveOriginalCornerBubbleRect(MutinyCornerControl.Music);
+            Rect quitBubbleRect = ResolveOriginalCornerBubbleRect(MutinyCornerControl.Quit);
 
-            if (GUI.Button(sfxClickRect, GUIContent.none, GUIStyle.none))
+            if (GUI.Button(sfxHitRect, GUIContent.none, GUIStyle.none) ||
+                (sfxHovered && GUI.Button(sfxBubbleRect, GUIContent.none, GUIStyle.none)))
                 ToggleCornerSfx();
-            if (GUI.Button(musicClickRect, GUIContent.none, GUIStyle.none))
+            if (GUI.Button(musicHitRect, GUIContent.none, GUIStyle.none) ||
+                (musicHovered && GUI.Button(musicBubbleRect, GUIContent.none, GUIStyle.none)))
                 ToggleCornerMusic();
-            if (GUI.Button(quitClickRect, GUIContent.none, GUIStyle.none))
+            if (GUI.Button(quitHitRect, GUIContent.none, GUIStyle.none) ||
+                (quitHovered && GUI.Button(quitBubbleRect, GUIContent.none, GUIStyle.none)))
                 OpenQuitPrompt();
 
             if (m_QuitPromptAlpha > 0f)

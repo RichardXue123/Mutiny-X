@@ -2423,6 +2423,25 @@ namespace Mutiny.Verification
                 MutinyGameHUD.ResolveOriginalCornerTooltip(MutinyCornerControl.Sfx) == "sound fx",
                 "HUD-CORNER-T05 production hover state maps to the original quit, music, and sound fx bubble labels");
 
+            result.Assert(
+                RectApproximately(MutinyGameHUD.ResolveOriginalCornerBubbleRect(MutinyCornerControl.Quit),
+                    new Rect(479.9f, 28f, 23f, 17f)) &&
+                RectApproximately(MutinyGameHUD.ResolveOriginalCornerBubbleRect(MutinyCornerControl.Music),
+                    new Rect(496.9f, 28f, 31f, 17f)) &&
+                RectApproximately(MutinyGameHUD.ResolveOriginalCornerBubbleRect(MutinyCornerControl.Sfx),
+                    new Rect(501.9f, 28f, 47f, 17f)),
+                "HUD-CORNER-T06 production corner bubble rectangles are located at y=28..45 under the icons");
+
+            // Verify Sound FX hover transitions:
+            bool sfxIconHover = MutinyGameHUD.IsCornerHovered(MutinyCornerControl.Sfx, new Vector2(530f, 15f), false);
+            bool sfxBubbleHover = MutinyGameHUD.IsCornerHovered(MutinyCornerControl.Sfx, new Vector2(530f, 35f), true);
+            bool sfxMovingToMusic = MutinyGameHUD.IsCornerHovered(MutinyCornerControl.Sfx, new Vector2(510f, 15f), true);
+            bool musicHover = MutinyGameHUD.IsCornerHovered(MutinyCornerControl.Music, new Vector2(510f, 15f), false);
+            bool sfxMovingDown = MutinyGameHUD.IsCornerHovered(MutinyCornerControl.Sfx, new Vector2(530f, 60f), true);
+            result.Assert(
+                sfxIconHover && sfxBubbleHover && !sfxMovingToMusic && musicHover && !sfxMovingDown,
+                "HUD-CORNER-T07 Sound FX hover releases cleanly when moving to Music or downwards, preventing sticky bubble");
+
             GameObject hudObject = null;
             try
             {

@@ -415,12 +415,14 @@ namespace Mutiny.Presentation
                 DrawCornerSprite(sfxVisualRect,
                     ResolveCornerToggleTexture(false, audio != null && audio.SfxEnabled, true), true, MutinyCornerControl.Sfx);
 
-            Rect sfxClickRect = sfxHovered ? sfxVisualRect : sfxHitRect;
-            Rect musicClickRect = musicHovered ? musicVisualRect : musicHitRect;
+            Rect sfxBubbleRect = MutinyGameHUD.ResolveOriginalCornerBubbleRect(MutinyCornerControl.Sfx);
+            Rect musicBubbleRect = MutinyGameHUD.ResolveOriginalCornerBubbleRect(MutinyCornerControl.Music);
 
-            if (GUI.Button(sfxClickRect, GUIContent.none, GUIStyle.none))
+            if (GUI.Button(sfxHitRect, GUIContent.none, GUIStyle.none) ||
+                (sfxHovered && GUI.Button(sfxBubbleRect, GUIContent.none, GUIStyle.none)))
                 audio?.ToggleSFX();
-            if (GUI.Button(musicClickRect, GUIContent.none, GUIStyle.none))
+            if (GUI.Button(musicHitRect, GUIContent.none, GUIStyle.none) ||
+                (musicHovered && GUI.Button(musicBubbleRect, GUIContent.none, GUIStyle.none)))
                 audio?.ToggleMusic();
         }
 
