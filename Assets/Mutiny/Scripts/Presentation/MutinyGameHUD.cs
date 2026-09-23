@@ -1177,8 +1177,9 @@ namespace Mutiny.Presentation
             // matching pixel coordinates directly against the 271x247 panel artwork.
             float panelWidth = 271f * scale;
             float panelHeight = 247f * scale;
+            float canvasTop = (Screen.height - 400f * scale) * 0.5f;
             float left = (Screen.width - panelWidth) * 0.5f;
-            float top = 23f * scale;
+            float top = canvasTop + 23f * scale;
             Rect panelRect = new Rect(left, top, panelWidth, panelHeight);
             Matrix4x4 panelMatrix = Matrix4x4.TRS(
                 new Vector3(left, top, 0f), Quaternion.identity,

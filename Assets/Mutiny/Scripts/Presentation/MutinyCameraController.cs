@@ -32,6 +32,17 @@ namespace Mutiny.Presentation
         private void Awake()
         {
             m_Camera = GetComponent<Camera>();
+            ApplyViewportLetterbox();
+        }
+
+        private void OnEnable()
+        {
+            ApplyViewportLetterbox();
+        }
+
+        private void Update()
+        {
+            ApplyViewportLetterbox();
         }
 
         public bool IsTrackingAirDrop => FindFallingChest() != null;
@@ -90,6 +101,7 @@ namespace Mutiny.Presentation
 
         private void LateUpdate()
         {
+            ApplyViewportLetterbox();
             EnsureReferences();
             if (m_Camera == null || m_LevelRoot == null || TurnManager == null)
                 return;
@@ -295,12 +307,11 @@ namespace Mutiny.Presentation
                 if (ShouldUseMouseEdgeScrolling(Application.isMobilePlatform, mouse != null))
                 {
                     Vector2 position = mouse.position.ReadValue();
-                    float horizontalEdge = Screen.width * (OriginalEdgePixels / OriginalHorizontalPixels);
-                    float verticalEdge = Screen.height * (OriginalEdgePixels / OriginalVerticalPixels);
-                    scrollLeft |= position.x < horizontalEdge;
-                    scrollRight |= position.x > Screen.width - horizontalEdge;
-                    scrollDown |= position.y < verticalEdge;
-                    scrollUp |= position.y > Screen.height - verticalEdge;
+                    Rect pixelRect = m_Camera != null ? m_Camera.pixelRect : new Rect(0f, 0f, Screen.width, Screen.height);
+                    float scale = Mathf.Min(Screen.width / OriginalHorizontalPixels, Screen.height / OriginalVerticalPixels);
+                    float edgePixels = OriginalEdgePixels * scale;
+                    CalculateMouseEdgeScroll(position, pixelRect, Screen.width, Screen.height, edgePixels,
+                        ref scrollLeft, ref scrollRight, ref scrollDown, ref scrollUp);
                 }
 
                 if (scrollLeft)
@@ -356,6 +367,27 @@ namespace Mutiny.Presentation
             return hasMouse && !isMobilePlatform;
         }
 
+        internal static void CalculateMouseEdgeScroll(
+            Vector2 mousePosition,
+            Rect viewportPixelRect,
+            float screenWidth,
+            float screenHeight,
+            float edgePixels,
+            ref bool scrollLeft,
+            ref bool scrollRight,
+            ref bool scrollDown,
+            ref bool scrollUp)
+        {
+            if (mousePosition.x < 0f || mousePosition.x > screenWidth ||
+                mousePosition.y < 0f || mousePosition.y > screenHeight)
+                return;
+
+            scrollLeft |= mousePosition.x < viewportPixelRect.xMin + edgePixels;
+            scrollRight |= mousePosition.x > viewportPixelRect.xMax - edgePixels;
+            scrollDown |= mousePosition.y < viewportPixelRect.yMin + edgePixels;
+            scrollUp |= mousePosition.y > viewportPixelRect.yMax - edgePixels;
+        }
+
         public bool CanStartMobileTouchPan(bool allowWhileAiming = false)
         {
             EnsureReferences();
@@ -378,8 +410,11 @@ namespace Mutiny.Presentation
             if (!CanStartMobileTouchPan(allowWhileAiming))
                 return false;
 
+            float viewportWidth = m_Camera != null ? m_Camera.pixelRect.width : Screen.width;
+            float viewportHeight = m_Camera != null ? m_Camera.pixelRect.height : Screen.height;
+
             Vector2 worldDelta = ScreenDeltaToWorldDelta(
-                screenDelta, Screen.width, Screen.height,
+                screenDelta, viewportWidth, viewportHeight,
                 m_Camera.orthographicSize, m_Camera.aspect);
             m_EdgeVelocityPixelsPerSecond = Vector2.zero;
             Vector3 next = transform.position;
@@ -453,6 +488,82 @@ namespace Mutiny.Presentation
             position.y = Mathf.Clamp(position.y, minY, maxY);
             position.z = transform.position.z;
             return position;
+        }
+
+        public static Rect CalculateViewportRect(int screenWidth, int screenHeight)
+        {
+            if (screenWidth <= 0 || screenHeight <= 0)
+                return new Rect(0f, 0f, 1f, 1f);
+
+            float targetAspect = OriginalHorizontalPixels / OriginalVerticalPixels;
+            float windowAspect = (float)screenWidth / screenHeight;
+
+            if (Mathf.Abs(windowAspect - targetAspect) < 0.001f)
+                return new Rect(0f, 0f, 1f, 1f);
+
+            if (windowAspect > targetAspect)
+            {
+                float insetW = targetAspect / windowAspect;
+                float insetX = (1f - insetW) * 0.5f;
+                return new Rect(insetX, 0f, insetW, 1f);
+            }
+            else
+            {
+                float insetH = windowAspect / targetAspect;
+                float insetY = (1f - insetH) * 0.5f;
+                return new Rect(0f, insetY, 1f, insetH);
+            }
+        }
+
+        public void ApplyViewportLetterbox()
+        {
+            if (m_Camera == null)
+                m_Camera = GetComponent<Camera>();
+
+            if (m_Camera == null)
+                return;
+
+            Rect targetRect = CalculateViewportRect(Screen.width, Screen.height);
+            if (m_Camera.rect != targetRect)
+            {
+                m_Camera.rect = targetRect;
+            }
+        }
+
+        public static void DrawLetterboxBars()
+        {
+            float scale = Mathf.Min(Screen.width / OriginalHorizontalPixels, Screen.height / OriginalVerticalPixels);
+            float canvasW = OriginalHorizontalPixels * scale;
+            float canvasH = OriginalVerticalPixels * scale;
+            float left = (Screen.width - canvasW) * 0.5f;
+            float top = (Screen.height - canvasH) * 0.5f;
+
+            Color oldColor = GUI.color;
+            GUI.color = Color.black;
+
+            if (left > 0.5f)
+            {
+                float rightX = left + canvasW;
+                float rightW = Screen.width - rightX;
+                GUI.DrawTexture(new Rect(0f, 0f, left, Screen.height), Texture2D.whiteTexture, ScaleMode.StretchToFill);
+                GUI.DrawTexture(new Rect(rightX, 0f, rightW, Screen.height), Texture2D.whiteTexture, ScaleMode.StretchToFill);
+            }
+
+            if (top > 0.5f)
+            {
+                float bottomY = top + canvasH;
+                float bottomH = Screen.height - bottomY;
+                GUI.DrawTexture(new Rect(0f, 0f, Screen.width, top), Texture2D.whiteTexture, ScaleMode.StretchToFill);
+                GUI.DrawTexture(new Rect(0f, bottomY, Screen.width, bottomH), Texture2D.whiteTexture, ScaleMode.StretchToFill);
+            }
+
+            GUI.color = oldColor;
+        }
+
+        private void OnGUI()
+        {
+            if (Event.current.type == EventType.Repaint)
+                DrawLetterboxBars();
         }
     }
 }

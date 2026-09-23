@@ -237,6 +237,62 @@ namespace Mutiny.Verification
                 MutinyCameraController.IsAimingCompatibleWithMobilePan(true, true) &&
                 MutinyCameraController.IsAimingCompatibleWithMobilePan(false, false),
                 "AND-INP-06/AND-CAM-03 only the explicit secondary-touch camera role can pan during aiming");
+
+            // Aspect ratio & Letterbox viewport rect tests
+            Rect exact11x8Rect = MutinyCameraController.CalculateViewportRect(1100, 800);
+            result.Assert(
+                Mathf.Approximately(exact11x8Rect.x, 0f) &&
+                Mathf.Approximately(exact11x8Rect.y, 0f) &&
+                Mathf.Approximately(exact11x8Rect.width, 1f) &&
+                Mathf.Approximately(exact11x8Rect.height, 1f),
+                "CAM-ASPECT-01 exact 11:8 (1100x800) aspect uses full viewport (0, 0, 1, 1)");
+
+            Rect widescreen16x9Rect = MutinyCameraController.CalculateViewportRect(1920, 1080);
+            result.Assert(
+                Mathf.Approximately(widescreen16x9Rect.x, 0.11328125f) &&
+                Mathf.Approximately(widescreen16x9Rect.y, 0f) &&
+                Mathf.Approximately(widescreen16x9Rect.width, 0.7734375f) &&
+                Mathf.Approximately(widescreen16x9Rect.height, 1f),
+                "CAM-ASPECT-02 16:9 widescreen creates horizontal pillarbox bars maintaining exact 11:8 aspect");
+
+            Rect taller4x3Rect = MutinyCameraController.CalculateViewportRect(1024, 768);
+            result.Assert(
+                Mathf.Approximately(taller4x3Rect.x, 0f) &&
+                Mathf.Approximately(taller4x3Rect.y, 0.015151515f) &&
+                Mathf.Approximately(taller4x3Rect.width, 1f) &&
+                Mathf.Approximately(taller4x3Rect.height, 0.96969697f),
+                "CAM-ASPECT-03 4:3 display creates vertical letterbox bars maintaining exact 11:8 aspect");
+
+            // Edge scrolling boundary tests
+            Rect viewportPixelRect = new Rect(217.5f, 0f, 1485f, 1080f);
+            float edgePixels = 108f;
+            bool sLeft = false, sRight = false, sDown = false, sUp = false;
+            MutinyCameraController.CalculateMouseEdgeScroll(
+                new Vector2(300f, 540f), viewportPixelRect, 1920f, 1080f, edgePixels,
+                ref sLeft, ref sRight, ref sDown, ref sUp);
+            result.Assert(sLeft && !sRight && !sDown && !sUp,
+                "CAM-EDGE-01 mouse inside left edge of letterboxed viewport triggers scrollLeft");
+
+            sLeft = false; sRight = false; sDown = false; sUp = false;
+            MutinyCameraController.CalculateMouseEdgeScroll(
+                new Vector2(1650f, 540f), viewportPixelRect, 1920f, 1080f, edgePixels,
+                ref sLeft, ref sRight, ref sDown, ref sUp);
+            result.Assert(!sLeft && sRight && !sDown && !sUp,
+                "CAM-EDGE-02 mouse inside right edge of letterboxed viewport triggers scrollRight");
+
+            sLeft = false; sRight = false; sDown = false; sUp = false;
+            MutinyCameraController.CalculateMouseEdgeScroll(
+                new Vector2(1000f, 540f), viewportPixelRect, 1920f, 1080f, edgePixels,
+                ref sLeft, ref sRight, ref sDown, ref sUp);
+            result.Assert(!sLeft && !sRight && !sDown && !sUp,
+                "CAM-EDGE-03 mouse in center of viewport does not trigger edge scrolling");
+
+            sLeft = false; sRight = false; sDown = false; sUp = false;
+            MutinyCameraController.CalculateMouseEdgeScroll(
+                new Vector2(-10f, 540f), viewportPixelRect, 1920f, 1080f, edgePixels,
+                ref sLeft, ref sRight, ref sDown, ref sUp);
+            result.Assert(!sLeft && !sRight && !sDown && !sUp,
+                "CAM-EDGE-04 mouse outside window boundaries does not trigger edge scrolling");
         }
 
         public static MutinyLevel1VerificationResult RunBattleHud()

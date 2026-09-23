@@ -80,6 +80,12 @@ namespace Mutiny.Presentation
             if (m_LevelController != null && m_LevelController.CurrentLevel != null)
                 m_LevelController.CurrentLevel.gameObject.SetActive(false);
 
+            Camera mainCam = Camera.main;
+            if (mainCam != null && mainCam.GetComponent<MutinyCameraController>() == null)
+            {
+                mainCam.gameObject.AddComponent<MutinyCameraController>();
+            }
+
             MutinyAudioManager.Instance?.PlayMusic("menu_music");
             Debug.Log($"[MutinyFrontend] FRONT-01 title shown; highestUnlocked={MutinySaveSystem.HighestUnlockedLevel}", this);
         }

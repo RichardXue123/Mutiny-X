@@ -114,10 +114,13 @@ namespace Mutiny.Presentation
             {
                 // Seagull.as sets dottedLine.x to the left edge of visible content
                 // and dottedLine.y to content._ymouse every pre-flight tick.
+                float scale = Mathf.Min(Screen.width / 550f, Screen.height / 400f);
+                float canvasLeft = (Screen.width - 550f * scale) * 0.5f;
+                float viewportWidth = 550f * scale;
                 GUI.DrawTextureWithTexCoords(
-                    new Rect(0f, guiY - 1f, Screen.width, m_DottedLine.height),
+                    new Rect(canvasLeft, guiY - 1f, viewportWidth, m_DottedLine.height),
                     m_DottedLine,
-                    new Rect(0f, 0f, Screen.width / (float)m_DottedLine.width, 1f),
+                    new Rect(0f, 0f, viewportWidth / (float)m_DottedLine.width, 1f),
                     true);
             }
 
