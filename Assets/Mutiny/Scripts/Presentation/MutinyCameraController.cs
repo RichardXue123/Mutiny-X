@@ -563,7 +563,10 @@ namespace Mutiny.Presentation
         private void OnGUI()
         {
             if (Event.current.type == EventType.Repaint)
+            {
+                GUI.depth = 1000;
                 DrawLetterboxBars();
+            }
         }
     }
 }

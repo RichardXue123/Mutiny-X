@@ -17,6 +17,15 @@ namespace Mutiny.Presentation
             return new Rect(8f, (screenHeight - ButtonSize) * 0.5f, ButtonSize, ButtonSize);
         }
 
+        public static Rect ResolveButtonRect(float screenWidth, float screenHeight)
+        {
+            float scale = Mathf.Min(screenWidth / 550f, screenHeight / 400f);
+            float canvasLeft = (screenWidth - 550f * scale) * 0.5f;
+            float x = canvasLeft + 8f;
+            float y = (screenHeight - ButtonSize) * 0.5f;
+            return new Rect(x, y, ButtonSize, ButtonSize);
+        }
+
         private bool m_IsOpen = false;
         private string m_InputText = "";
         private string m_StatusMessage = "Mutiny GM Console ready. Type 'help' for commands.";
@@ -125,7 +134,6 @@ namespace Mutiny.Presentation
             EnsureResources();
 
             // Save GUI state
-            int prevDepth = GUI.depth;
             Matrix4x4 prevMatrix = GUI.matrix;
             Color prevColor = GUI.color;
 
@@ -135,7 +143,7 @@ namespace Mutiny.Presentation
             GUI.color = Color.white;
 
             // 1. Draw circular floating GM button on the left vertical center (reduced to 1/3: 60px)
-            Rect buttonRect = ResolveButtonRect(Screen.height);
+            Rect buttonRect = ResolveButtonRect(Screen.width, Screen.height);
             float btnSize = buttonRect.width;
             float btnX = buttonRect.x;
             float btnY = buttonRect.y;
@@ -160,7 +168,6 @@ namespace Mutiny.Presentation
             // Restore GUI state
             GUI.color = prevColor;
             GUI.matrix = prevMatrix;
-            GUI.depth = prevDepth;
         }
 
         private void DrawCommandPanel(float originX, float centerY)

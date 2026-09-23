@@ -3568,6 +3568,9 @@ namespace Mutiny.Verification
                 result.Assert(Mathf.Approximately(MutinyGMManager.ButtonSize, 60f) &&
                               RectApproximately(MutinyGMManager.ResolveButtonRect(400f), new Rect(8f, 170f, 60f, 60f)),
                     "GM-05 GM button size is 60px (reduced to 1/3 from 180px) and centered on screen height");
+                result.Assert(RectApproximately(MutinyGMManager.ResolveButtonRect(1100f, 800f), new Rect(8f, 370f, 60f, 60f)) &&
+                              RectApproximately(MutinyGMManager.ResolveButtonRect(1920f, 1080f), new Rect(225.5f, 510f, 60f, 60f)),
+                    "GM-06 GM button anchors to the left edge of the visible letterboxed 550x400 game canvas");
             }
             finally
             {
