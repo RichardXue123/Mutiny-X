@@ -37,7 +37,7 @@
 | CHAR-ANI-02 | 受击且未停稳时保持 frame 15，停稳后播放 16..34 并回待机 | `Character.as::advance`；frame 35 | `PlayHit`、`AdvanceOriginalTick` | 生产爆炸命中后同时记录速度与当前帧，直至归待机 | 已实现；待 Unity 运行验证 |
 | CHAR-ANI-03 | 抛飞/滚动使用整体角度，每 tick 由 `vx*3` 驱动，地面接触使角度收敛 | `Character.as::advance`、Solid 接触路径 | `MutinyRotationRules`、`AdvanceOriginalRotationTick` | 生产投掷与爆炸击飞分别记录角度/tick | 已实现；待运行验证 |
 | CHAR-ANI-04 | 地面死亡等待停稳与显示血量滑落，再播 24 帧尸体并停在末帧 | `Character.as::advance`；symbol 1065 frame 24 | `AdvanceOriginalHealthTick`、`PresentLandDeath`、`MutinyDeadCharacterEffect` | 生产伤害将血降为 0，运动时不出尸体；停稳后验证 1..24 并持有 | 已实现；资源/局部回归已写，本轮未运行 |
-| CHAR-ANI-05 | 落水死亡不生成地面尸体，用水花、水下旋转和淡出表现 | `Character.as::advance`、`Solid.splashCheck` | `Drown`、`AdvanceOriginalWaterRotationTick` | 生产水线穿越后断言无 `DeadCharacter_*`，有 splash 且角度继续变化 | 部分已实现；透明度逐 tick 与原版待完整对照 |
+| CHAR-ANI-05 | 落水死亡不生成地面尸体；水花由注册点跨线触发，等于水线就生成，溺水发生于低于水线时 | `Character.as::advance`、`Solid.splashCheck` | `AdvanceOriginalSplashCheck`、`Drown`、`AdvanceOriginalWaterRotationTick` | 生产角色恰好到水线生成一次，下一 tick 下沉溺水不重复；核对尸体和角度 | 水花触发已接入；透明度逐 tick 与原版待完整对照 |
 
 ## 已知差异与待确认
 

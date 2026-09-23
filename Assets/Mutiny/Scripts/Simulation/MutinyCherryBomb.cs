@@ -85,11 +85,6 @@ namespace Mutiny.Simulation
                 }
             }
 
-            // Also check if fell below water level or off screen
-            if (IsFired && PhysicsBody != null && PhysicsBody.IsInWater)
-            {
-                Explode();
-            }
         }
 
         protected override void OnContact(CollisionSide side)

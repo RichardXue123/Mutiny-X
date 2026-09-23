@@ -50,6 +50,7 @@ namespace Mutiny.Levels
             levelRoot.Width = levelData.Width;
             levelRoot.Height = levelData.Height;
             levelRoot.Players = levelData.Players;
+            levelRoot.SkyColour = MutinyOriginalBackground.SkyColourForLevel(levelIndex);
             MutinyAnimatedTiles animatedTiles = levelRootObj.AddComponent<MutinyAnimatedTiles>();
 
             // 1. Background
@@ -70,7 +71,7 @@ namespace Mutiny.Levels
             levelRoot.WaterHolder = waterObj.transform;
             levelRoot.WaterLevelY = BuildWater(levelData, waterObj.transform);
             bgObj.AddComponent<MutinyBattleBackground>().Initialize(levelRoot,
-                MutinyOriginalBackground.SkyColourForLevel(levelIndex));
+                levelRoot.SkyColour);
 
             // 4. Objects (Characters & Items)
             GameObject objectsObj = new GameObject("Objects");
@@ -362,14 +363,34 @@ namespace Mutiny.Levels
             }
         }
 
-        public static void SpawnSplash(float pixelX, float waterPixelY, int skyColour = 1)
+        // Solid.splashCheck compares the object's registration Y, not its bottom
+        // extent or the one-shot drowning/contact event. Equality is underwater.
+        public static bool CheckSplashCrossing(float pixelX, float pixelY, float waterPixelY,
+            ref bool overWater, int skyColour = 0)
         {
             if (float.IsInfinity(waterPixelY) || float.IsNaN(waterPixelY))
+                return false;
+
+            bool nowOverWater = pixelY < waterPixelY;
+            if (nowOverWater == overWater)
+                return false;
+
+            overWater = nowOverWater;
+            SpawnSplash(pixelX, waterPixelY, skyColour);
+            MutinyAudioManager.Instance?.PlaySFX("splash");
+            return true;
+        }
+
+        public static void SpawnSplash(float pixelX, float waterPixelY, int skyColour = 0)
+        {
+            var levelRoot = UnityEngine.Object.FindAnyObjectByType<MutinyLevelRoot>();
+            if (float.IsInfinity(waterPixelY) || float.IsNaN(waterPixelY))
             {
-                var levelRoot = UnityEngine.Object.FindAnyObjectByType<MutinyLevelRoot>();
                 if (levelRoot != null)
                     waterPixelY = -levelRoot.WaterLevelY * MutinyPhysics.PixelsPerUnit;
             }
+            if (skyColour == 0)
+                skyColour = levelRoot != null ? levelRoot.SkyColour : 1;
 
             GameObject splash = new GameObject("WaterSplash");
             splash.transform.position = MutinyPhysics.PixelToUnity(pixelX, waterPixelY);
@@ -397,16 +418,21 @@ namespace Mutiny.Levels
     [DisallowMultipleComponent]
     public sealed class MutinySplashEffect : MonoBehaviour
     {
+        // The symbol has 24 exported frames per sky colour. At frames 19/43/67
+        // cl.destroy() runs before rendering, leaving only the first 18 visible.
         private const int FramesPerColour = 24;
+        private const int VisibleFramesPerColour = 18;
         private SpriteRenderer m_Renderer;
         private Sprite[] m_Frames = Array.Empty<Sprite>();
         private float m_Accumulator;
         private int m_FrameIndex;
+        public int CurrentSourceFrame { get; private set; }
 
         public void Initialize(int skyColour)
         {
             m_Frames = MutinyWaterSurface.LoadFrameRange("Art/Effects/Splash",
-                (Mathf.Clamp(skyColour, 1, 3) - 1) * FramesPerColour + 1, FramesPerColour, new Vector2(0.5f, 0f));
+                (Mathf.Clamp(skyColour, 1, 3) - 1) * FramesPerColour + 1,
+                VisibleFramesPerColour, new Vector2(0.5f, 0f));
             if (m_Frames.Length == 0)
             {
                 Debug.LogError("[Mutiny:Water] Original splash frames are missing from Resources.", this);
@@ -417,6 +443,7 @@ namespace Mutiny.Levels
             m_Renderer = gameObject.AddComponent<SpriteRenderer>();
             m_Renderer.sortingOrder = MutinyLevelBuilder.WaterSortingOrder + 1;
             m_Renderer.sprite = m_Frames[0];
+            CurrentSourceFrame = (Mathf.Clamp(skyColour, 1, 3) - 1) * FramesPerColour + 1;
         }
 
         private void Update()
@@ -425,17 +452,34 @@ namespace Mutiny.Levels
                 return;
 
             m_Accumulator += Time.deltaTime;
+            AdvanceFrames();
+        }
+
+        private void AdvanceFrames()
+        {
             while (m_Accumulator >= MutinyPhysics.TimeStep)
             {
                 m_Accumulator -= MutinyPhysics.TimeStep;
                 m_FrameIndex++;
                 if (m_FrameIndex >= m_Frames.Length)
                 {
+                    // Flash destroys the clip on its 19th tick. Hide it now,
+                    // since Unity defers Destroy until the end of the frame.
+                    m_Renderer.enabled = false;
                     Destroy(gameObject);
                     return;
                 }
                 m_Renderer.sprite = m_Frames[m_FrameIndex];
+                CurrentSourceFrame++;
             }
+        }
+
+        public void AdvanceOriginalTickForVerification()
+        {
+            if (m_Frames.Length == 0 || m_Renderer == null || !m_Renderer.enabled)
+                return;
+            m_Accumulator += MutinyPhysics.TimeStep;
+            AdvanceFrames();
         }
     }
 }

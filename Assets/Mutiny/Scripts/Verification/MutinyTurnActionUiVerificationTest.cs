@@ -60,6 +60,8 @@ namespace Mutiny.Verification
             VerifyGameEndPopup(result);
             VerifyWeaponReadyAndCancel(result);
             VerifyProductionActionMethods(result);
+            VerifyOriginalSplashTimeline(result);
+            VerifyCherryBombWaterSplash(result);
             VerifyAiDecisionFlow(result);
             VerifyAiSpecialWeaponCandidates(result);
             VerifyCannonSmokeTrail(result);
@@ -2655,15 +2657,24 @@ namespace Mutiny.Verification
                 body.WaterPixelY = 100f;
                 PhysicsBodyState waterState = body.State;
                 waterState.X = 64f;
-                waterState.Y = 101f;
-                waterState.VelocityY = 2f;
+                waterState.Y = 99f;
+                waterState.Weight = 0f;
+                waterState.VelocityX = 0f;
+                waterState.VelocityY = 1f;
                 body.State = waterState;
-                body.EvaluateWaterState();
-                result.Assert(body.IsInWater && character.IsDrowned && !character.IsAlive,
-                    "WATER-01 baked character Awake binding drowns through the production water event");
+                body.SetTerrain(null, 0, 0);
+                body.AdvanceSimulationTick();
                 splashObject = GameObject.Find("WaterSplash");
-                result.Assert(splashObject != null && splashObject.GetComponent<MutinySplashEffect>() != null,
-                    "WATER-02 crossing the water line spawns the original splash effect");
+                result.Assert(!body.IsInWater && !character.IsDrowned && splashObject != null &&
+                              splashObject.GetComponent<MutinySplashEffect>() != null &&
+                              Mathf.Approximately(splashObject.transform.position.x, 2f) &&
+                              Mathf.Approximately(splashObject.transform.position.y, -100f / MutinyPhysics.PixelsPerUnit),
+                    "VIS-SPLASH-01 character crossing at equality spawns at its current X and the surface Y before drowning");
+                body.AdvanceSimulationTick();
+                result.Assert(body.IsInWater && character.IsDrowned && !character.IsAlive,
+                    "WATER-01 baked character Awake binding drowns after crossing the surface");
+                result.Assert(Object.FindObjectsByType<MutinySplashEffect>().Length == 1,
+                    "VIS-SPLASH-01 drowning after the crossing does not spawn a second splash");
 
                 // WATER-03: Weapon falling into water invalidation
                 GameObject testDynamiteObject = new GameObject("WaterVerification_Dynamite");
@@ -2697,6 +2708,78 @@ namespace Mutiny.Verification
                 DestroyNow(team2Object);
                 DestroyNow(team1Object);
                 DestroyNow(managerObject);
+            }
+        }
+
+        private static void VerifyOriginalSplashTimeline(MutinyLevel1VerificationResult result)
+        {
+            for (int sky = 1; sky <= 3; sky++)
+            {
+                GameObject splashObject = new GameObject($"SplashVerification_Sky{sky}");
+                try
+                {
+                    MutinySplashEffect splash = splashObject.AddComponent<MutinySplashEffect>();
+                    splash.Initialize(sky);
+                    SpriteRenderer renderer = splashObject.GetComponent<SpriteRenderer>();
+                    int firstFrame = (sky - 1) * 24 + 1;
+                    bool firstVisible = renderer != null && renderer.enabled &&
+                                        renderer.sprite != null && splash.CurrentSourceFrame == firstFrame &&
+                                        Vector2.Distance(renderer.sprite.pivot, new Vector2(24f, 0f)) < 0.01f;
+                    for (int tick = 2; tick <= 18; tick++)
+                        splash.AdvanceOriginalTickForVerification();
+                    bool lastVisible = renderer != null && renderer.enabled &&
+                                       splash.CurrentSourceFrame == firstFrame + 17;
+                    splash.AdvanceOriginalTickForVerification();
+                    result.Assert(firstVisible && lastVisible && renderer != null && !renderer.enabled,
+                        $"VIS-SPLASH-01 sky {sky} displays frames {firstFrame}..{firstFrame + 17} and destroys on {firstFrame + 18}");
+                }
+                finally
+                {
+                    DestroyNow(splashObject);
+                }
+            }
+        }
+
+        private static void VerifyCherryBombWaterSplash(MutinyLevel1VerificationResult result)
+        {
+            GameObject bombObject = new GameObject("SplashVerification_CherryBomb");
+            try
+            {
+                MutinyCherryBomb bomb = bombObject.AddComponent<MutinyCherryBomb>();
+                bomb.Initialize(null);
+                MutinyPhysicsBody body = bomb.PhysicsBody;
+                body.WaterPixelY = 100f;
+                body.SetTerrain(null, 0, 0);
+                PhysicsBodyState state = body.State;
+                state.X = 64f;
+                state.Y = 99f;
+                state.Weight = 0f;
+                body.State = state;
+                bomb.Fire(new Vector2(0f, 1f));
+
+                int before = Object.FindObjectsByType<MutinySplashEffect>().Length;
+                body.AdvanceSimulationTick();
+                int atSurface = Object.FindObjectsByType<MutinySplashEffect>().Length;
+                body.AdvanceSimulationTick();
+                int afterEntry = Object.FindObjectsByType<MutinySplashEffect>().Length;
+                result.Assert(atSurface == before + 1 && afterEntry == atSurface && !bomb.IsFinished,
+                    "VIS-SPLASH-02 CherryBomb splashes at equality once and entering water does not trigger contact explosion");
+
+                state = body.State;
+                state.Y = 101f;
+                state.Weight = 0f;
+                state.VelocityY = -2f;
+                body.State = state;
+                body.AdvanceSimulationTick();
+                result.Assert(Object.FindObjectsByType<MutinySplashEffect>().Length == afterEntry + 1,
+                    "VIS-SPLASH-02 resurfacing produces a second crossing splash");
+            }
+            finally
+            {
+                foreach (MutinySplashEffect splash in Object.FindObjectsByType<MutinySplashEffect>())
+                    DestroyNow(splash.gameObject);
+                DestroySmokeTrails();
+                DestroyNow(bombObject);
             }
         }
 

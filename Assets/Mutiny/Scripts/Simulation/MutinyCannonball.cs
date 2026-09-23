@@ -7,6 +7,7 @@ namespace Mutiny.Simulation
     [DisallowMultipleComponent]
     public sealed class MutinyCannonball : MutinyWeapon
     {
+        protected override bool UsesInheritedSplashCheck => false; // Cannonball.advance bypasses Weapon.advance
         public const float ExplosionSize = 100f;
         public const float ExplosionDamage = 50f;
 

@@ -14,16 +14,16 @@
 
 原版不使用统一粒子系统，而是由导出名称的 MovieClip 、嵌套子时间轴和帧脚本组成。逻辑帧必须与画面帧同步：例如 explosion 第 3 帧 `cl.hit()`，sweepingFlame 第 4 帧 `cl.createNext()`，效果结束帧再 `cl.destroy()`。
 
-Unity 主要用 PNG 序列 + `SpriteRenderer` 复现这些时间轴，以 `MutinyPhysics.TimeStep`/25 Hz 推进。并非所有资源都已接入：烟迹目录缺失，因此现有 `MutinyRumBottleSmokeTrail` 在运行时会直接返回。
+Unity 主要用 PNG 序列 + `SpriteRenderer` 复现这些时间轴，以 `MutinyPhysics.TimeStep`/25 Hz 推进。
 
 ## 通用效果规格
 
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
 | --- | --- | --- | --- | --- | --- |
 | VIS-EXP-01 | explosion 按 `size/100` 等比缩放；frame 3 命中，frame 8 停止并销毁 | `Explosion.as`；symbol 1785 frame 3/8 | `MutinyExplosion.Spawn`、`Update`、`ApplyHit` | 从真实武器碰撞生成，断言缩放、帧号、一次命中与销毁 tick | 已实现；局部回归已写，本轮未运行 |
-| VIS-SMOKE-01 | Cannonball、CherryBomb、Dynamite、ParachuteBomb（未开伞）、RumBottle 的 `advance` 路径每 tick 创建 `cannonSmokeTrail`；烟迹 frame 19 销毁 | 五个武器 AS2；symbol 866 frame 19 | `MutinyRumBottleSmokeTrail`；Cannonball/ParachuteBomb/RumBottle 已调用 | 检查 19 帧资源后由五种生产武器逐 tick 计数烟迹实例 | 未实现完整：资源缺失，CherryBomb/Dynamite 未接入 |
+| VIS-SMOKE-01 | Cannonball、CherryBomb、Dynamite、ParachuteBomb（未开伞）、RumBottle 的 `advance` 路径每 tick 创建 `cannonSmokeTrail`；烟迹 frame 19 销毁 | 五个武器 AS2；symbol 866 frame 19 | `MutinyRumBottleSmokeTrail`；五种武器已调用 | 检查 19 帧资源后由五种生产武器逐 tick 计数烟迹实例 | 已接入；待 Unity Play Mode 验证 |
 | VIS-FLAME-01 | sweepingFlame 创建即命中附近角色，frame 4 沿地表传播 8 px，frame 11 销毁 | `SweepingFlame.as`；symbol 905 frame 4/11 | `MutinySweepingFlame` | RumBottle 地面碰撞生成左右两条，逐 tick 核对命中/传播/销毁 | 已实现；待 Unity 运行验证 |
-| VIS-SPLASH-02 | 武器穿越水线时可触发通用 splash，但不应自动等同 Solid contact/爆炸 | `Weapon.as::advance`、`Solid.as::splashCheck` | 各武器 `AdvanceSplashCheck` 或物理水事件 | 对每个投射物分别测试进水、出水、地形碰撞 | 部分已实现；CherryBomb 入水被当作 contact 的差异待确认 |
+| VIS-SPLASH-02 | 已发射且未完成的普通武器在注册点跨水线时生成 splash；水线穿越不调用 `contact`，CherryBomb 不因入水而爆炸；Boulder/Parachute Bomb/金币按各自原版 `advance` 保留专用调用，Cannonball 不走继承的 `Weapon.advance` | `Weapon.as::advance`、`Solid.as::splashCheck`、`CherryBomb.as::advance`、`Cannonball.as::advance` | `MutinyWeapon.AdvanceInheritedSplashCheck`、各武器 `AdvanceSplashCheck` | 对投射物分别测试相等水线、入水、出水、地形碰撞 | 已接入；待 Unity Play Mode 验证 |
 
 ## 武器时间轴盘点
 
@@ -50,11 +50,11 @@ Unity 主要用 PNG 序列 + `SpriteRenderer` 复现这些时间轴，以 `Mutin
 - 已有通用效果：Explosion 8 帧、Splash 72 张导出图、SweepingFlame 11 帧、Water 30 帧。
 - 已有复合武器帧：Anchor 12、CherryBomb 4、Dynamite 13、GunpowderBarrel 12、Mine 30、ParachuteBomb 30、RumBottle 12、Seagull 14、TidalWave 27、WoodenCrate 18。
 - 单帧/组件化资源：Banana、PiecesOfEight、VoodooDoll、SeagullFire、Cannonball；Boulder 和 Cannon 为多部件图层。
-- 缺失：`Assets/Mutiny/Resources/Art/Effects/CannonSmokeTrail/1..19`。代码对该资源有显式加载，但本基线目录不存在。
+- 烟迹：`Assets/Mutiny/Resources/Art/Effects/CannonSmokeTrail/1..19` 已在项目中。
 
 ## 完成状态
 
 - 静态确认：爆炸、扫火、烟迹、Mine、Parachute Bomb、Seagull、Tidal Wave、箱体与 Anchor 的关键帧脚本。
-- 已实现：除烟迹外的主要帧播放器与生产事件连接。
+- 已实现：主要帧播放器与生产事件连接；本轮修正水花帧长和跨线调用。
 - 实际测试通过：本轮未运行 Unity，不新增通过记录。
 - 待运行验证：通用效果与上表所有时间轴的生产入口逐帧对照。

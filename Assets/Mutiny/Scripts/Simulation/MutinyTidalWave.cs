@@ -13,6 +13,7 @@ namespace Mutiny.Simulation
         public override bool AdvancesMotionWhileReady => false;
         // TidalWave constructor omits show(); startWave() creates the visible clip.
         public override bool IsBodyVisibleWhileReady => false;
+        protected override bool UsesInheritedSplashCheck => false; // emitted on startWave's first tick
 
         public const float OriginalStartX = -550f;
         public const float OriginalSpeed = 20f;

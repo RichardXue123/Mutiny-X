@@ -72,7 +72,11 @@ namespace Mutiny.Simulation
 
         protected float m_LifetimeTimer = 0f;
         protected float m_WaterTimer = 0f;
-        protected bool m_HasSpawnedWaterSplash = false;
+        private bool m_HasHandledWaterEntry;
+        private bool m_OverWater = true;
+        // Cannonball and some weapon subclasses do not execute Weapon.advance's
+        // inherited splashCheck; they supply their own post-motion behavior.
+        protected virtual bool UsesInheritedSplashCheck => true;
         private readonly MutinyRotationState m_RotationState = new MutinyRotationState();
         private bool m_HasLoggedRotationVelocity;
         private float m_LastLoggedRotationVelocityX;
@@ -87,7 +91,8 @@ namespace Mutiny.Simulation
             IsBeingAimed = false;
             m_LifetimeTimer = 0f;
             m_WaterTimer = 0f;
-            m_HasSpawnedWaterSplash = false;
+            m_HasHandledWaterEntry = false;
+            m_OverWater = true;
             m_RotationState.Reset(RotationTransform != null ? RotationTransform.localEulerAngles.z : 0f);
             m_HasLoggedRotationVelocity = false;
 
@@ -116,6 +121,8 @@ namespace Mutiny.Simulation
             PhysicsBody.OnCeilingHit += () => OnContact(CollisionSide.Ceiling);
             PhysicsBody.OnWallHit += () => OnContact(CollisionSide.Wall);
             PhysicsBody.OnEnterWater += HandleEnterWater;
+            PhysicsBody.OnAfterMotionStep -= AdvanceInheritedSplashCheck;
+            PhysicsBody.OnAfterMotionStep += AdvanceInheritedSplashCheck;
             PhysicsBody.OnBeforeSimulationStep -= AdvanceOriginalRotationTick;
             PhysicsBody.OnBeforeSimulationStep += AdvanceOriginalRotationTick;
             MutinyDebugLog.Info("Weapon",
@@ -225,16 +232,19 @@ namespace Mutiny.Simulation
 
         protected virtual void HandleEnterWater()
         {
-            if (!m_HasSpawnedWaterSplash && PhysicsBody != null)
-            {
-                m_HasSpawnedWaterSplash = true;
-                float waterY = float.IsInfinity(PhysicsBody.WaterPixelY) ? PhysicsBody.State.Y : PhysicsBody.WaterPixelY;
-                MutinyWaterSurface.SpawnSplash(PhysicsBody.State.X, waterY);
-                Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("splash");
-            }
-
-            OnContact(CollisionSide.Water);
+            m_HasHandledWaterEntry = true;
             OnWaterSubmerged();
+        }
+
+        private void AdvanceInheritedSplashCheck()
+        {
+            if (!UsesInheritedSplashCheck || !PhysicsBody.ApplyWaterPhysics ||
+                !IsFired || IsFinished)
+                return;
+
+            PhysicsBodyState state = PhysicsBody.State;
+            MutinyWaterSurface.CheckSplashCrossing(state.X, state.Y,
+                PhysicsBody.WaterPixelY, ref m_OverWater);
         }
 
         protected virtual void OnWaterSubmerged()
@@ -253,7 +263,7 @@ namespace Mutiny.Simulation
             if (PhysicsBody.IsInWater)
             {
                 m_WaterTimer += Time.deltaTime;
-                if (!m_HasSpawnedWaterSplash)
+                if (!m_HasHandledWaterEntry)
                 {
                     HandleEnterWater();
                 }

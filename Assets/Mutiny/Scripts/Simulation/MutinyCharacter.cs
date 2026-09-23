@@ -70,6 +70,7 @@ namespace Mutiny.Simulation
         private readonly MutinyRotationState m_RotationState = new MutinyRotationState();
         private bool m_HasLoggedRotationVelocity;
         private float m_LastLoggedRotationVelocityX;
+        private bool m_OverWater = true;
 
         public bool IsResolvingHealthDisplay =>
             !IsDrowned && !Mathf.Approximately(ShownHealth, Health);
@@ -89,6 +90,7 @@ namespace Mutiny.Simulation
                 PhysicsBody = gameObject.AddComponent<MutinyPhysicsBody>();
             m_RotationState.Reset(transform.localEulerAngles.z);
             m_HasLoggedRotationVelocity = false;
+            m_OverWater = true;
             BindPhysicsEvents();
         }
 
@@ -196,6 +198,7 @@ namespace Mutiny.Simulation
             m_ContactSoundCount = 0;
             m_RotationState.Reset(transform.localEulerAngles.z);
             m_HasLoggedRotationVelocity = false;
+            m_OverWater = true;
 
             ParseWeapons(properties);
 
@@ -400,8 +403,6 @@ namespace Mutiny.Simulation
             OnHealthChanged?.Invoke();
             PhysicsBodyState state = PhysicsBody != null ? PhysicsBody.State : default;
             float waterPixelY = PhysicsBody != null ? PhysicsBody.WaterPixelY : state.Y;
-            MutinyWaterSurface.SpawnSplash(state.X, waterPixelY);
-            Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("splash");
             MutinyDebugLog.Info("Water",
                 $"character drowned name={name} team=T{TeamIndex} position=({state.X:F2},{state.Y:F2}) waterY={waterPixelY:F2}", this);
             MarkDead();
@@ -590,12 +591,21 @@ namespace Mutiny.Simulation
             PhysicsBody.OnWallHit += HandleOriginalPhysicalContact;
             PhysicsBody.OnAfterMotionStep -= AdvanceOriginalRotationTick;
             PhysicsBody.OnAfterMotionStep += AdvanceOriginalRotationTick;
+            PhysicsBody.OnAfterMotionStep -= AdvanceOriginalSplashCheck;
+            PhysicsBody.OnAfterMotionStep += AdvanceOriginalSplashCheck;
             PhysicsBody.OnWaterMotionAdjusted -= AdvanceOriginalWaterRotationTick;
             PhysicsBody.OnWaterMotionAdjusted += AdvanceOriginalWaterRotationTick;
             PhysicsBody.OnSimulationStep -= AdvanceOriginalHealthTick;
             PhysicsBody.OnSimulationStep += AdvanceOriginalHealthTick;
             PhysicsBody.OnSimulationStep -= AdvanceOriginalContactTimerTick;
             PhysicsBody.OnSimulationStep += AdvanceOriginalContactTimerTick;
+        }
+
+        private void AdvanceOriginalSplashCheck()
+        {
+            PhysicsBodyState state = PhysicsBody.State;
+            MutinyWaterSurface.CheckSplashCrossing(state.X, state.Y,
+                PhysicsBody.WaterPixelY, ref m_OverWater);
         }
 
         private void OnDestroy()
@@ -608,6 +618,7 @@ namespace Mutiny.Simulation
                 PhysicsBody.OnCeilingHit -= HandleOriginalPhysicalContact;
                 PhysicsBody.OnWallHit -= HandleOriginalPhysicalContact;
                 PhysicsBody.OnAfterMotionStep -= AdvanceOriginalRotationTick;
+                PhysicsBody.OnAfterMotionStep -= AdvanceOriginalSplashCheck;
                 PhysicsBody.OnWaterMotionAdjusted -= AdvanceOriginalWaterRotationTick;
                 PhysicsBody.OnSimulationStep -= AdvanceOriginalHealthTick;
                 PhysicsBody.OnSimulationStep -= AdvanceOriginalContactTimerTick;

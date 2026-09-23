@@ -11,6 +11,7 @@ namespace Mutiny.Levels
         public int Width;
         public int Height;
         public int Players;
+        public int SkyColour = 1;
         public float WaterLevelY;
 
         public Transform BackgroundHolder;
