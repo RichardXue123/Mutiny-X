@@ -21,7 +21,26 @@
 - `BOX-WAIT-01`：第一只木箱提交后，连续驱动生产 `MutinyTurnManager.AdvanceSimulationTick()` 超过安全阈值 150 tick；断言根箱未被强制 `Finish/Destroy`、pending 链仍存在，并可继续完成第二、第三箱。火药桶共享同一无超时规则。
 - `BOX-CAM-01`：第一箱提交并进入 `ActionExecuting` 后，经生产镜头目标解析断言没有箱体跟随目标、没有角色回移门；`CanAcceptManualScrollingForVerification()` 必须为真，覆盖鼠标边缘、方向键和 WASD 共用的滚屏资格。
 - `CRT-EXP-01/02`：让角色与第一只木箱同时落入生产 `MutinyExplosion.ApplyHit` 范围；断言同次命中已给角色向上速度、只移除命中箱的共享碰撞注册、木箱立即位于原版 frame 11。随后各推进一个角色物理 tick 和箱子时间轴 tick，断言角色已经飞离且箱子进入 frame 12；推进至 frame 18 时箱子隐藏。
+- `BOX-END-01`：在生产 `MutinyTurnManager` 中分别击败敌方和玩家方；每次都同时创建已注册箱体与未注册待放置 BoxWeapon，断言进入 `GameOver` 时 WoodenCrate、GunpowderBarrel 均同步失活且共享注册数归零。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`，尚未在 Unity Play Mode 实际执行，不能登记为通过。
+
+## Cannon 范围锚点回归
+
+- `CAN-PLACE-01`：角色位于 `(100,200)` 时，通过生产 `MutinyCannon.PlacementCenterPixels` 与独立 `RangeCircle` Transform 断言范围中心均为 `(100,100)`，即原始 100 px 圆的底部落在角色坐标。
+- `CAN-PLACE-03`：从炮身初始 `(100,190)` 按住并把指针快速移到 `(100,400)`，驱动生产 25 Hz tick；以 `(100,100)` 为中心的 120 px 约束应先把目标裁到 `(100,220)`，再按原版半距离移动至 `(100,205)`，并保持拖动资格。
+- 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；待 Unity Play Mode 实际执行，不能登记为通过。
+
+## AI 武器候选缺口回归
+
+- `AI-WPN-04`：通过 `EvaluateCharacterWeapons` 的生产分发与 Anchor 正式执行入口，在固定随机种子和地面上验证全图垂直采样会生成 Anchor 候选；胜出后创建已发射的正式 Anchor，并消费库存。
+- `AI-WPN-05`：通过同一生产分发器验证 Wooden Crate 获得至少 3 个合法 BoxWeapon 位置后进入候选；随后启动正式 `BeginAiPlacement` 并推进原版 40 tick 延迟，断言第一箱落地且三箱序列仍处于活动状态。
+- 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；`Assembly-CSharp` 与 `Assembly-CSharp-Editor` 编译通过；尚未在 Unity Play Mode 实际执行，不能登记为通过。
+
+## Banana 轨迹一致性回归
+
+- `BAN-PHY-01`：通过生产 `MutinyWeaponFactory.SpawnAndLaunch()` 提交 400 px 满拉力，断言 Banana 实际初速为原版 `twangMaxForce=30`，不再错误套用 `Weapon.release` 的 20 上限。
+- `BAN-TRAJ-01`：以同一初速分别驱动生产预览 `PredictVelocityTick()` 和实际 `MutinyPhysicsBody.AdvanceSimulationTick()`，连续比较前 5 个无碰撞 tick 的坐标完全一致。
+- 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；待 Unity Play Mode 实际执行，不能登记为通过。
 
 ## Mine 缺陷回归
 
@@ -54,3 +73,19 @@
 - `AND-INP-02`：生产触摸读取只锁定首个 `Began` 的 touch id，其他触点不能替换本次手势；真机多点干扰仍待验证。
 - `AND-INP-03`：断言 `Canceled` 只产生取消标记而不伪造正常松开；正在拖动的火炮取消后不提交发射。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`，覆盖生产触摸状态构造、触点取得资格和火炮取消入口；`Assembly-CSharp` 与 `Assembly-CSharp-Editor` 编译通过；尚未在 Unity Play Mode 与 Android 真机实际执行，不能登记为通过。
+
+## Android 触摸镜头回归
+
+- `AND-INP-04/AND-CAM-02`：验证屏幕拖动量按正交相机当前可视宽高换算为世界位移，且镜头反向移动以形成“内容跟手”；生产拖动入口继续经过回合资格、自动跟随门和关卡边界。
+- 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；`Assembly-CSharp` 与 `Assembly-CSharp-Editor` 编译通过；尚未在 Android 真机实际执行，不能登记为通过。
+
+## Android 点击/拖动与多指回归
+
+- `AND-INP-05`：点击型武器的触摸按下不立即提交；累计屏幕位移不超过阈值的松手才调用生产武器入口，超过阈值转为镜头拖动且不消费武器。
+- `AND-INP-06/AND-CAM-03`：行动触点处于 Aiming/火炮拖动时，第二 touch id 可取得独立镜头角色；镜头门只对这个明确角色放宽 aiming 限制，其余回合、AI、自动目标和边界门保持不变。
+- 当前状态：阈值分类与 aiming 镜头角色门用例已加入 `MutinyTurnActionUiVerificationTest`；`Assembly-CSharp` 与 `Assembly-CSharp-Editor` 编译通过；多指设备行为尚未在 Android 真机实际执行，不能登记为通过。
+
+## Android 降落伞炸弹扇风回归
+
+- `AND-PCB-FAN-01`：验证移动触点持续按住时 fan 输入为 active；短触摸只有 `Began` 锁存、在下一物理 tick 前已松开时仍 active 一次；脉冲消费后无持续触摸则恢复 inactive。方向与 `±0.2` 继续由现有 `PCB-FAN-01` 生产物理用例覆盖。
+- 当前状态：用例已加入 `VerifyParachuteBomb()`，覆盖持续触摸、短点击首 tick 生效及第二 tick 不重复消费；`Assembly-CSharp` 与 `Assembly-CSharp-Editor` 编译通过；尚未在 Android 真机实际执行，不能登记为通过。

@@ -13,6 +13,14 @@
 - `Assets/Mutiny/Scripts/Presentation/MutinyCameraController.cs`
 - `Assets/Mutiny/Scripts/Presentation/MutinyAudioManager.cs`
 
+## 动画与视觉效果基线
+
+- [动画与视觉效果总览](ANIMATION_AND_VISUAL_EFFECTS.md)：原版 Flash 时间轴/AS2 与当前 Unity 实现的跨模块对照、缺口和验收顺序。
+- [角色动画](05-CharacterAnimation/README.md)：待机、受击、旋转、落水和死亡表现。
+- [武器画面效果](06-WeaponEffects/README.md)：投射物时间轴、爆炸、烟迹、火焰和特殊武器。
+
+基线日期为 2026-09-23；本轮只完成静态取证与实现盘点，没有将未运行的 Unity 用例登记为通过。
+
 ## 边界
 
 表现层读取权威状态和事件，不自行决定伤害、库存、行动资格或回合结束。

@@ -9,11 +9,12 @@ namespace Mutiny.Simulation
     {
         // DefineSprite 1900 contains a 200 px visible circle in a 365 px canvas.
         // TileSystem scales it to 130%, so the visible radius is 130 px. Keep the
-        // Unity placement guide and its actual constraint centred on the character.
+        // placement guide and its actual constraint centred 100 px above the
+        // character, so the source circle's bottom rests on the owner position.
         public const float RangeCircleSourceRadius = 100f;
         public const float RangeCircleScale = 1.3f;
         public const float RangeCircleVisibleRadius = RangeCircleSourceRadius * RangeCircleScale;
-        public const float PlacementOffsetY = 0f;
+        public const float PlacementOffsetY = -100f;
         public const float InitialEquipmentOffsetY = -10f;
         public const float PlacementRadius = 120f;
         public const float BodyClickRadius = 20f;
@@ -380,7 +381,7 @@ namespace Mutiny.Simulation
             GameObject rangeObject = new GameObject("RangeCircle");
             // Controller.rangeCircle is a stage-level sibling in Flash. Keeping it
             // outside the cannon hierarchy prevents body drag/rotation from ever
-            // changing the owner-anchored placement guide.
+            // changing the owner-bottom-anchored placement guide.
             m_RangeCircleRenderer = rangeObject.AddComponent<SpriteRenderer>();
             m_RangeCircleRenderer.sortingOrder = WeaponSortingOrder - 2;
             m_RangeCircleRenderer.sprite = LoadRuntimeSprite("Art/Weapons/Cannon/RangeCircle", RangeCirclePivot);
@@ -466,7 +467,7 @@ namespace Mutiny.Simulation
             // displayed Y axis is up, so the equivalent sprite rotation is negated.
             transform.rotation = Quaternion.Euler(0f, 0f, -RotationDegrees);
             // rangeCircle is attached to the controller in Flash, so cannon
-            // rotation must not move its owner-centred world position.
+            // rotation must not move its owner-bottom-anchored world position.
             UpdateRangeCircleVisual();
         }
 

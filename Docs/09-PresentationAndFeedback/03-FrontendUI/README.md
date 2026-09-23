@@ -31,6 +31,12 @@ MutinyFrontendController (MonoBehaviour, DisallowMultipleComponent)
 
 ## 画布与布局标准
 
+### Android 屏幕方向
+
+| ID | 可观察行为 | 来源 | Unity 入口 | 验收用例 | 当前结果 |
+| --- | --- | --- | --- | --- | --- |
+| AND-DSP-01 | Android 启动及运行期间只使用横屏；允许设备在 Landscape Left 与 Landscape Right 之间翻转，不允许进入两个竖屏方向 | 用户授权的 Android 适配要求 | `ProjectSettings.asset`：`defaultScreenOrientation=AutoRotation`，仅开启两个 Landscape 方向 | 构建后分别以竖持、左横持和右横持启动；画面始终为横屏且左右横屏可翻转 | 已配置；待 Android 构建与真机验证 |
+
 前端 UI 使用与战斗 HUD 完全一致的 550×400 原版 Flash 舞台基准和 letterbox 缩放算法：
 
 ```csharp

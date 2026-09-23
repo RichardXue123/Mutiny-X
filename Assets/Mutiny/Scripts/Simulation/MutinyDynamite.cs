@@ -81,6 +81,8 @@ namespace Mutiny.Simulation
             PhysicsBody.State.Bounce = 0.2f;
             // Dynamite.as constructor: hitsBoxes = true.
             PhysicsBody.State.HitsBoxes = true;
+            PhysicsBody.OnSimulationStep -= EmitOriginalSmokeTrail;
+            PhysicsBody.OnSimulationStep += EmitOriginalSmokeTrail;
         }
 
         protected override void OnWaterSubmerged()
@@ -172,6 +174,20 @@ namespace Mutiny.Simulation
             MutinyExplosion.Spawn(posPx, 250f, 70f, Owner);
 
             Destroy(gameObject, 0.1f);
+        }
+
+        private void EmitOriginalSmokeTrail()
+        {
+            // Dynamite.advance has no fired/isLit condition around the trail.
+            // The unlit water frame still follows the same !finished gate.
+            if (!IsFinished && PhysicsBody != null)
+                MutinyRumBottleSmokeTrail.Spawn(new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y));
+        }
+
+        private void OnDestroy()
+        {
+            if (PhysicsBody != null)
+                PhysicsBody.OnSimulationStep -= EmitOriginalSmokeTrail;
         }
     }
 }

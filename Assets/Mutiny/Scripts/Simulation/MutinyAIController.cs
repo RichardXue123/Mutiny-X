@@ -350,8 +350,22 @@ namespace Mutiny.Simulation
 
                 if (string.Equals(weaponType, "gunpowderBarrel", StringComparison.OrdinalIgnoreCase))
                 {
-                    EvaluateGunpowderBarrel(shooter, enemies, allies, terrainGrid, gridW, gridH,
+                    EvaluateBoxWeapon(shooter, enemies, allies, terrainGrid, gridW, gridH, weaponType,
                         ref bestMove, ref candidateCount);
+                    continue;
+                }
+
+                if (string.Equals(weaponType, "woodenCrate", StringComparison.OrdinalIgnoreCase))
+                {
+                    EvaluateBoxWeapon(shooter, enemies, allies, terrainGrid, gridW, gridH, weaponType,
+                        ref bestMove, ref candidateCount);
+                    continue;
+                }
+
+                if (string.Equals(weaponType, "anchor", StringComparison.OrdinalIgnoreCase))
+                {
+                    EvaluateAnchor(shooter, enemies, allies, terrainGrid, gridW, gridH, waterPixelY,
+                        samples, ref bestMove, ref candidateCount);
                     continue;
                 }
 
@@ -359,14 +373,6 @@ namespace Mutiny.Simulation
                 {
                     EvaluateCannon(shooter, enemies, allies, terrainGrid, gridW, gridH, waterPixelY,
                         samples, ref bestMove, ref candidateCount);
-                    continue;
-                }
-
-                // These weapons have original aiPerform data beyond vx/vy.  Do not
-                // substitute a normal projectile until their runtime path is exact.
-                if (IsDeferredSpecialWeapon(weaponType))
-                {
-                    MutinyDebugLog.Info("AI", $"deferred special weapon={weaponType} character={shooter.name}", this);
                     continue;
                 }
 
@@ -391,13 +397,38 @@ namespace Mutiny.Simulation
             }
         }
 
-        private void EvaluateGunpowderBarrel(
+        // Verification seam for the production inventory dispatcher and candidate
+        // generators. Tests supply an isolated board but do not duplicate any AI
+        // formula or bypass the real per-weapon routing above.
+        internal AIMove EvaluateCharacterWeaponsForVerification(
             MutinyCharacter shooter,
             List<MutinyCharacter> enemies,
             List<MutinyCharacter> allies,
             string[,] terrainGrid,
             int gridW,
             int gridH,
+            float waterPixelY,
+            out int candidateCount)
+        {
+            var bestMove = new AIMove
+            {
+                MoveType = AIMoveType.Pass,
+                Score = float.NegativeInfinity
+            };
+            candidateCount = 0;
+            EvaluateCharacterWeapons(shooter, enemies, allies, terrainGrid, gridW, gridH,
+                waterPixelY, ref bestMove, ref candidateCount);
+            return bestMove;
+        }
+
+        private void EvaluateBoxWeapon(
+            MutinyCharacter shooter,
+            List<MutinyCharacter> enemies,
+            List<MutinyCharacter> allies,
+            string[,] terrainGrid,
+            int gridW,
+            int gridH,
+            string weaponType,
             ref AIMove bestMove,
             ref int candidateCount)
         {
@@ -428,7 +459,7 @@ namespace Mutiny.Simulation
             if (livingEnemies.Count == 0)
                 return;
 
-            MutinyGunpowderBarrel probe = MutinyWeaponFactory.SpawnWeapon("gunpowderBarrel", shooter) as MutinyGunpowderBarrel;
+            MutinyWeapon probe = MutinyWeaponFactory.SpawnWeapon(weaponType, shooter);
             if (probe == null)
                 return;
             try
@@ -443,7 +474,7 @@ namespace Mutiny.Simulation
                     float offsetX = sign * UnityEngine.Random.Range(16, 64);
                     float offsetY = UnityEngine.Random.Range(-50, 50);
                     Vector2 candidate = new Vector2(target.x + offsetX, target.y + offsetY);
-                    if (probe.CanPlace(candidate))
+                    if (CanPlaceBoxWeapon(probe, candidate))
                         possibilities.Add(candidate);
                 }
 
@@ -453,7 +484,7 @@ namespace Mutiny.Simulation
                     {
                         MoveType = AIMoveType.ShootWeapon,
                         Character = shooter,
-                        WeaponType = "gunpowderBarrel",
+                        WeaponType = weaponType,
                         Score = UnityEngine.Random.value,
                         BoxPossibilities = possibilities.ToArray()
                     }, ref candidateCount);
@@ -462,6 +493,76 @@ namespace Mutiny.Simulation
             finally
             {
                 Destroy(probe.gameObject);
+            }
+        }
+
+        private static bool CanPlaceBoxWeapon(MutinyWeapon probe, Vector2 candidate)
+        {
+            if (probe is MutinyGunpowderBarrel barrel)
+                return barrel.CanPlace(candidate);
+            if (probe is MutinyWoodenCrate crate)
+                return crate.CanPlace(candidate);
+            return false;
+        }
+
+        private void EvaluateAnchor(
+            MutinyCharacter shooter,
+            List<MutinyCharacter> enemies,
+            List<MutinyCharacter> allies,
+            string[,] terrainGrid,
+            int gridW,
+            int gridH,
+            float waterPixelY,
+            int samples,
+            ref AIMove bestMove,
+            ref int candidateCount)
+        {
+            // Anchor.randomThrows: choose an x across the whole level, start at
+            // y=-200 and fall vertically at 40 px/tick. Only floor contacts become
+            // candidates; water misses are discarded before generic scoring.
+            if (terrainGrid == null || gridW <= 0 || gridH <= 0 || float.IsInfinity(waterPixelY))
+                return;
+
+            int levelWidthPixels = gridW * (int)MutinyPhysics.PixelsPerUnit;
+            List<PhysicsBoxObstacle> boxes = MutinyBoxRegistry.GetObstacles();
+            for (int sample = 0; sample < Mathf.Max(0, samples); sample++)
+            {
+                int targetX = UnityEngine.Random.Range(0, levelWidthPixels);
+                PhysicsBodyState body = PhysicsBodyState.CreateDefault(targetX, MutinyAnchor.DropStartYPixels);
+                body.Weight = 0f;
+                body.LeftExtent = body.RightExtent = 48f;
+                body.TopExtent = 96f;
+                body.BottomExtent = 0f;
+                body.HitsBoxes = true;
+
+                bool hitFloor = false;
+                // The source loop is bounded by water. Keep an additional guard so
+                // malformed verification terrain cannot hang the whole AI turn.
+                for (int tick = 0; tick < 1024 && body.Y < waterPixelY; tick++)
+                {
+                    body.VelocityX = 0f;
+                    body.VelocityY = MutinyAnchor.DropSpeedPixelsPerTick;
+                    StepResult result = MutinyPhysics.Step(ref body, terrainGrid, gridW, gridH, boxes);
+                    if (result.HitFloor)
+                    {
+                        hitFloor = true;
+                        break;
+                    }
+                }
+
+                if (!hitFloor)
+                    continue;
+
+                Vector2 landing = new Vector2(body.X, body.Y);
+                float score = ScoreGenericWeaponCandidate("anchor", landing, enemies, allies);
+                ConsiderCandidate(ref bestMove, new AIMove
+                {
+                    MoveType = AIMoveType.ShootWeapon,
+                    Character = shooter,
+                    WeaponType = "anchor",
+                    TargetPosition = landing,
+                    Score = score
+                }, ref candidateCount);
             }
         }
 
@@ -709,13 +810,6 @@ namespace Mutiny.Simulation
             float force = UnityEngine.Random.Range(5f, maxForce);
             float radians = degrees * Mathf.Deg2Rad;
             return new Vector2(Mathf.Cos(radians) * force, Mathf.Sin(radians) * force);
-        }
-
-        private static bool IsDeferredSpecialWeapon(string weaponType)
-        {
-            return string.Equals(weaponType, "woodenCrate", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(weaponType, "gunpowderBarrel", StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(weaponType, "anchor", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool MutinyWeaponFactoryCanFire(string weaponType)
@@ -1087,6 +1181,21 @@ namespace Mutiny.Simulation
                         ch.ConsumeWeapon(move.WeaponType);
                         MutinyDebugLog.Info("AI", $"gunpowder barrel AI sequence armed candidates={move.BoxPossibilities.Length}", this);
                     }
+                }
+                else if (string.Equals(move.WeaponType, "woodenCrate", StringComparison.OrdinalIgnoreCase))
+                {
+                    MutinyWeapon crateWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    if (crateWeapon is MutinyWoodenCrate crate && crate.BeginAiPlacement(move.BoxPossibilities))
+                    {
+                        ch.ConsumeWeapon(move.WeaponType);
+                        MutinyDebugLog.Info("AI", $"wooden crate AI sequence armed candidates={move.BoxPossibilities.Length}", this);
+                    }
+                }
+                else if (string.Equals(move.WeaponType, "anchor", StringComparison.OrdinalIgnoreCase))
+                {
+                    MutinyWeapon anchorWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    if (anchorWeapon is MutinyAnchor anchor && anchor.DropForAi(move.TargetPosition.x))
+                        ch.ConsumeWeapon(move.WeaponType);
                 }
                 else if (string.Equals(move.WeaponType, "cannon", StringComparison.OrdinalIgnoreCase))
                 {

@@ -17,5 +17,8 @@
 | AND-INP-01 | Android 第一根有效触点映射为统一主指针：`Began`=按下沿，`Moved/Stationary`=持续按住，`Ended`=松开；点击选人、按住拖动显示轨迹、松开后沿用桌面端同一跳跃/武器发射入口 | 用户授权的 Android 操作方案；桌面生产入口 `MutinyPlayerInput.Update` | `TryReadPointer`、`TryReadTouchPointer`、`PointerFrameState` | 对各触摸阶段断言统一指针状态；通过现有生产蓄力/发射入口验证状态转换 | 已实现；C# 编译通过，待 Unity/Android 运行验证 |
 | AND-INP-02 | 一次手势只由最先 `Began` 的触点拥有，其他触点不得抢占位置或触发松开发射；全部释放后下一次 `Began` 才能取得所有权 | 用户授权的 Android 操作方案 | `m_ActiveTouchId`、`TryReadTouchPointer` | 触点锁定逻辑回归；Android 真机双指干扰验证 | 已实现；触点资格静态回归已加入，待真机验证 |
 | AND-INP-03 | `Canceled`（系统手势、切后台或输入设备取消）只取消当前蓄力/拖动并清理轨迹，不得提交跳跃、武器或火炮发射 | 用户授权的 Android 操作方案 | `HandlePointerCancellation`、`MutinyCannon.CancelPointer` | 阶段映射断言 `Canceled` 不产生 release；火炮取消保持未提交 | 已实现；C# 编译通过，待 Unity/Android 运行验证 |
+| AND-INP-04 | Android 在棋盘空白处按住并拖动时平移当前视角；内容跟随手指移动，松手结束。角色、蓄力起点、武器专用点击与取消按钮优先，不得同时触发镜头拖动 | 用户授权的 Android 镜头适配要求 | `TryBeginMobileCameraDrag`、`AdvanceMobileCameraDrag`、`MutinyCameraController.PanByMobileTouchDelta` | 空白触点可取得镜头手势；屏幕位移按相机可视范围换算并受关卡边界限制；与蓄力互斥 | 已实现；C# 编译通过，待 Android 真机验证 |
+| AND-INP-05 | Android 对船锚、海浪、海鸥、箱/桶和巫毒目标等点击型操作区分点击与拖动：按下后在阈值内松手才提交武器；持续移动超过阈值则不提交武器，改为平移镜头 | 用户反馈：选中点击型武器后仍需先移动视角 | `BeginMobileTapCandidate`、`AdvanceMobileTapCandidate`、`IsMobileTapActivatedInteraction` | 阈值内 release 调生产武器入口；越阈值只取得镜头手势且库存/回合状态不改变 | 已实现；阈值回归已加入、C# 编译通过，待真机验证 |
+| AND-INP-06 | 一根手指正在蓄力跳跃、投掷或拖动火炮时，第二根手指可独立拖动镜头；第二指不得替换行动触点、提交武器或结束第一指蓄力 | 用户授权的 Android 多指操作要求 | `UpdateSecondaryMobileCameraTouch`、`m_SecondaryCameraTouchId` | 行动触点锁定保持；第二触点仅产生相机位移；任一触点单独释放不结束另一触点角色 | 已实现；角色门回归已加入、C# 编译通过，待真机多指验证 |
 
 以上为移动端输入适配，不改变 Flash 原版的选取半径、最小拖动距离、方向、力度、轨迹或库存消耗规则。桌面端继续读取 `Mouse.current`。

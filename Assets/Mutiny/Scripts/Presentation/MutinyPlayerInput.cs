@@ -27,6 +27,9 @@ namespace Mutiny.Presentation
         public float DragSelectionRadiusPixels = 30f;
         public float MinDragDistancePixels = 5f;
 
+        [Header("Android Touch Settings (screen pixels)")]
+        public float MobileTapDragThresholdPixels = 24f;
+
         public string ActiveWeapon { get; private set; }
         public MutinyPlayerInteractionState InteractionState { get; private set; } =
             MutinyPlayerInteractionState.CharacterSelection;
@@ -92,6 +95,12 @@ namespace Mutiny.Presentation
         private const int NoActiveTouchId = int.MinValue;
         private int m_ActiveTouchId = NoActiveTouchId;
         private Vector2 m_LastTouchPosition;
+        private bool m_IsMobileCameraDragging;
+        private Vector2 m_LastMobileCameraDragPosition;
+        private bool m_IsPendingMobileTap;
+        private Vector2 m_MobileTapStartPosition;
+        private int m_SecondaryCameraTouchId = NoActiveTouchId;
+        private Vector2 m_LastSecondaryCameraTouchPosition;
         // Unlike ordinary projectiles, PiecesOfEight remains equipped and is reused
         // for coin 2..8 while the turn stays in ActionExecuting.
         private MutinyPiecesOfEight m_ArmedPiecesOfEight;
@@ -147,6 +156,7 @@ namespace Mutiny.Presentation
             MutinyGameHUD hud = FindAnyObjectByType<MutinyGameHUD>();
             if (hud != null && hud.IsQuitPromptVisible)
             {
+                ResetMobileGestureOwnership();
                 ClearSpecialWeaponCursor();
                 ClearHoveredCharacter();
                 if (InteractionState == MutinyPlayerInteractionState.Aiming)
@@ -156,6 +166,7 @@ namespace Mutiny.Presentation
 
             if (!CanProcessCurrentTurnInput())
             {
+                ResetMobileGestureOwnership();
                 ClearSpecialWeaponCursor();
                 ClearHoveredCharacter();
                 m_WasTurnActive = false;
@@ -193,6 +204,8 @@ namespace Mutiny.Presentation
                 return;
             }
 
+            UpdateSecondaryMobileCameraTouch();
+
             if (!TryReadPointer(out PointerFrameState pointer))
             {
                 ClearSpecialWeaponCursor();
@@ -207,6 +220,18 @@ namespace Mutiny.Presentation
             }
 
             Vector3 mouseWorld = GetMouseWorldPosition(pointer.Position);
+
+            if (m_IsPendingMobileTap)
+            {
+                AdvanceMobileTapCandidate(pointer, currentTeam, mouseWorld);
+                return;
+            }
+
+            if (m_IsMobileCameraDragging)
+            {
+                AdvanceMobileCameraDrag(pointer);
+                return;
+            }
 
             // Global weapon triggers in flight: Seagull and Banana take priority
             // over any character selection or action states.
@@ -227,7 +252,14 @@ namespace Mutiny.Presentation
             {
                 ClearSpecialWeaponCursor();
                 if (pointer.PressedThisFrame)
-                    TrySelectCharacter(currentTeam, mouseWorld);
+                {
+                    MutinyCharacter clicked = FindCharacterNearPosition(
+                        mouseWorld, currentTeam, CharacterSelectionRadiusPixels);
+                    if (clicked != null)
+                        TrySelectCharacter(currentTeam, mouseWorld);
+                    else
+                        TryBeginMobileCameraDrag(pointer.Position);
+                }
                 return;
             }
 
@@ -260,8 +292,21 @@ namespace Mutiny.Presentation
                 ShouldHandleWeaponReadyPrimaryInput(
                     pointer.PressedThisFrame, pointer.IsPressed))
             {
+                if (Application.isMobilePlatform && IsMobileTapActivatedInteraction())
+                {
+                    BeginMobileTapCandidate(pointer.Position);
+                    return;
+                }
+
+                bool cannonSelected = ActiveWeapon != null &&
+                    ActiveWeapon.Equals("cannon", System.StringComparison.OrdinalIgnoreCase);
                 if (TryHandleCannonInput(pointer, selectedCharacter, mouseWorld))
                     return;
+                if (cannonSelected)
+                {
+                    TryBeginMobileCameraDrag(pointer.Position);
+                    return;
+                }
 
                 if (TrySelectVoodooTarget(currentTeam, selectedCharacter, mouseWorld))
                     return;
@@ -280,6 +325,10 @@ namespace Mutiny.Presentation
                         MutinyMine.NotifyCharacterBeganSelfThrowAim(selectedCharacter);
                     MutinyDebugLog.Info("Input",
                         $"aim started character={selectedCharacter.name} weapon={ActiveWeapon ?? "character"} origin={MutinyPhysics.UnityToPixel(m_AimOrigin)}", this);
+                }
+                else
+                {
+                    TryBeginMobileCameraDrag(pointer.Position);
                 }
             }
 
@@ -472,12 +521,183 @@ namespace Mutiny.Presentation
 
         private void HandlePointerCancellation()
         {
+            m_IsMobileCameraDragging = false;
+            m_IsPendingMobileTap = false;
             m_ArmedCannon?.CancelPointer();
             if (InteractionState == MutinyPlayerInteractionState.Aiming)
                 CancelCurrentAim();
             HideTrajectory();
             ClearSpecialWeaponCursor();
             ClearHoveredCharacter();
+        }
+
+        private bool IsMobileTapActivatedInteraction()
+        {
+            if (IsVoodooTargetSelection())
+                return true;
+            if (string.IsNullOrEmpty(ActiveWeapon))
+                return false;
+
+            return ActiveWeapon.Equals("woodenCrate", System.StringComparison.OrdinalIgnoreCase) ||
+                   ActiveWeapon.Equals("gunpowderBarrel", System.StringComparison.OrdinalIgnoreCase) ||
+                   ActiveWeapon.Equals("anchor", System.StringComparison.OrdinalIgnoreCase) ||
+                   ActiveWeapon.Equals("seagull", System.StringComparison.OrdinalIgnoreCase) ||
+                   ActiveWeapon.Equals("tidalWave", System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void BeginMobileTapCandidate(Vector2 screenPosition)
+        {
+            m_IsPendingMobileTap = true;
+            m_MobileTapStartPosition = screenPosition;
+        }
+
+        private void AdvanceMobileTapCandidate(
+            PointerFrameState pointer, MutinyTeam currentTeam, Vector3 pointerWorld)
+        {
+            float dragDistance = Vector2.Distance(pointer.Position, m_MobileTapStartPosition);
+            if (ShouldConvertPendingTapToCameraDrag(
+                    dragDistance, MobileTapDragThresholdPixels))
+            {
+                m_IsPendingMobileTap = false;
+                if (TryBeginMobileCameraDrag(m_MobileTapStartPosition))
+                    AdvanceMobileCameraDrag(pointer);
+                return;
+            }
+
+            if (!pointer.ReleasedThisFrame)
+                return;
+
+            m_IsPendingMobileTap = false;
+            MutinyCharacter selectedCharacter = currentTeam != null
+                ? currentTeam.SelectedCharacter
+                : null;
+            if (selectedCharacter == null || !selectedCharacter.IsAlive)
+                return;
+            if (TrySelectVoodooTarget(currentTeam, selectedCharacter, pointerWorld))
+                return;
+            TryActivateClickWeapon(selectedCharacter, pointerWorld);
+        }
+
+        internal static bool ShouldConvertPendingTapToCameraDrag(
+            float dragDistancePixels, float thresholdPixels)
+        {
+            return dragDistancePixels > Mathf.Max(0f, thresholdPixels);
+        }
+
+        private bool TryBeginMobileCameraDrag(Vector2 screenPosition)
+        {
+            if (!Application.isMobilePlatform || IsAiming)
+                return false;
+
+            if (GameCamera == null)
+                GameCamera = Camera.main;
+            MutinyCameraController cameraController =
+                GameCamera != null ? GameCamera.GetComponent<MutinyCameraController>() : null;
+            if (cameraController == null || !cameraController.CanStartMobileTouchPan())
+                return false;
+
+            m_IsMobileCameraDragging = true;
+            m_LastMobileCameraDragPosition = screenPosition;
+            ClearSpecialWeaponCursor();
+            ClearHoveredCharacter();
+            return true;
+        }
+
+        private void AdvanceMobileCameraDrag(PointerFrameState pointer)
+        {
+            Vector2 delta = pointer.Position - m_LastMobileCameraDragPosition;
+            m_LastMobileCameraDragPosition = pointer.Position;
+
+            if ((pointer.IsPressed || pointer.ReleasedThisFrame) &&
+                delta.sqrMagnitude > Mathf.Epsilon)
+            {
+                MutinyCameraController cameraController =
+                    GameCamera != null ? GameCamera.GetComponent<MutinyCameraController>() : null;
+                if (cameraController == null || !cameraController.PanByMobileTouchDelta(delta))
+                    m_IsMobileCameraDragging = false;
+            }
+
+            if (pointer.ReleasedThisFrame || !pointer.IsPressed)
+                m_IsMobileCameraDragging = false;
+        }
+
+        private void UpdateSecondaryMobileCameraTouch()
+        {
+            if (!Application.isMobilePlatform)
+                return;
+
+            Touchscreen touchscreen = Touchscreen.current;
+            if (touchscreen == null)
+            {
+                m_SecondaryCameraTouchId = NoActiveTouchId;
+                return;
+            }
+
+            if (m_SecondaryCameraTouchId != NoActiveTouchId)
+            {
+                for (int i = 0; i < touchscreen.touches.Count; i++)
+                {
+                    var touch = touchscreen.touches[i];
+                    if (touch.touchId.ReadValue() != m_SecondaryCameraTouchId)
+                        continue;
+
+                    UnityEngine.InputSystem.TouchPhase phase = touch.phase.ReadValue();
+                    if (phase == UnityEngine.InputSystem.TouchPhase.Canceled)
+                    {
+                        m_SecondaryCameraTouchId = NoActiveTouchId;
+                        return;
+                    }
+
+                    Vector2 position = touch.position.ReadValue();
+                    Vector2 delta = position - m_LastSecondaryCameraTouchPosition;
+                    m_LastSecondaryCameraTouchPosition = position;
+                    bool released = phase == UnityEngine.InputSystem.TouchPhase.Ended ||
+                                    touch.press.wasReleasedThisFrame;
+                    if ((touch.press.isPressed || released) &&
+                        delta.sqrMagnitude > Mathf.Epsilon)
+                    {
+                        MutinyCameraController controller = GetGameCameraController();
+                        if (controller == null ||
+                            !controller.PanByMobileTouchDelta(delta, true))
+                            m_SecondaryCameraTouchId = NoActiveTouchId;
+                    }
+                    if (released)
+                        m_SecondaryCameraTouchId = NoActiveTouchId;
+                    return;
+                }
+
+                m_SecondaryCameraTouchId = NoActiveTouchId;
+                return;
+            }
+
+            if (!IsAiming || m_IsMobileCameraDragging ||
+                m_ActiveTouchId == NoActiveTouchId)
+                return;
+
+            MutinyCameraController cameraController = GetGameCameraController();
+            if (cameraController == null || !cameraController.CanStartMobileTouchPan(true))
+                return;
+
+            for (int i = 0; i < touchscreen.touches.Count; i++)
+            {
+                var candidate = touchscreen.touches[i];
+                int touchId = candidate.touchId.ReadValue();
+                if (touchId == m_ActiveTouchId || !candidate.press.wasPressedThisFrame)
+                    continue;
+
+                m_SecondaryCameraTouchId = touchId;
+                m_LastSecondaryCameraTouchPosition = candidate.position.ReadValue();
+                return;
+            }
+        }
+
+        private MutinyCameraController GetGameCameraController()
+        {
+            if (GameCamera == null)
+                GameCamera = Camera.main;
+            return GameCamera != null
+                ? GameCamera.GetComponent<MutinyCameraController>()
+                : null;
         }
 
         private void UpdateSpecialWeaponCursor(
@@ -593,9 +813,17 @@ namespace Mutiny.Presentation
 
         private void OnDisable()
         {
-            m_ActiveTouchId = NoActiveTouchId;
             HandlePointerCancellation();
+            ResetMobileGestureOwnership();
             ClearSpecialWeaponCursor();
+        }
+
+        private void ResetMobileGestureOwnership()
+        {
+            m_ActiveTouchId = NoActiveTouchId;
+            m_SecondaryCameraTouchId = NoActiveTouchId;
+            m_IsMobileCameraDragging = false;
+            m_IsPendingMobileTap = false;
         }
 
         // The verification entry invokes exactly the Update phase gate; it avoids
@@ -861,9 +1089,12 @@ namespace Mutiny.Presentation
             if (pointer.PressedThisFrame)
             {
                 // The source tests pin first, then the 20px cannon-body circle.
-                if (!m_ArmedCannon.TryBeginPinDrag(mousePixels))
-                    m_ArmedCannon.TryBeginBodyDrag(mousePixels);
-                return true;
+                bool beganDrag = m_ArmedCannon.TryBeginPinDrag(mousePixels) ||
+                                 m_ArmedCannon.TryBeginBodyDrag(mousePixels);
+                // A desktop Cannon owns the board just like the Flash mouse
+                // implementation. On mobile, an actual blank press remains
+                // available to the camera-drag gesture.
+                return beganDrag || !Application.isMobilePlatform;
             }
 
             if (pointer.IsPressed)
@@ -1166,6 +1397,7 @@ namespace Mutiny.Presentation
 
         private void ResetForCurrentTurn()
         {
+            ResetMobileGestureOwnership();
             HideTrajectory();
             ClearEquippedWeapon();
             m_ObservedTeam = TurnManager != null ? TurnManager.CurrentTeam : null;

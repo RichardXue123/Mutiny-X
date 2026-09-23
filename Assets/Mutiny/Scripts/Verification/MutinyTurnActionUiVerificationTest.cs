@@ -61,6 +61,8 @@ namespace Mutiny.Verification
             VerifyWeaponReadyAndCancel(result);
             VerifyProductionActionMethods(result);
             VerifyAiDecisionFlow(result);
+            VerifyAiSpecialWeaponCandidates(result);
+            VerifyCannonSmokeTrail(result);
             VerifyCannon(result);
             VerifyBoulder(result);
             VerifyBanana(result);
@@ -78,6 +80,109 @@ namespace Mutiny.Verification
             VerifyGMManager(result);
             VerifySpritePivots(result);
             return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunCannonSmokeTrail()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyCannonSmokeTrail(result);
+            return result;
+        }
+
+        private static void VerifyCannonSmokeTrail(MutinyLevel1VerificationResult result)
+        {
+            MutinyRumBottleSmokeTrail preview = null;
+            try
+            {
+                bool resourcesMatch = true;
+                for (int frame = 1; frame <= MutinyRumBottleSmokeTrail.OriginalFrameCount; frame++)
+                {
+                    Texture2D texture = Resources.Load<Texture2D>($"Art/Effects/CannonSmokeTrail/{frame}");
+                    resourcesMatch &= texture != null && texture.width == 17 && texture.height == 17;
+                }
+                result.Assert(resourcesMatch,
+                    "VIS-SMOKE-01 original cannonSmokeTrail has all 19 exported 17x17 frames");
+
+                Vector2 spawnPixel = new Vector2(320f, 192f);
+                preview = MutinyRumBottleSmokeTrail.Spawn(spawnPixel);
+                if (preview != null && preview.GetComponent<SpriteRenderer>() == null)
+                    preview.SendMessage("Awake");
+                SpriteRenderer renderer = preview != null ? preview.GetComponent<SpriteRenderer>() : null;
+                Vector3 stationaryPosition = preview != null ? preview.transform.position : Vector3.zero;
+                bool startsOnFrameOne = preview != null && renderer != null && renderer.sprite != null &&
+                                        preview.CurrentFrame == 1 && preview.FrameCount == 19 &&
+                                        renderer.sortingOrder == MutinyRumBottleSmokeTrail.SmokeSortingOrder &&
+                                        Vector2.Distance(renderer.sprite.pivot,
+                                            new Vector2(8f, 9f)) < 0.01f;
+                for (int tick = 1; tick < 18 && preview != null; tick++)
+                    preview.AdvanceOriginalTickForVerification();
+                bool reachesLastVisibleFrame = preview != null && preview.CurrentFrame == 18 &&
+                                               !preview.IsComplete && preview.transform.position == stationaryPosition;
+                preview?.AdvanceOriginalTickForVerification();
+                result.Assert(startsOnFrameOne && reachesLastVisibleFrame &&
+                              preview != null && preview.IsComplete && renderer != null && !renderer.enabled,
+                    "VIS-SMOKE-01 production trail stays at each sampled path point, shows frames 1-18, and executes destroy on frame 19");
+
+                DestroySmokeTrails();
+                result.Assert(WeaponTickCreatesSmoke<MutinyCannonball>(true),
+                    "VIS-SMOKE-01 production cannonball physics tick emits the original trail");
+                result.Assert(WeaponTickCreatesSmoke<MutinyCherryBomb>(true),
+                    "VIS-SMOKE-01 production cherry bomb physics tick emits the original trail");
+                result.Assert(WeaponTickCreatesSmoke<MutinyDynamite>(true),
+                    "VIS-SMOKE-01 production dynamite physics tick emits the original trail");
+                result.Assert(WeaponTickCreatesSmoke<MutinyRumBottle>(true),
+                    "VIS-SMOKE-01 production rum bottle physics tick emits the original trail");
+                result.Assert(WeaponTickCreatesSmoke<MutinyParachuteBomb>(true),
+                    "VIS-SMOKE-01 production closed parachute bomb physics tick emits the original trail");
+            }
+            finally
+            {
+                if (preview != null)
+                    DestroyNow(preview.gameObject);
+                DestroySmokeTrails();
+            }
+        }
+
+        private static bool WeaponTickCreatesSmoke<T>(bool fire) where T : MutinyWeapon
+        {
+            GameObject weaponObject = new GameObject($"SmokeVerification_{typeof(T).Name}");
+            try
+            {
+                T weapon = weaponObject.AddComponent<T>();
+                if (weapon.PhysicsBody == null)
+                    weapon.SendMessage("Awake");
+                weapon.Initialize(null);
+                weapon.PhysicsBody.SetTerrain(new string[32, 32], 32, 32);
+                PhysicsBodyState state = weapon.PhysicsBody.State;
+                state.X = 320f;
+                state.Y = 192f;
+                state.Weight = 0f;
+                weapon.PhysicsBody.State = state;
+                if (fire)
+                    weapon.Fire(new Vector2(4f, -2f));
+
+                int before = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>().Length;
+                weapon.PhysicsBody.AdvanceSimulationTick();
+                int after = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>().Length;
+                if (after != before + 1)
+                {
+                    MutinyParachuteBomb parachuteBomb = weapon as MutinyParachuteBomb;
+                    string chute = parachuteBomb != null ? $" chute={parachuteBomb.ChuteOpen}" : string.Empty;
+                    Debug.LogError($"[Smoke Verification] {typeof(T).Name} before={before} after={after} fired={weapon.IsFired} finished={weapon.IsFinished} vy={weapon.PhysicsBody.State.VelocityY}{chute}");
+                }
+                return after == before + 1;
+            }
+            finally
+            {
+                DestroyNow(weaponObject);
+            }
+        }
+
+        private static void DestroySmokeTrails()
+        {
+            MutinyRumBottleSmokeTrail[] trails = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>();
+            for (int i = 0; i < trails.Length; i++)
+                DestroyNow(trails[i].gameObject);
         }
 
         private static void VerifyAndroidAdaptation(MutinyLevel1VerificationResult result)
@@ -114,6 +219,22 @@ namespace Mutiny.Verification
                 !MutinyPlayerInput.ShouldAcquireTouchForVerification(true, true) &&
                 !MutinyPlayerInput.ShouldAcquireTouchForVerification(false, false),
                 "AND-INP-02 only a fresh touch can acquire an otherwise unowned gesture");
+
+            Vector2 worldDrag = MutinyCameraController.ScreenDeltaToWorldDelta(
+                new Vector2(100f, 50f), 1000f, 500f, 10f, 2f);
+            result.Assert(
+                Mathf.Approximately(worldDrag.x, 4f) &&
+                Mathf.Approximately(worldDrag.y, 2f),
+                "AND-INP-04/AND-CAM-02 touch drag uses the orthographic camera's visible width and height");
+            result.Assert(
+                !MutinyPlayerInput.ShouldConvertPendingTapToCameraDrag(24f, 24f) &&
+                MutinyPlayerInput.ShouldConvertPendingTapToCameraDrag(24.01f, 24f),
+                "AND-INP-05 a click weapon commits at or below the tap threshold and becomes camera drag only above it");
+            result.Assert(
+                !MutinyCameraController.IsAimingCompatibleWithMobilePan(true, false) &&
+                MutinyCameraController.IsAimingCompatibleWithMobilePan(true, true) &&
+                MutinyCameraController.IsAimingCompatibleWithMobilePan(false, false),
+                "AND-INP-06/AND-CAM-03 only the explicit secondary-touch camera role can pan during aiming");
         }
 
         public static MutinyLevel1VerificationResult RunBattleHud()
@@ -613,6 +734,18 @@ namespace Mutiny.Verification
                 cannonObject = cannon != null ? cannon.gameObject : null;
                 bool equipmentPosition = cannon != null &&
                     Mathf.Approximately(cannon.PhysicsBody.State.Y, 190f) && cannon.PhysicsBody.State.HitsBoxes;
+                bool rangeUsesOwnerAsCircleBottom = cannon != null &&
+                    Vector2.Distance(cannon.PlacementCenterPixels, new Vector2(100f, 100f)) < 0.001f &&
+                    Vector2.Distance(
+                        MutinyPhysics.UnityToPixel(cannon.RangeCircleRenderer.transform.position),
+                        new Vector2(100f, 100f)) < 0.001f;
+                cannon.TryBeginBodyDrag(new Vector2(100f, 190f));
+                cannon.DragBodyTo(new Vector2(100f, 400f));
+                cannon.AdvanceOriginalTickForVerification();
+                bool bodyClampUsesBottomAnchoredCircle = cannon.IsDraggingBody &&
+                    Mathf.Approximately(cannon.PhysicsBody.State.X, 100f) &&
+                    Mathf.Approximately(cannon.PhysicsBody.State.Y, 205f);
+                cannon.CancelPointer();
                 cannon.TryBeginPinDrag(new Vector2(cannon.PhysicsBody.State.X + cannon.PinX, cannon.PhysicsBody.State.Y));
                 cannon.DragPinTo(new Vector2(cannon.PhysicsBody.State.X - 40f, cannon.PhysicsBody.State.Y));
                 cannon.CancelPointer();
@@ -648,10 +781,11 @@ namespace Mutiny.Verification
                                                  aiCannon.Cannonball != null &&
                                                  Mathf.Approximately(aiCannon.Cannonball.PhysicsBody.State.VelocityY, 30f);
                 DestroyNow(aiCannonObject);
-                result.Assert(equipmentPosition && canceledPinDoesNotCommit && equalThresholdDoesNotCommit && committed &&
+                result.Assert(equipmentPosition && rangeUsesOwnerAsCircleBottom && bodyClampUsesBottomAnchoredCircle &&
+                              canceledPinDoesNotCommit && equalThresholdDoesNotCommit && committed &&
                               fullForceBall && waitsForCannonballAndFades && finishesAfterBallAndTwentyFadeTicks &&
                               aiWaitsTwentyFourTicks && aiFiresOnTwentyFifthTick,
-                    "WPN-05-INT/ANI/AI and AND-INP-03 production Cannon cancels without firing, keeps a 30-force ball above its body, completes its lifecycle, and AI fires after 25 ticks");
+                    "CAN-PLACE-01/03 WPN-05-INT/ANI/AI and AND-INP-03 production Cannon anchors its range above the owner, clamps body drag to that circle, cancels without firing, completes its lifecycle, and AI fires after 25 ticks");
             }
             finally
             {
@@ -1236,6 +1370,130 @@ namespace Mutiny.Verification
                     DestroyNow(boulder != null ? boulder.gameObject : null);
                 DestroyNow(enemyCharacterObject);
                 DestroyNow(aiCharacterObject);
+                DestroyNow(enemyTeamObject);
+                DestroyNow(aiTeamObject);
+            }
+        }
+
+        private static void VerifyAiSpecialWeaponCandidates(MutinyLevel1VerificationResult result)
+        {
+            GameObject aiTeamObject = null;
+            GameObject enemyTeamObject = null;
+            GameObject shooterObject = null;
+            GameObject enemyObject = null;
+
+            try
+            {
+                aiTeamObject = new GameObject("AiAllWeaponsVerification_Team");
+                MutinyTeam aiTeam = aiTeamObject.AddComponent<MutinyTeam>();
+                aiTeam.TeamNumber = 2;
+                aiTeam.IsAiControlled = true;
+                MutinyAIController ai = aiTeamObject.AddComponent<MutinyAIController>();
+
+                enemyTeamObject = new GameObject("AiAllWeaponsVerification_EnemyTeam");
+                MutinyTeam enemyTeam = enemyTeamObject.AddComponent<MutinyTeam>();
+                enemyTeam.TeamNumber = 1;
+
+                shooterObject = new GameObject("AiAllWeaponsVerification_Shooter");
+                MutinyCharacter shooter = shooterObject.AddComponent<MutinyCharacter>();
+                shooter.TeamIndex = 2;
+                shooter.Luck = 30f;
+                PhysicsBodyState shooterState = PhysicsBodyState.CreateDefault(48f, 16f);
+                shooterState.Weight = 0f;
+                shooter.PhysicsBody.State = shooterState;
+                shooter.PhysicsBody.WaterPixelY = 192f;
+                aiTeam.RegisterCharacter(shooter);
+
+                enemyObject = new GameObject("AiAllWeaponsVerification_Enemy");
+                MutinyCharacter enemy = enemyObject.AddComponent<MutinyCharacter>();
+                enemy.TeamIndex = 1;
+                PhysicsBodyState enemyState = PhysicsBodyState.CreateDefault(48f, 128f);
+                enemyState.Weight = 0f;
+                enemy.PhysicsBody.State = enemyState;
+                enemyTeam.RegisterCharacter(enemy);
+
+                var enemies = new List<MutinyCharacter> { enemy };
+                var allies = new List<MutinyCharacter> { shooter };
+
+                string[,] anchorTerrain = new string[6, 3];
+                for (int row = 0; row < 6; row++)
+                    for (int column = 0; column < 3; column++)
+                        anchorTerrain[row, column] = "-";
+                for (int column = 0; column < 3; column++)
+                    anchorTerrain[4, column] = "ground";
+
+                shooter.AddWeapon("anchor");
+                UnityEngine.Random.InitState(15001);
+                AIMove anchorMove = ai.EvaluateCharacterWeaponsForVerification(
+                    shooter, enemies, allies, anchorTerrain, 3, 6, 192f, out int anchorCandidates);
+                bool anchorSelected = anchorMove.MoveType == AIMoveType.ShootWeapon &&
+                                      anchorMove.WeaponType == "anchor" &&
+                                      anchorCandidates == 30 &&
+                                      anchorMove.TargetPosition.x >= 0f &&
+                                      anchorMove.TargetPosition.x < 96f;
+                shooter.CanThrow = true;
+                shooter.CanShoot = true;
+                ai.ExecuteMoveForVerification(anchorMove);
+                MutinyAnchor executedAnchor = null;
+                foreach (MutinyAnchor candidate in Object.FindObjectsByType<MutinyAnchor>())
+                {
+                    if (candidate != null && candidate.Owner == shooter && candidate.IsFired)
+                    {
+                        executedAnchor = candidate;
+                        break;
+                    }
+                }
+                result.Assert(anchorSelected && executedAnchor != null &&
+                              Mathf.Approximately(executedAnchor.PhysicsBody.State.X, anchorMove.TargetPosition.x) &&
+                              !shooter.HasWeapon("anchor"),
+                    "AI-WPN-04 production Anchor routing samples full-level vertical drops, selects a floor candidate, and executes DropForAi");
+
+                shooter.WeaponInventory.Clear();
+                shooter.InfiniteWeapons.Clear();
+                shooter.AddWeapon("woodenCrate");
+                shooterState = shooter.PhysicsBody.State;
+                shooterState.X = 9800f;
+                shooterState.Y = 64f;
+                shooter.PhysicsBody.State = shooterState;
+                enemyState = enemy.PhysicsBody.State;
+                enemyState.X = 10000f;
+                enemyState.Y = 64f;
+                enemy.PhysicsBody.State = enemyState;
+
+                string[,] crateTerrain = new string[6, 320];
+                for (int row = 0; row < 6; row++)
+                    for (int column = 0; column < 320; column++)
+                        crateTerrain[row, column] = "-";
+                for (int column = 0; column < 320; column++)
+                    crateTerrain[4, column] = "ground";
+
+                UnityEngine.Random.InitState(14001);
+                AIMove crateMove = ai.EvaluateCharacterWeaponsForVerification(
+                    shooter, enemies, allies, crateTerrain, 320, 6, 192f, out int crateCandidates);
+                bool crateSelected = crateMove.MoveType == AIMoveType.ShootWeapon &&
+                                     crateMove.WeaponType == "woodenCrate" &&
+                                     crateCandidates == 1 &&
+                                     crateMove.BoxPossibilities != null &&
+                                     crateMove.BoxPossibilities.Length >= 3;
+
+                MutinyWoodenCrate crate = MutinyWeaponFactory.SpawnWeapon("woodenCrate", shooter) as MutinyWoodenCrate;
+                crate?.PhysicsBody.SetTerrain(crateTerrain, 320, 6);
+                bool crateArmed = crate != null && crate.BeginAiPlacement(crateMove.BoxPossibilities);
+                for (int tick = 0; tick < MutinyWoodenCrate.AiPlaceDelayTicks; tick++)
+                    crate?.AdvanceAiPlacementTickForVerification();
+                result.Assert(crateSelected && crateArmed && crate.IsAiPlacementActive && crate.PlacedCount == 1,
+                    "AI-WPN-05 production Wooden Crate routing admits BoxWeapon candidates and begins the original delayed three-crate AI sequence");
+            }
+            finally
+            {
+                foreach (MutinyAnchor anchor in Object.FindObjectsByType<MutinyAnchor>())
+                    if (anchor != null && anchor.Owner != null && anchor.Owner.name == "AiAllWeaponsVerification_Shooter")
+                        DestroyNow(anchor.gameObject);
+                foreach (MutinyWoodenCrate crate in Object.FindObjectsByType<MutinyWoodenCrate>())
+                    if (crate != null && crate.Owner != null && crate.Owner.name == "AiAllWeaponsVerification_Shooter")
+                        DestroyNow(crate.gameObject);
+                DestroyNow(enemyObject);
+                DestroyNow(shooterObject);
                 DestroyNow(enemyTeamObject);
                 DestroyNow(aiTeamObject);
             }
@@ -2108,6 +2366,10 @@ namespace Mutiny.Verification
             GameObject playerObject = null;
             GameObject enemyObject = null;
             GameObject hudObject = null;
+            GameObject victoryCrateObject = null;
+            GameObject victoryBarrelObject = null;
+            GameObject defeatCrateObject = null;
+            GameObject defeatBarrelObject = null;
             try
             {
                 controllerObject = new GameObject("GameEndVerification_LevelController");
@@ -2130,6 +2392,15 @@ namespace Mutiny.Verification
                 MutinyTurnManager manager = managerObject.AddComponent<MutinyTurnManager>();
                 manager.Initialize(playerTeam, enemyTeam);
 
+                MutinyWoodenCrate victoryCrate =
+                    MutinyWeaponFactory.SpawnWeapon("woodenCrate", player) as MutinyWoodenCrate;
+                MutinyGunpowderBarrel victoryBarrel =
+                    MutinyWeaponFactory.SpawnWeapon("gunpowderBarrel", player) as MutinyGunpowderBarrel;
+                victoryCrateObject = victoryCrate != null ? victoryCrate.gameObject : null;
+                victoryBarrelObject = victoryBarrel != null ? victoryBarrel.gameObject : null;
+                if (victoryCrate != null)
+                    MutinyBoxRegistry.Register(victoryCrate.PhysicsBody);
+
                 // Damage uses the real death path.  Make the display immediately
                 // settled so the production turn manager reaches its normal
                 // inactivity boundary instead of waiting for a presentation tween.
@@ -2145,16 +2416,55 @@ namespace Mutiny.Verification
                 bool synchronized = hud.SynchronizeGameEndPopup();
 
                 int expectedLevelScore = MutinyLevelController.CalculateOriginalSinglePlayerLevelScore(playerTeam, 2);
+                bool victoryClearedBoxes = MutinyBoxRegistry.Count == 0 &&
+                    (victoryCrateObject == null || !victoryCrateObject.activeSelf) &&
+                    (victoryBarrelObject == null || !victoryBarrelObject.activeSelf);
                 result.Assert(manager.CurrentPhase == TurnPhase.GameOver &&
                               manager.GameResult == GameOverResult.Team1Wins &&
                               controller.LastCompletedLevelScore == expectedLevelScore &&
                               controller.SinglePlayerScore == expectedLevelScore &&
-                              synchronized && hud.GameEndPopupKind == MutinyGameEndPopupKind.LevelComplete,
-                    "END-POP-T01 production victory path unlocks/awards once and opens level-complete popup from TurnManager GameOver");
+                              synchronized && hud.GameEndPopupKind == MutinyGameEndPopupKind.LevelComplete &&
+                              victoryClearedBoxes,
+                    "END-POP-T01/BOX-END-01 production victory opens level-complete and clears placed plus pending box weapons before popup observers run");
+
+                // Re-enter the same production state machine with the opposite
+                // team defeated so BOX-END-01 covers both victory and failure.
+                player.Health = player.MaxHealth;
+                player.ShownHealth = player.Health;
+                player.IsAlive = true;
+                player.IsDrowned = false;
+                enemy.Health = enemy.MaxHealth;
+                enemy.ShownHealth = enemy.Health;
+                enemy.IsAlive = true;
+                enemy.IsDrowned = false;
+                manager.StartGame();
+                MutinyWoodenCrate defeatCrate =
+                    MutinyWeaponFactory.SpawnWeapon("woodenCrate", player) as MutinyWoodenCrate;
+                MutinyGunpowderBarrel defeatBarrel =
+                    MutinyWeaponFactory.SpawnWeapon("gunpowderBarrel", player) as MutinyGunpowderBarrel;
+                defeatCrateObject = defeatCrate != null ? defeatCrate.gameObject : null;
+                defeatBarrelObject = defeatBarrel != null ? defeatBarrel.gameObject : null;
+                if (defeatBarrel != null)
+                    MutinyBoxRegistry.Register(defeatBarrel.PhysicsBody);
+                player.TakeDamage(player.MaxHealth);
+                player.ShownHealth = player.Health;
+                for (int tick = 0; tick <= MutinyTurnManager.InactivitySettlingThreshold; tick++)
+                    manager.AdvanceSimulationTick();
+                bool defeatClearedBoxes = MutinyBoxRegistry.Count == 0 &&
+                    (defeatCrateObject == null || !defeatCrateObject.activeSelf) &&
+                    (defeatBarrelObject == null || !defeatBarrelObject.activeSelf);
+                result.Assert(manager.CurrentPhase == TurnPhase.GameOver &&
+                              manager.GameResult == GameOverResult.Team2Wins &&
+                              defeatClearedBoxes,
+                    "BOX-END-01 production failure path clears WoodenCrate and GunpowderBarrel objects plus shared collision state");
 
             }
             finally
             {
+                DestroyNow(defeatBarrelObject);
+                DestroyNow(defeatCrateObject);
+                DestroyNow(victoryBarrelObject);
+                DestroyNow(victoryCrateObject);
                 DestroyNow(hudObject);
                 DestroyNow(enemyObject);
                 DestroyNow(playerObject);
@@ -2422,14 +2732,33 @@ namespace Mutiny.Verification
                 MutinyPlayerInput input = inputObject.AddComponent<MutinyPlayerInput>();
                 input.TurnManager = turnManager;
 
-                // Production factory + twang uses the original 30-force gauge but
-                // Weapon.release's 20 px/tick committed velocity limit.
+                // TileSystem.mouseUp submits twanging.twang() directly in Flash;
+                // Weapon.release's unrelated 20-force cap is not on this path.
                 MutinyWeapon launched = MutinyWeaponFactory.SpawnAndLaunch(
                     "banana", humanOwner, Vector2.zero, new Vector2(-400f, 0f));
                 MutinyBanana humanBanana = launched as MutinyBanana;
                 result.Assert(humanBanana != null &&
-                              Mathf.Approximately(humanBanana.PhysicsBody.State.VelocityX, 20f),
-                    "WPN-03-EFF-01 production Banana release clamps its 30-force drag to 20 px/tick");
+                              Mathf.Approximately(humanBanana.PhysicsBody.State.VelocityX, 30f),
+                    "BAN-PHY-01 production Banana twang commits the same 30-force limit shown by its preview");
+
+                Vector2 previewPosition = Vector2.zero;
+                Vector2 previewVelocity = MutinyPhysics.CalculateTwangVelocity(
+                    Vector2.zero, new Vector2(-400f, 0f),
+                    MutinyWeaponFactory.GetTwangMaxForce("banana"));
+                bool previewMatchesActual = humanBanana != null;
+                for (int tick = 0; tick < 5 && previewMatchesActual; tick++)
+                {
+                    previewVelocity = MutinyTrajectoryRenderer.PredictVelocityTick(
+                        "banana", previewVelocity, MutinyPhysics.Gravity);
+                    previewPosition += previewVelocity;
+                    humanBanana.PhysicsBody.AdvanceSimulationTick();
+                    previewMatchesActual =
+                        Vector2.Distance(
+                            previewPosition,
+                            new Vector2(humanBanana.PhysicsBody.State.X, humanBanana.PhysicsBody.State.Y)) < 0.001f;
+                }
+                result.Assert(previewMatchesActual,
+                    "BAN-TRAJ-01 Banana preview and production physics match for the first five unobstructed 25 Hz ticks");
 
                 // The later click reaches the active banana after CanShoot has
                 // already been consumed, then the next production simulation tick
@@ -2554,6 +2883,15 @@ namespace Mutiny.Verification
                               bomb.PhysicsBody.State.HitsBoxes && !owner.HasWeapon("parachuteBomb") &&
                               !owner.CanThrow && !owner.CanShoot && manager.CurrentPhase == TurnPhase.ActionExecuting,
                     "WPN-08-INT-01/EFF-01 production twang preserves the original 30px/tick ParachuteBomb launch cap and Solid parameters");
+                bomb.SetMobileFanStateForVerification(false, true);
+                bool shortTapFirstTick = bomb.ConsumeMobileFanActiveForVerification();
+                bool shortTapSecondTick = bomb.ConsumeMobileFanActiveForVerification();
+                result.Assert(
+                    MutinyParachuteBomb.ResolveMobileFanActive(true, false) &&
+                    MutinyParachuteBomb.ResolveMobileFanActive(false, true) &&
+                    !MutinyParachuteBomb.ResolveMobileFanActive(false, false) &&
+                    shortTapFirstTick && !shortTapSecondTick,
+                    "AND-PCB-FAN-01 Android fan remains active while held and consumes exactly one physics tick for a short tap");
 
                 PhysicsBodyState state = bomb.PhysicsBody.State;
                 state.X = 0f;

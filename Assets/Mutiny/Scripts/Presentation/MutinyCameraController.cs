@@ -356,6 +356,53 @@ namespace Mutiny.Presentation
             return hasMouse && !isMobilePlatform;
         }
 
+        public bool CanStartMobileTouchPan(bool allowWhileAiming = false)
+        {
+            EnsureReferences();
+            return Application.isMobilePlatform &&
+                   m_Camera != null && m_LevelRoot != null && TurnManager != null &&
+                   TurnManager.CurrentTeam != null && !TurnManager.CurrentTeam.IsAiControlled &&
+                   PlayerInput != null && !PlayerInput.IsActionMenuOpen &&
+                   IsAimingCompatibleWithMobilePan(PlayerInput.IsAiming, allowWhileAiming) &&
+                   m_TurnPanTarget == null && FindActionTarget() == null && CanUseManualScrolling();
+        }
+
+        internal static bool IsAimingCompatibleWithMobilePan(
+            bool isAiming, bool allowWhileAiming)
+        {
+            return !isAiming || allowWhileAiming;
+        }
+
+        public bool PanByMobileTouchDelta(Vector2 screenDelta, bool allowWhileAiming = false)
+        {
+            if (!CanStartMobileTouchPan(allowWhileAiming))
+                return false;
+
+            Vector2 worldDelta = ScreenDeltaToWorldDelta(
+                screenDelta, Screen.width, Screen.height,
+                m_Camera.orthographicSize, m_Camera.aspect);
+            m_EdgeVelocityPixelsPerSecond = Vector2.zero;
+            Vector3 next = transform.position;
+            next.x -= worldDelta.x;
+            next.y -= worldDelta.y;
+            SetClampedPosition(next);
+            return true;
+        }
+
+        internal static Vector2 ScreenDeltaToWorldDelta(
+            Vector2 screenDelta, float screenWidth, float screenHeight,
+            float orthographicSize, float aspect)
+        {
+            if (screenWidth <= 0f || screenHeight <= 0f)
+                return Vector2.zero;
+
+            float visibleHeight = orthographicSize * 2f;
+            float visibleWidth = visibleHeight * aspect;
+            return new Vector2(
+                screenDelta.x * visibleWidth / screenWidth,
+                screenDelta.y * visibleHeight / screenHeight);
+        }
+
         private MutinyTreasureChest FindFallingChest()
         {
             if (!MutinyTreasureChestManager.SystemEnabled)

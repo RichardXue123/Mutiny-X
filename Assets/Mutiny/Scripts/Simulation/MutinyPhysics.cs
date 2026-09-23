@@ -112,6 +112,57 @@ namespace Mutiny.Simulation
             Bodies.Clear();
         }
 
+        /// <summary>
+        /// Original Controller.endGame calls unloadLevel, which destroys every
+        /// Controller.boxes member. Unity keeps the battlefield behind its result
+        /// popup, so make that cleanup explicit at the GameOver boundary. Include
+        /// pending BoxWeapon chain nodes as well as registered, placed obstacles.
+        /// </summary>
+        public static int ClearForLevelEnd()
+        {
+            var targets = new HashSet<GameObject>();
+            AddBoxWeaponTargets<MutinyWoodenCrate>(targets);
+            AddBoxWeaponTargets<MutinyGunpowderBarrel>(targets);
+
+            for (int i = 0; i < Bodies.Count; i++)
+            {
+                MutinyPhysicsBody body = Bodies[i];
+                if (body != null)
+                    targets.Add(body.gameObject);
+            }
+
+            // Collision state must disappear synchronously. Object destruction is
+            // end-of-frame in Play Mode, so disabling first also removes visuals,
+            // updates and input eligibility before OnGameOver observers run.
+            Bodies.Clear();
+            foreach (GameObject target in targets)
+            {
+                if (target == null)
+                    continue;
+                target.SetActive(false);
+#if UNITY_EDITOR
+                if (!Application.isPlaying)
+                    UnityEngine.Object.DestroyImmediate(target);
+                else
+                    UnityEngine.Object.Destroy(target);
+#else
+                UnityEngine.Object.Destroy(target);
+#endif
+            }
+            return targets.Count;
+        }
+
+        private static void AddBoxWeaponTargets<T>(HashSet<GameObject> targets)
+            where T : Component
+        {
+            T[] instances = UnityEngine.Object.FindObjectsByType<T>(FindObjectsInactive.Include);
+            for (int i = 0; i < instances.Length; i++)
+            {
+                if (instances[i] != null)
+                    targets.Add(instances[i].gameObject);
+            }
+        }
+
         private static void PruneDestroyedBodies()
         {
             for (int i = Bodies.Count - 1; i >= 0; i--)

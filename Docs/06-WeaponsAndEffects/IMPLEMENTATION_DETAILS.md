@@ -70,7 +70,7 @@
 | --- | --- | --- | --- |
 | WPN-AIM-01 | 30 px 命中半径内才进入拉拽；松开立即提交 | `TileSystem.as::mouseDown/mouseUp` | 已实现；待运行验证 |
 | WPN-AIM-02 | 拉力系数 0.25，预测 15 tick，默认上限 20 | `Solid.as::twang/drawTwangLine` | 已实现 |
-| WPN-AIM-03 | Banana、ParachuteBomb、RumBottle 的实际提交上限是 30 | 三个武器构造器 + `Solid.twang` | ParachuteBomb 已实现；Banana、RumBottle 当前又截到 20，已知差异 |
+| WPN-AIM-03 | Banana、ParachuteBomb、RumBottle 的实际提交上限是 30 | 三个武器构造器 + `Solid.twang` | ParachuteBomb 已实现；Banana 本轮修复；RumBottle 当前仍错误截到 20 |
 | WPN-AIM-04 | 放置型武器不进入通用 twang；各自消费点击/拖动 | `TileSystem.as` 与专用类 | 已实现 |
 
 ### 4.2 Weapon 公共状态
@@ -143,7 +143,8 @@
 
 | ID | 可观察行为 | 来源 | Unity 入口 | 状态 |
 | --- | --- | --- | --- | --- |
-| BAN-PHY-01 | extent 7、bounce .8、friction .5、twangMaxForce 30 | `Banana.as::constructor` | `MutinyBanana.Initialize` | 参数已实现；提交被错误截为 20 |
+| BAN-PHY-01 | extent 7、bounce .8、friction .5、twangMaxForce 30；正常 twang 提交不经过 `Weapon.release` 的 20 上限 | `Banana.as::constructor`、`TileSystem.mouseUp`、`Solid.twang` | `MutinyBanana` 继承共享 `Twang` | 已实现；自动回归已写，待 Unity 运行验证 |
+| BAN-TRAJ-01 | 预览与实际发射共用 30 力初速和“先加 weight、再位移”的 25 Hz 步进顺序 | `Solid.as::drawTwangLine/twangPrediction/advanceMotion` | `MutinyTrajectoryRenderer.PredictVelocityTick`、`MutinyPhysicsBody.AdvanceSimulationTick` | 满拉力连续比较前 5 tick 的预览点与实际位置 | 已实现；自动回归已写，待 Unity 运行验证 |
 | BAN-HIT-01 | 每次 Solid 接触只播放 `banana_bounce`，不会按反弹次数自动爆炸 | `Banana.as::contact` | `OnContact` | 已实现 |
 | BAN-DET-01 | 静止时自动爆；人类玩家飞行中下一次全局鼠标按下触发爆炸 | `Banana.as::advanceMotion/fire` | `TryRequestPlayerDetonation` | 已实现；待运行验证 |
 | BAN-AI-01 | AI 最近角色距离 `<400` 时爆；“开始远离且 `<2500`”分支存在，但本 SWF 的 `lastSqDistance` 未更新，实际不可达 | `Banana.as::advanceMotion` | 保留 Infinity，不发明历史更新 | 已实现；静态确认 |
@@ -159,7 +160,7 @@
 
 ### 6.5 Cannon / Cannonball
 
-详细规格见 [09-Cannon](09-Cannon/README.md)。核心结论：大炮和炮弹是独立对象；原版范围圆对象位于角色 `(x,y-100)`，本项目按当前角色表现与明确验收要求，将提示圆和实际 120 px 部署约束统一以角色坐标为圆心，并保持范围提示独立于炮身变换。炮身默认四向 extent 10，持续按住左键拖动时通过 Solid 碰撞步移动；快速指针采样越界会钳到圆周但不再伪造松手（这是相对原版 130 px 自动释放的授权差异）。拉栓局部 X 为 `[-40,-21]`，松开 `<-30` 才提交；回弹到 -21 后以 30 速度发射并播放 Unity 资源键 `cannon_explosion`。炮弹 weight 0、hitsBoxes=true，碰到地形/箱体/非 owner 角色立即 100/50 爆炸；源码没有“穿透障碍”的行为。
+详细规格见 [09-Cannon](09-Cannon/README.md)。核心结论：大炮和炮弹是独立对象；范围圆对象和实际 120 px 部署约束统一以角色 `(x,y-100)` 为中心，使原始 100 px 圆的底部落在角色坐标，并保持范围提示独立于炮身变换。炮身默认四向 extent 10，持续按住左键拖动时通过 Solid 碰撞步移动；快速指针采样越界会钳到圆周但不再伪造松手（这是相对原版 130 px 自动释放的授权差异）。拉栓局部 X 为 `[-40,-21]`，松开 `<-30` 才提交；回弹到 -21 后以 30 速度发射并播放 Unity 资源键 `cannon_explosion`。炮弹 weight 0、hitsBoxes=true，碰到地形/箱体/非 owner 角色立即 100/50 爆炸；源码没有“穿透障碍”的行为。
 
 ### 6.6 Gunpowder Barrel
 
@@ -280,7 +281,7 @@
 
 | 优先级 | 差异 | 影响 | 建议修复入口 |
 | --- | --- | --- | --- |
-| P0 | Banana、RumBottle 被二次截速到 20，原版 twangMaxForce 为 30 | 射程和 AI/玩家落点错误 | 移除两个 `Twang` 中额外的 20 截断；补 30 力生产入口用例 |
+| P0 | RumBottle 仍被二次截速到 20，原版 twangMaxForce 为 30 | 射程和 AI/玩家落点错误 | 移除 `Twang` 中额外的 20 截断；补 30 力生产入口用例 |
 | P0 | Dynamite 入水被当作 dud 并自动结束；原版静态代码只切换 unlit 帧 | 生效/回合结束不同 | 先运行原版入水取证，再按结果改 `MutinyDynamite` |
 | P1 | 通用 `MutinyWeapon.Update` 增加 0.4 秒入水结束和 8 秒超时 | CherryBomb、Dynamite、RumBottle 等可能提前结束 | 将扩展与原版规则分层，逐武器选择是否启用 |
 | P1 | CherryBomb 的 Water 被当作 contact 爆炸 | 原版静态路径不支持该结论 | 原版运行对照；不要仅据 Unity 现状定规格 |

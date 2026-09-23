@@ -15,5 +15,12 @@
 - 点击只取 X；Y 强制为 -200。extent：left/right 48、top 96、bottom 0，每 tick vy=40。
 - 首次落地对 `abs(dx)<48` 且位于锚上方 64 px 内的角色造成 60，不是沿途直接秒杀。
 - 落地后 hold 30 tick，再 whiteOut 10 tick；AI 提交后先等 20 tick 才下落。
+- AI 按角色 Luck 样本数在全图随机 X，从 `y=-200` 垂直模拟；仅触地样本进入普通落点评分，并按原版将总分乘 `0.5`。
 
 来源：`Anchor.as`。规则：`ANC-*`，见 [完整审计](../IMPLEMENTATION_DETAILS.md#615-anchor)。
+
+## 行为规格与实现映射
+
+| ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
+| --- | --- | --- | --- | --- | --- |
+| AI-WPN-04 | AI 在全图随机 X，从顶部垂直模拟 Anchor；只接纳触地样本，评分乘 `0.5`，胜出后等待 20 tick 再下落 | `Anchor.as::randomThrows/aiPerform` | `MutinyAIController.EvaluateAnchor()`、`MutinyAnchor.DropForAi()` | 固定种子与地面，核对样本数、X 范围、胜出类型、正式对象和库存消耗 | 已实现；自动回归已写；待 Unity 运行验证 |

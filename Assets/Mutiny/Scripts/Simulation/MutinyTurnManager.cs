@@ -269,6 +269,13 @@ namespace Mutiny.Simulation
                     return false;
                 }
 
+                if (activeWeapons[i] is MutinyWoodenCrate crate &&
+                    crate.IsAiPlacementActive && crate.HasPendingPlacement)
+                {
+                    blocker = "woodenCrate:ai-placement";
+                    return false;
+                }
+
                 if (activeWeapons[i] is MutinyPiecesOfEight coins &&
                     coins.IsAwaitingNextCoin && coins.Owner != null && coins.Owner.IsAlive)
                 {
@@ -396,8 +403,10 @@ namespace Mutiny.Simulation
                     Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("fan");
                 }
 
+                int clearedBoxes = MutinyBoxRegistry.ClearForLevelEnd();
+
                 MutinyDebugLog.Info("Turn",
-                    $"END-POP result={GameResult} team1Alive={Team1.AliveCount} team2Alive={Team2.AliveCount} level={FindAnyObjectByType<MutinyLevelController>()?.CurrentLevelIndex}", this);
+                    $"END-POP result={GameResult} team1Alive={Team1.AliveCount} team2Alive={Team2.AliveCount} level={FindAnyObjectByType<MutinyLevelController>()?.CurrentLevelIndex} boxesCleared={clearedBoxes}", this);
                 OnGameOver?.Invoke(GameResult);
                 return;
             }

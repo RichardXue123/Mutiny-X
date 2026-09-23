@@ -55,16 +55,6 @@ namespace Mutiny.Simulation
             PhysicsBody.OnSimulationStep += AdvanceOriginalTick;
         }
 
-        public override void Twang(Vector2 startPx, Vector2 dragPx)
-        {
-            // Banana exposes a 30-force pull gauge, then Weapon.release clamps the
-            // committed throw to the shared 20 px/tick cap.
-            Vector2 launchVelocity = MutinyPhysics.CalculateTwangVelocity(startPx, dragPx, TwangMaxForce);
-            if (launchVelocity.sqrMagnitude > MutinyPhysics.DefaultTwangMaxForce * MutinyPhysics.DefaultTwangMaxForce)
-                launchVelocity = launchVelocity.normalized * MutinyPhysics.DefaultTwangMaxForce;
-            Fire(launchVelocity);
-        }
-
         public static bool TryRequestPlayerDetonation(MutinyTeam inputTeam)
         {
             MutinyBanana banana = FindPlayerDetonatableBanana(inputTeam);

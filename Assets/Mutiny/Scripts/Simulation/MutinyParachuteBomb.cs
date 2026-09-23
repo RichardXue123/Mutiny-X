@@ -28,6 +28,7 @@ namespace Mutiny.Simulation
         private const int OpeningFrameIndex = 10;
         private const int OpenLoopFrameIndex = 25;
         private const int OpenLoopActionFrameIndex = 29;
+        private const int NoMobileFanTouchId = int.MinValue;
 
         private readonly List<Sprite> m_Frames = new List<Sprite>(OriginalFrameCount);
         private int m_FramesFromFire;
@@ -37,6 +38,10 @@ namespace Mutiny.Simulation
         private float m_VerificationMousePixelX;
         private bool m_ChuteOpenedThisTick;
         private float m_ClosedFuseTickAccumulator;
+        private int m_MobileFanTouchId = NoMobileFanTouchId;
+        private bool m_MobileFanHeld;
+        private bool m_MobileFanPulsePending;
+        private Vector2 m_MobileFanScreenPosition;
 
         [Header("Parachute State")]
         public bool ChuteOpen { get; private set; }
@@ -70,6 +75,8 @@ namespace Mutiny.Simulation
             PhysicsBody.OnBeforeSimulationStep += AdvanceOriginalMotionTick;
             PhysicsBody.OnSimulationStep -= AdvanceOriginalPostMotionTick;
             PhysicsBody.OnSimulationStep += AdvanceOriginalPostMotionTick;
+            PhysicsBody.OnSimulationStep -= EmitOriginalSmokeTrail;
+            PhysicsBody.OnSimulationStep += EmitOriginalSmokeTrail;
 
             ChuteOpen = false;
             IsFanActive = false;
@@ -79,6 +86,10 @@ namespace Mutiny.Simulation
             m_VerificationFanHeld = null;
             m_ChuteOpenedThisTick = false;
             m_ClosedFuseTickAccumulator = 0f;
+            m_MobileFanTouchId = NoMobileFanTouchId;
+            m_MobileFanHeld = false;
+            m_MobileFanPulsePending = false;
+            m_MobileFanScreenPosition = Vector2.zero;
             ApplyFrame();
         }
 
@@ -109,6 +120,7 @@ namespace Mutiny.Simulation
 
         protected override void Update()
         {
+            CaptureMobileFanInput();
             AdvanceClosedFusePresentation(Time.deltaTime);
 
             // ParachuteBomb inherits Weapon.advance, whose only lifecycle exits are
@@ -163,11 +175,7 @@ namespace Mutiny.Simulation
             // and sound when the over-water boolean changes; it never calls contact.
             AdvanceSplashCheck();
 
-            // ParachuteBomb.advance runs after Weapon.advance and emits smoke only
-            // while its chute remains closed.
-            if (!ChuteOpen)
-                MutinyRumBottleSmokeTrail.Spawn(new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y));
-            else if (m_ChuteOpenedThisTick)
+            if (m_ChuteOpenedThisTick)
                 m_ChuteOpenedThisTick = false;
             else
                 AdvanceChuteAnimation();
@@ -180,6 +188,15 @@ namespace Mutiny.Simulation
                 SyncTransformFromState();
                 MutinyDebugLog.Info("ParachuteBomb", "clamped at original y=-300 ceiling", this);
             }
+        }
+
+        private void EmitOriginalSmokeTrail()
+        {
+            // ParachuteBomb.advance emits in both ready and fired states until the
+            // opening threshold changes chuteOpen. Keep this separate from the
+            // fired-only motion callback so the stopped outer frame still smokes.
+            if (!IsFinished && !ChuteOpen && PhysicsBody != null)
+                MutinyRumBottleSmokeTrail.Spawn(new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y));
         }
 
         private void ApplyFanInput()
@@ -214,6 +231,26 @@ namespace Mutiny.Simulation
                 return true;
             }
 
+            if (Application.isMobilePlatform)
+            {
+                Camera mobileCamera = Camera.main;
+                if (mobileCamera == null)
+                {
+                    held = false;
+                    mousePixelX = 0f;
+                    return false;
+                }
+
+                held = ConsumeMobileFanActive();
+                Vector3 mobileWorld = mobileCamera.ScreenToWorldPoint(
+                    new Vector3(
+                        m_MobileFanScreenPosition.x,
+                        m_MobileFanScreenPosition.y,
+                        -mobileCamera.transform.position.z));
+                mousePixelX = MutinyPhysics.UnityToPixel(mobileWorld).x;
+                return true;
+            }
+
             Mouse mouse = Mouse.current;
             Camera camera = Camera.main;
             if (mouse == null || camera == null)
@@ -229,6 +266,87 @@ namespace Mutiny.Simulation
             held = mouse.leftButton.isPressed;
             mousePixelX = MutinyPhysics.UnityToPixel(world).x;
             return true;
+        }
+
+        private void CaptureMobileFanInput()
+        {
+            if (!Application.isMobilePlatform || !IsFired || IsFinished || !IsHumanOwned())
+                return;
+
+            Touchscreen touchscreen = Touchscreen.current;
+            if (touchscreen == null)
+            {
+                m_MobileFanTouchId = NoMobileFanTouchId;
+                m_MobileFanHeld = false;
+                return;
+            }
+
+            if (m_MobileFanTouchId != NoMobileFanTouchId)
+            {
+                for (int i = 0; i < touchscreen.touches.Count; i++)
+                {
+                    var touch = touchscreen.touches[i];
+                    if (touch.touchId.ReadValue() != m_MobileFanTouchId)
+                        continue;
+
+                    m_MobileFanScreenPosition = touch.position.ReadValue();
+                    if (touch.press.wasPressedThisFrame)
+                        m_MobileFanPulsePending = true;
+                    m_MobileFanHeld = touch.press.isPressed;
+                    UnityEngine.InputSystem.TouchPhase phase = touch.phase.ReadValue();
+                    if (phase == UnityEngine.InputSystem.TouchPhase.Ended ||
+                        phase == UnityEngine.InputSystem.TouchPhase.Canceled ||
+                        touch.press.wasReleasedThisFrame)
+                    {
+                        m_MobileFanTouchId = NoMobileFanTouchId;
+                        m_MobileFanHeld = false;
+                    }
+                    return;
+                }
+
+                m_MobileFanTouchId = NoMobileFanTouchId;
+                m_MobileFanHeld = false;
+            }
+
+            for (int i = 0; i < touchscreen.touches.Count; i++)
+            {
+                var candidate = touchscreen.touches[i];
+                if (!candidate.press.wasPressedThisFrame && !candidate.press.isPressed)
+                    continue;
+
+                m_MobileFanTouchId = candidate.touchId.ReadValue();
+                m_MobileFanScreenPosition = candidate.position.ReadValue();
+                m_MobileFanHeld = candidate.press.isPressed;
+                if (candidate.press.wasPressedThisFrame)
+                    m_MobileFanPulsePending = true;
+                return;
+            }
+        }
+
+        internal static bool ResolveMobileFanActive(
+            bool touchHeld, bool pulsePending)
+        {
+            return touchHeld || pulsePending;
+        }
+
+        private bool ConsumeMobileFanActive()
+        {
+            bool active = ResolveMobileFanActive(
+                m_MobileFanHeld, m_MobileFanPulsePending);
+            m_MobileFanPulsePending = false;
+            return active;
+        }
+
+        internal void SetMobileFanStateForVerification(
+            bool touchHeld, bool pulsePending)
+        {
+            m_MobileFanHeld = touchHeld;
+            m_MobileFanPulsePending = pulsePending;
+        }
+
+        internal bool ConsumeMobileFanActiveForVerification()
+        {
+            return ConsumeMobileFanActive();
         }
 
         private void AdvanceSplashCheck()
@@ -405,6 +523,7 @@ namespace Mutiny.Simulation
                 return;
             PhysicsBody.OnBeforeSimulationStep -= AdvanceOriginalMotionTick;
             PhysicsBody.OnSimulationStep -= AdvanceOriginalPostMotionTick;
+            PhysicsBody.OnSimulationStep -= EmitOriginalSmokeTrail;
         }
     }
 }

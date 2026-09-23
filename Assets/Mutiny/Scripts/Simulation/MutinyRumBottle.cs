@@ -132,8 +132,9 @@ namespace Mutiny.Simulation
             }
 
             // RumBottle.advance creates one cannonSmokeTrail Debris each 25 Hz
-            // advance while the bottle is airborne.
-            if (IsFired)
+            // non-simulation advance. The source has no fired condition, so the
+            // equipped/ready bottle also emits its fuse trail.
+            if (!IsFinished)
                 MutinyRumBottleSmokeTrail.Spawn(new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y));
         }
 

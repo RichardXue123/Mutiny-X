@@ -10,6 +10,7 @@
 
 - `Assets/Mutiny/Scripts/Presentation/MutinyPlayerInput.cs`
 - `Assets/Mutiny/Scripts/Simulation/MutinyAIController.cs`
+- [AI 逻辑实现进度与实现说明](AI_IMPLEMENTATION_STATUS.md)
 
 ## 边界
 
@@ -28,4 +29,4 @@
 
 ## 后续文档
 
-行动请求接口、输入映射、AI 决策树和原版评分规则。
+行动请求接口和输入映射。AI 决策树、原版评分规则、当前覆盖和差异见 [AI 逻辑实现进度与实现说明](AI_IMPLEMENTATION_STATUS.md)。

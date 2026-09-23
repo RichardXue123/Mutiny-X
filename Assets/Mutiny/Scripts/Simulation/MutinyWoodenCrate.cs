@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Mutiny.Diagnostics;
 using UnityEngine;
@@ -23,6 +24,8 @@ namespace Mutiny.Simulation
         public const int OriginalPlacementCount = 3;
         public const int OriginalExplodeFirstFrame = 11;
         public const int OriginalDestroyFrame = 18;
+        public const int AiPlaceDelayTicks = 40;
+        public const int AiDelayAfterPlaceTicks = 10;
 
         private readonly List<Sprite> m_Frames = new();
         private MutinyWoodenCrate m_NextBox;
@@ -32,12 +35,20 @@ namespace Mutiny.Simulation
         private bool m_IsExploding;
         private float m_AnimationAccumulator;
         private int m_AnimationFrame;
+        private float m_SequenceAccumulator;
+        private Vector2[] m_AiList;
+        private Vector2 m_AiNext;
+        private int m_AiIndex;
+        private float m_AiOffset;
+        private int m_AiDelay;
+        private int m_AiDelayAfter;
 
         public MutinyWoodenCrate NextBox => m_NextBox;
         public bool HasPlacedAny => IsFired;
         public bool HasPendingPlacement => !IsFinished && FindPendingBox() != null;
         public bool IsExploding => m_IsExploding;
         public int PlacedCount => CountPlaced(GetRootBox());
+        public bool IsAiPlacementActive => m_AiList != null;
         internal int TimelineFrameForVerification => m_AnimationFrame + 1;
         internal bool IsVisibleForVerification => SpriteRenderer != null && SpriteRenderer.enabled;
 
@@ -73,6 +84,10 @@ namespace Mutiny.Simulation
             m_IsExploding = false;
             m_AnimationAccumulator = 0f;
             m_AnimationFrame = 0;
+            m_SequenceAccumulator = 0f;
+            m_AiList = null;
+            m_AiDelay = 0;
+            m_AiDelayAfter = 0;
             SetVisible(false);
         }
 
@@ -210,6 +225,7 @@ namespace Mutiny.Simulation
 
         protected override void Update()
         {
+            AdvancePlacementSequence();
             if (m_IsExploding)
                 AdvanceExplosionAnimation();
         }
@@ -269,6 +285,112 @@ namespace Mutiny.Simulation
                 Finish();
             }
             MutinyDebugLog.Info("WoodenCrate", $"placed index={PlacedCount}/{OriginalPlacementCount} pos=({pixelPosition.x:F1},{pixelPosition.y:F1}) next={(m_NextBox != null)}", this);
+        }
+
+        // BoxWeapon.advance drives AI placement even while the root box itself is
+        // stationary. Keep the source 25 Hz delays independent of body activity.
+        private void AdvancePlacementSequence()
+        {
+            if (m_ParentBox != null || (IsFinished && m_AiList == null))
+                return;
+
+            m_SequenceAccumulator += Time.deltaTime;
+            while (m_SequenceAccumulator >= MutinyPhysics.TimeStep)
+            {
+                m_SequenceAccumulator -= MutinyPhysics.TimeStep;
+                AdvanceSequenceTick();
+            }
+        }
+
+        private void AdvanceSequenceTick()
+        {
+            if (m_AiDelay > 0)
+            {
+                m_AiDelay--;
+                if (m_AiDelay == 0)
+                {
+                    MutinyWoodenCrate pending = FindPendingBox();
+                    if (pending != null)
+                    {
+                        pending.Place(m_AiNext);
+                        pending.SetVisible(true);
+                        m_AiDelayAfter = AiDelayAfterPlaceTicks;
+                        MutinyDebugLog.Info("WoodenCrate", $"AI placed index={PlacedCount}/{OriginalPlacementCount} pos={m_AiNext}", this);
+                    }
+                }
+            }
+            else if (m_AiDelayAfter > 0)
+            {
+                m_AiDelayAfter--;
+                if (m_AiDelayAfter == 0 && FindPendingBox() != null)
+                    AiContinue();
+            }
+
+            if (m_NextBox != null && m_NextBox.IsFinished && !IsFinished)
+            {
+                Finish();
+                m_AiList = null;
+                MutinyDebugLog.Info("WoodenCrate", $"AI placement sequence finished count={PlacedCount}", this);
+            }
+        }
+
+        internal void AdvanceAiPlacementTickForVerification()
+        {
+            AdvanceSequenceTick();
+        }
+
+        /// <summary>BoxWeapon.aiPerform: retain the first three source candidates.</summary>
+        public bool BeginAiPlacement(Vector2[] possibilities)
+        {
+            if (possibilities == null || possibilities.Length < 3 || Owner == null || !Owner.IsAlive)
+                return false;
+
+            int count = Mathf.Min(3, possibilities.Length);
+            m_AiList = new Vector2[count];
+            Array.Copy(possibilities, m_AiList, count);
+            m_AiIndex = 0;
+            m_AiOffset = 0f;
+            m_AiNext = new Vector2(float.NaN, float.NaN);
+            m_AiDelay = 0;
+            m_AiDelayAfter = 0;
+            AiContinue();
+            MutinyDebugLog.Info("WoodenCrate", $"AI armed candidates={count} firstDelay={m_AiDelay}", this);
+            return m_AiList != null && m_AiDelay > 0;
+        }
+
+        private void AiContinue()
+        {
+            if (m_AiList == null || m_AiList.Length == 0)
+                return;
+
+            m_AiDelay = AiPlaceDelayTicks;
+            // Preserve BoxWeapon.aiContinue ordering: first advance the index,
+            // then search downward in 32 px bands; later placements may stack 48 px.
+            if (!float.IsNaN(m_AiNext.x) && CanPlace(m_AiNext + Vector2.up * -48f) && UnityEngine.Random.value >= 0.4f)
+            {
+                m_AiOffset -= 48f;
+                m_AiNext.y -= 48f;
+                return;
+            }
+
+            for (int attempts = 0; attempts < m_AiList.Length * 12; attempts++)
+            {
+                m_AiIndex++;
+                if (m_AiIndex >= m_AiList.Length)
+                {
+                    m_AiIndex = 0;
+                    m_AiOffset -= 32f;
+                }
+                Vector2 candidate = m_AiList[m_AiIndex] + Vector2.up * m_AiOffset;
+                if (CanPlace(candidate))
+                {
+                    m_AiNext = candidate;
+                    return;
+                }
+            }
+
+            m_AiList = null;
+            MutinyDebugLog.Warning("WoodenCrate", "AI found no legal follow-up crate placement", this);
         }
 
         // BoxWeapon.advance performs this parent-completion propagation as part of

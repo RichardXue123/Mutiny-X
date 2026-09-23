@@ -26,6 +26,8 @@ namespace Mutiny.Simulation
             base.Initialize(owner);
             // CherryBomb.as constructor: hitsBoxes = true.
             PhysicsBody.State.HitsBoxes = true;
+            PhysicsBody.OnSimulationStep -= EmitOriginalSmokeTrail;
+            PhysicsBody.OnSimulationStep += EmitOriginalSmokeTrail;
         }
 
         public static readonly Vector2 OriginalPivot = new Vector2(10f / 20f, 10f / 32f); // Symbol 844: origin (10, 22) of 20x32
@@ -119,6 +121,20 @@ namespace Mutiny.Simulation
 
             // Destroy weapon gameobject after a short delay so any remaining references can clean up
             Destroy(gameObject, 0.1f);
+        }
+
+        private void EmitOriginalSmokeTrail()
+        {
+            // CherryBomb.advance emits one trail every non-simulation tick while
+            // the clip exists, including its equipped/ready state.
+            if (!IsFinished && PhysicsBody != null)
+                MutinyRumBottleSmokeTrail.Spawn(new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y));
+        }
+
+        private void OnDestroy()
+        {
+            if (PhysicsBody != null)
+                PhysicsBody.OnSimulationStep -= EmitOriginalSmokeTrail;
         }
     }
 }

@@ -198,9 +198,10 @@ namespace Mutiny.Levels
         [ContextMenu("Clear Level")]
         public void ClearLevel()
         {
-            // Clear gameplay state immediately; do not wait for delayed OnDestroy
-            // callbacks from objects under the previous level root.
-            MutinyBoxRegistry.ResetForLevel();
+            // BoxWeapon instances are spawned outside the level-root hierarchy.
+            // Clear both their visuals and collision state immediately; do not
+            // wait for delayed OnDestroy callbacks from the old scene graph.
+            MutinyBoxRegistry.ClearForLevelEnd();
 
             if (m_CurrentLevel != null)
             {

@@ -62,6 +62,18 @@ namespace Mutiny.Verification.Editor
                                string.Join("\n", result.Failures));
         }
 
+        [MenuItem("Mutiny/Parity/Validate Cannon Smoke Trail")]
+        public static void ValidateCannonSmokeTrail()
+        {
+            MutinyLevel1VerificationResult result =
+                MutinyTurnActionUiVerificationTest.RunCannonSmokeTrail();
+            if (result.Passed)
+                Debug.Log($"[Mutiny Parity] Cannon smoke trail verification passed: {result.PassedAssertions}/{result.TotalAssertions} assertions.");
+            else
+                Debug.LogError("[Mutiny Parity] Cannon smoke trail verification failed:\n" +
+                               string.Join("\n", result.Failures));
+        }
+
         [MenuItem("Mutiny/Parity/Validate Battle HUD")]
         public static void ValidateBattleHud()
         {

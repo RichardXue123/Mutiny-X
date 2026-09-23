@@ -179,7 +179,10 @@ namespace Mutiny.Simulation
             m_LifetimeTimer = 0f;
             m_WaterTimer = 0f;
 
-            // Clamp max velocity to 20 px/tick (Flash Weapon.release)
+            // Fire receives both direct/AI velocities and normal twang velocities.
+            // Clamp to this weapon's own force limit. Normal pointer release calls
+            // Solid/Weapon.twang in Flash and does not pass through Weapon.release's
+            // unrelated 20 px/tick draggable-object cap.
             float sqrLen = velocityPx.sqrMagnitude;
             if (sqrLen > TwangMaxForce * TwangMaxForce)
             {
