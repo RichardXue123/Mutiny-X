@@ -44,7 +44,7 @@
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 实际结果 |
 | --- | --- | --- | --- | --- | --- |
 | VIS-WATER-01 | 水面按 `skyColour` 选 `water1..3`；每种颜色使用独立循环帧 | `Water.as::Water`、`Controller.setSkyColour`；water 时间轴 | `MutinyWaterSurface.Initialize` | 分别构建三种天色，逐 tick 对照原版帧序及循环点 | Unity 已实现每色 10 帧循环，但 `BuildWater` 当前固定传 `skyColour=1`；待修复与运行验证 |
-| VIS-SPLASH-01 | `Solid.splashCheck` 在注册点 `y < water.y` 状态变化时，于物体当前 X、水线 Y 生成水花并播放音效；等于水线算水下；按天色播放 1..18 / 25..42 / 49..66，可见段后的全局帧 19/43/67 执行 `cl.destroy()` | `Solid.as::splashCheck`、`Character.as::advance`、`Weapon.as::advance`；symbol 1780 帧脚本、`sprite-origins.csv`、导出 PNG | `MutinyWaterSurface.CheckSplashCrossing/SpawnSplash`、`MutinySplashEffect`；角色和普通武器物理帧及专用武器路径 | 生产角色恰好到水线时核对坐标、溺水时不重复生成；三色检查首帧/第 18 帧和第 19 帧销毁 | 已接入；现有 PNG 与原版导出逐字节一致；Unity Play Mode 待运行 |
+| VIS-SPLASH-01 | `Solid.splashCheck` 在注册点 `y < water.y` 状态变化时，于物体当前 X、水线 Y 生成水花并播放音效；等于水线算水下；按天色播放 1..18 / 25..42 / 49..66，可见段后的全局帧 19/43/67 执行 `cl.destroy()`；水面重新 `show()` 后覆盖同层 splash | `Solid.as::splashCheck`、`Clip.as::show/hide`、`Character.as::advance`、`Weapon.as::advance`；symbol 1780 帧脚本、`sprite-origins.csv`、导出 PNG | `MutinyWaterSurface.CheckSplashCrossing/SpawnSplash`、`MutinySplashEffect`；角色和普通武器物理帧及专用武器路径 | 生产角色恰好到水线时核对坐标、溺水时不重复生成；三色检查水花低于水面的层级、首帧/第 18 帧和第 19 帧销毁 | 已接入；现有 PNG 与原版导出逐字节一致；Unity Play Mode 待运行 |
 | VIS-BG-01 | 战斗背景的 cloudBase/hills/frontClouds/backClouds 根据镜头 X/Y 以不同系数位移，水底背景跟随水面 | `Water.as::advance:18-31`、`Global.negativeModulo`、symbol 1998 的三色图层 | `MutinyBattleBackground`、`MutinyOriginalBackground.BattleLayerPosition` | 在关卡 1/6/11/16 移动镜头至四角，逐帧比较注册点、层级、位移和循环边界 | 已接入；原版首帧图层重组像素一致；待 Unity Play Mode 对照 |
 | VIS-TILE-01 | `boat_ripple_*` 和 `tile_ripple_*` 七组各 16 帧；`Tile.show` 在显示时跳到 `1 + animationCounter % 16`，之后正常播放 | `Tile.as::show`、`TileSystem.as::advance/panCamera`、`tile-mapping.csv` 和符号 741/707/724/1901/1592/1609/1575 | `MutinyAnimatedTiles` 从 `BuildBackground/BuildTerrain` 注册，共用 25 Hz 帧计数 | 在含七组 ripple 的关卡逐 tick 记录 1..16→1；镜头移出再移入检查相位；确认碰撞未变化 | 112 张资源与原版导出逐字节一致；已接入；待 Unity Play Mode 验证 |
 | VIS-TORCH-01 | `cave_torch` 外层只有 1 帧，内层 symbol 1485 火焰有 24 帧，位于 `(14,13)` px；移出视野销毁、重新显示从第 1 帧播放 | symbol 1486 的 placements、1485 的 24 帧导出、`Clip.show/hide` 和 `Tile.show` | `MutinyAnimatedTiles.RegisterTorch`、`Art/Tiles/Single/cave_torch_base`、`Art/Tiles/Animated/cave_torch_flame` | 静态底座 + 24 帧火焰逐帧对照；移出/移入视野确认火焰重新从 1 开始；碰撞保持原值 | 底座与火焰 frame 1 重组像素等于原版首帧；已接入；待 Unity Play Mode 验证 |
@@ -69,7 +69,7 @@
 | --- | --- | --- | --- |
 | P0 | VIS-BG-01 | 已接入原版分层资源与视差公式，待 Unity Play Mode 核对 | 镜头移动与不同屏幕比例下的实际画面尚未确认 |
 | P0 | VIS-TILE-01 / VIS-TORCH-01 | ripple 和火把子时间轴已接入，待 Unity Play Mode 核对 | 运行时帧相位与进出视野时机尚未逐帧确认 |
-| P1 | VIS-SPLASH-01 | 已修正跨线触发、图像注册点与第 19/43/67 帧销毁，待 Unity Play Mode 核对 | 生产关卡中的入水/出水录像尚未确认 |
+| P1 | VIS-SPLASH-01 | 已修正跨线触发、图像注册点、位于水面之下的层级与第 19/43/67 帧销毁，待 Unity Play Mode 核对 | 生产关卡中的入水/出水录像尚未确认 |
 | P1 | VIS-WATER-01 | 关卡水面固定使用 sky 1 | 后段关卡配色错误 |
 | P1 | VIS-SMOKE-01 | 五种投射物烟迹已接入，待 Unity Play Mode 核对 | 生产场景中的位置和寿命尚未逐帧确认 |
 | P1 | VIS-FRONT-01 | 已接入原版分层资源和 25 Hz 循环，待 Unity Play Mode 核对 | 各层回卷时的实际画面尚未确认 |

@@ -21,6 +21,9 @@ namespace Mutiny.Levels
         public const int CharacterSortingStride = 8;
         public const int CharacterOverlaySortingOffset = 1;
         public const int WaterSortingOrder = 300;
+        // Solid.splashCheck shows the splash, then hides and re-shows Water in
+        // the same Flash waterLayer. Water therefore ends up above the splash.
+        public const int SplashSortingOrder = WaterSortingOrder - 1;
 
         public static int GetCharacterSortingOrder(int originalCreationIndex)
         {
@@ -441,7 +444,7 @@ namespace Mutiny.Levels
             }
 
             m_Renderer = gameObject.AddComponent<SpriteRenderer>();
-            m_Renderer.sortingOrder = MutinyLevelBuilder.WaterSortingOrder + 1;
+            m_Renderer.sortingOrder = MutinyLevelBuilder.SplashSortingOrder;
             m_Renderer.sprite = m_Frames[0];
             CurrentSourceFrame = (Mathf.Clamp(skyColour, 1, 3) - 1) * FramesPerColour + 1;
         }

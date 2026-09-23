@@ -2724,6 +2724,8 @@ namespace Mutiny.Verification
                     int firstFrame = (sky - 1) * 24 + 1;
                     bool firstVisible = renderer != null && renderer.enabled &&
                                         renderer.sprite != null && splash.CurrentSourceFrame == firstFrame &&
+                                        renderer.sortingOrder == MutinyLevelBuilder.SplashSortingOrder &&
+                                        renderer.sortingOrder < MutinyLevelBuilder.WaterSortingOrder &&
                                         Vector2.Distance(renderer.sprite.pivot, new Vector2(24f, 0f)) < 0.01f;
                     for (int tick = 2; tick <= 18; tick++)
                         splash.AdvanceOriginalTickForVerification();
@@ -2731,7 +2733,7 @@ namespace Mutiny.Verification
                                        splash.CurrentSourceFrame == firstFrame + 17;
                     splash.AdvanceOriginalTickForVerification();
                     result.Assert(firstVisible && lastVisible && renderer != null && !renderer.enabled,
-                        $"VIS-SPLASH-01 sky {sky} displays frames {firstFrame}..{firstFrame + 17} and destroys on {firstFrame + 18}");
+                        $"VIS-SPLASH-01 sky {sky} stays below water, displays frames {firstFrame}..{firstFrame + 17} and destroys on {firstFrame + 18}");
                 }
                 finally
                 {
