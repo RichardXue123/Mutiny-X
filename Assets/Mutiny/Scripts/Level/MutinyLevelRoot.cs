@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Mutiny.Presentation;
 using Mutiny.Simulation;
 using UnityEngine;
 
@@ -31,6 +32,14 @@ namespace Mutiny.Levels
 
         public void EnsureRuntimeWater()
         {
+            // Baked scenes can predate SkyColour serialization. Their controller
+            // has already parsed the level index in Awake when Start reaches here.
+            MutinyLevelController controller = GetComponent<MutinyLevelController>();
+            if (controller == null)
+                controller = GetComponentInParent<MutinyLevelController>();
+            if (controller != null && controller.LevelXml != null)
+                SkyColour = MutinyOriginalBackground.SkyColourForLevel(controller.CurrentLevelIndex);
+
             float waterPixelY = -WaterLevelY * MutinyPhysics.PixelsPerUnit;
             for (int i = 0; i < AllCharacters.Count; i++)
             {
@@ -53,7 +62,7 @@ namespace Mutiny.Levels
             if (surface == null)
                 surface = WaterHolder.gameObject.AddComponent<MutinyWaterSurface>();
             if (surface.LoadedFrameCount == 0)
-                surface.Initialize(Width * MutinyLevelBuilder.CellSize, WaterLevelY, 1);
+                surface.Initialize(Width * MutinyLevelBuilder.CellSize, WaterLevelY, SkyColour);
         }
     }
 }
