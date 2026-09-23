@@ -50,18 +50,19 @@ namespace Mutiny.Levels
             levelRoot.Width = levelData.Width;
             levelRoot.Height = levelData.Height;
             levelRoot.Players = levelData.Players;
+            MutinyAnimatedTiles animatedTiles = levelRootObj.AddComponent<MutinyAnimatedTiles>();
 
             // 1. Background
             GameObject bgObj = new GameObject("Background");
             bgObj.transform.SetParent(levelRootObj.transform, false);
             levelRoot.BackgroundHolder = bgObj.transform;
-            BuildBackground(levelData, bgObj.transform);
+            BuildBackground(levelData, bgObj.transform, animatedTiles);
 
             // 2. Terrain
             GameObject terrainObj = new GameObject("Terrain");
             terrainObj.transform.SetParent(levelRootObj.transform, false);
             levelRoot.TerrainHolder = terrainObj.transform;
-            BuildTerrain(levelData, terrainObj.transform);
+            BuildTerrain(levelData, terrainObj.transform, animatedTiles);
 
             // 3. Water
             GameObject waterObj = new GameObject("Water");
@@ -98,7 +99,8 @@ namespace Mutiny.Levels
             return levelRootObj;
         }
 
-        private static void BuildBackground(MutinyLevelData levelData, Transform parent)
+        private static void BuildBackground(MutinyLevelData levelData, Transform parent,
+            MutinyAnimatedTiles animatedTiles)
         {
             if (levelData.Background == null)
                 return;
@@ -122,11 +124,13 @@ namespace Mutiny.Levels
                     SpriteRenderer sr = tileObj.AddComponent<SpriteRenderer>();
                     sr.sprite = sprite;
                     sr.sortingOrder = BackgroundSortingOrder;
+                    animatedTiles.Register(sr, tileName, x, y);
                 }
             }
         }
 
-        private static void BuildTerrain(MutinyLevelData levelData, Transform parent)
+        private static void BuildTerrain(MutinyLevelData levelData, Transform parent,
+            MutinyAnimatedTiles animatedTiles)
         {
             if (levelData.Terrain == null)
                 return;
@@ -150,6 +154,7 @@ namespace Mutiny.Levels
                     SpriteRenderer sr = tileObj.AddComponent<SpriteRenderer>();
                     sr.sprite = sprite;
                     sr.sortingOrder = TerrainSortingOrder;
+                    animatedTiles.Register(sr, tileName, x, y);
 
                     // Physical collision for solid terrain (exclude water ripples)
                     if (!tileName.Contains("ripple"))
