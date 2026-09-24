@@ -137,6 +137,17 @@ namespace Mutiny.Verification
                     "VIS-SMOKE-01 production rum bottle physics tick emits the original trail");
                 result.Assert(WeaponTickCreatesSmoke<MutinyParachuteBomb>(true),
                     "VIS-SMOKE-01 production closed parachute bomb physics tick emits the original trail");
+                result.Assert(WeaponTickCreatesSmoke<MutinyParachuteBomb>(true, openParachute: true),
+                    "VIS-SMOKE-01 production parachute bomb stops emitting smoke when its chute opens");
+                DestroySmokeTrails();
+                result.Assert(WeaponTickCreatesSmoke<MutinyCherryBomb>(false),
+                    "VIS-SMOKE-01 equipped cherry bomb emits smoke before firing");
+                result.Assert(WeaponTickCreatesSmoke<MutinyDynamite>(false),
+                    "VIS-SMOKE-01 equipped dynamite emits smoke before firing");
+                result.Assert(WeaponTickCreatesSmoke<MutinyRumBottle>(false),
+                    "VIS-SMOKE-01 equipped rum bottle emits smoke before firing");
+                result.Assert(WeaponTickCreatesSmoke<MutinyParachuteBomb>(false),
+                    "VIS-SMOKE-01 equipped closed parachute bomb emits smoke before firing");
             }
             finally
             {
@@ -146,7 +157,7 @@ namespace Mutiny.Verification
             }
         }
 
-        private static bool WeaponTickCreatesSmoke<T>(bool fire) where T : MutinyWeapon
+        private static bool WeaponTickCreatesSmoke<T>(bool fire, bool openParachute = false) where T : MutinyWeapon
         {
             GameObject weaponObject = new GameObject($"SmokeVerification_{typeof(T).Name}");
             try
@@ -162,18 +173,27 @@ namespace Mutiny.Verification
                 state.Weight = 0f;
                 weapon.PhysicsBody.State = state;
                 if (fire)
-                    weapon.Fire(new Vector2(4f, -2f));
+                {
+                    // At vy=-2 the parachute opens before its smoke callback;
+                    // keep this case closed to exercise the original smoke gate.
+                    Vector2 launchVelocity = weapon is MutinyParachuteBomb && !openParachute
+                        ? new Vector2(4f, -20f)
+                        : new Vector2(4f, -2f);
+                    weapon.Fire(launchVelocity);
+                }
 
                 int before = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>().Length;
                 weapon.PhysicsBody.AdvanceSimulationTick();
                 int after = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>().Length;
-                if (after != before + 1)
+                int expectedSmokeCount = before + (openParachute ? 0 : 1);
+                MutinyParachuteBomb parachute = weapon as MutinyParachuteBomb;
+                bool chuteMatches = !openParachute || (parachute != null && parachute.ChuteOpen);
+                if (after != expectedSmokeCount || !chuteMatches)
                 {
-                    MutinyParachuteBomb parachuteBomb = weapon as MutinyParachuteBomb;
-                    string chute = parachuteBomb != null ? $" chute={parachuteBomb.ChuteOpen}" : string.Empty;
-                    Debug.LogError($"[Smoke Verification] {typeof(T).Name} before={before} after={after} fired={weapon.IsFired} finished={weapon.IsFinished} vy={weapon.PhysicsBody.State.VelocityY}{chute}");
+                    string chute = parachute != null ? $" chute={parachute.ChuteOpen}" : string.Empty;
+                    Debug.LogError($"[Smoke Verification] {typeof(T).Name} before={before} after={after} expected={expectedSmokeCount} fired={weapon.IsFired} finished={weapon.IsFinished} vy={weapon.PhysicsBody.State.VelocityY}{chute}");
                 }
-                return after == before + 1;
+                return after == expectedSmokeCount && chuteMatches;
             }
             finally
             {

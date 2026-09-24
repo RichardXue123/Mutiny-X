@@ -127,7 +127,7 @@
 | --- | --- | --- | --- | --- |
 | CHB-PHY-01 | extent 四向均为 9，`hitsBoxes=true`，可 twang | `CherryBomb.as::constructor` | `MutinyCherryBomb.Initialize`/基类 | 已实现 |
 | CHB-HIT-01 | 发射后任何 Solid 接触立即隐藏并生成 80/40 爆炸、播放 `pop` | `CherryBomb.as::contact` | `OnContact → Explode` | 已实现；待运行验证 |
-| CHB-FX-01 | 未结束期间每 tick 生成一份 `cannonSmokeTrail`，源码没有 `fired` 条件 | `CherryBomb.as::advance` | 当前没有烟迹 | 已知差异 |
+| CHB-FX-01 | 未结束期间每 tick 生成一份 `cannonSmokeTrail`，源码没有 `fired` 条件 | `CherryBomb.as::advance` | `MutinyCherryBomb.EmitOriginalSmokeTrail`，装备阶段也生成 | 已接入；待 Unity 运行验证 |
 | CHB-WATER-01 | 入水只来自共享 splash/越界逻辑，不等价于 Solid contact | `Weapon.as::advance`、`Solid.as::splashCheck` | 当前把 Water 传给 `OnContact` 并会爆炸 | 已知差异，需原版运行确认入水表现 |
 
 ### 6.2 Dynamite
@@ -137,7 +137,7 @@
 | DYN-PHY-01 | extent 11、friction 1.7；飞行时旋转 `vx*2` | `Dynamite.as` | `MutinyDynamite` + rotation rules | 已实现 |
 | DYN-END-01 | `vx==0 && abs(vy)<.2` 时生成 250/70 爆炸 | `Dynamite.as::advanceMotion` | `Update → Explode` | 已实现 |
 | DYN-WATER-01 | `y>water.y` 只执行 `gotoAndStop("unlit")`；源码没有“熄灭后禁止爆炸”分支 | `Dynamite.as::advanceMotion` | 当前入水后作为 dud 自动结束 | 已知差异 |
-| DYN-FX-01 | 未结束期间每 tick 生成烟迹，源码没有 `fired` 条件 | `Dynamite.as::advance` | 当前未生成烟迹 | 已知差异 |
+| DYN-FX-01 | 未结束期间每 tick 生成烟迹，源码没有 `fired` 条件 | `Dynamite.as::advance` | `MutinyDynamite.EmitOriginalSmokeTrail`，装备阶段也生成 | 已接入；待 Unity 运行验证 |
 
 ### 6.3 Banana
 
@@ -286,7 +286,6 @@
 | P1 | 通用 `MutinyWeapon.Update` 增加 0.4 秒入水结束和 8 秒超时 | CherryBomb、Dynamite、RumBottle 等可能提前结束 | 将扩展与原版规则分层，逐武器选择是否启用 |
 | P1 | CherryBomb 的 Water 被当作 contact 爆炸 | 原版静态路径不支持该结论 | 原版运行对照；不要仅据 Unity 现状定规格 |
 | P1 | Mine 忽略所有静止角色，未保留“当前 twanging 的静止角色仍触发”例外 | 少数交互时序不一致 | 给 `CheckForProximity` 传入当前 twang 目标 |
-| P2 | CherryBomb、Dynamite 缺少源码每 tick 烟迹 | 表现差异，不改变主要伤害 | 复用 25 Hz smoke trail，确认装备阶段是否也显示 |
 | P2 | Boulder/Anchor 的 `Global.whiteOut` 加色阶段由普通 SpriteRenderer 近似 | 淡出颜色不完全一致 | 专用材质或 shader |
 
 ## 8. 验收矩阵
