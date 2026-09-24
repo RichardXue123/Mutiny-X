@@ -28,9 +28,12 @@ namespace Mutiny.Simulation
         private readonly Queue<float> m_AiShotXs = new Queue<float>();
         private int m_FlyingFrame;
         private int m_ShotFrame;
+        private bool m_HasPendingShot;
+        private string m_PendingShotSource;
 
         public int ActiveShotCount => m_Shots.Count;
         public float FlightY => PhysicsBody == null ? 0f : PhysicsBody.State.Y;
+        public override bool CanExpireFromTurnSafetyTimeout => false;
 
         protected override void Awake()
         {
@@ -53,6 +56,8 @@ namespace Mutiny.Simulation
             m_Shots.Clear();
             m_FlyingFrame = 0;
             m_ShotFrame = 0;
+            m_HasPendingShot = false;
+            m_PendingShotSource = null;
         }
 
         public void PlaceAtFlightHeight(float flightY)
@@ -176,6 +181,24 @@ namespace Mutiny.Simulation
                 RequestShot("ai-plan");
             }
 
+            if (m_HasPendingShot)
+            {
+                string source = m_PendingShotSource;
+                m_HasPendingShot = false;
+                m_PendingShotSource = null;
+                SpawnShot(source);
+            }
+
+            // Seagull.as owns its child projectiles and advances every one after
+            // processing this tick's input. Keeping that ordering also advances a
+            // newly-created shot once before the frame can render it at x - 10.
+            for (int i = m_Shots.Count - 1; i >= 0; i--)
+            {
+                MutinySeagullFire shot = m_Shots[i];
+                if (shot != null)
+                    shot.AdvanceOriginalTick();
+            }
+
             if (PhysicsBody.State.X > ResolveLevelWidthPixels() + OriginalExitPadding && m_Shots.Count == 0)
             {
                 Finish();
@@ -188,10 +211,28 @@ namespace Mutiny.Simulation
 
         private bool RequestShot(string source)
         {
-            if (!IsFired || IsFinished || PhysicsBody == null || PhysicsBody.State.X >= ResolveLevelWidthPixels())
+            if (!IsFired || IsFinished || PhysicsBody == null || m_HasPendingShot ||
+                PhysicsBody.State.X >= ResolveLevelWidthPixels())
             {
                 MutinyDebugLog.Info("Seagull", $"shot rejected source={source}", this);
                 return false;
+            }
+
+            // Flash stores mouseButtonDown until Seagull.advance reads it. Do the
+            // same here instead of spawning from an arbitrary Unity render Update.
+            m_HasPendingShot = true;
+            m_PendingShotSource = source;
+            MutinyDebugLog.Info("Seagull", $"shot queued source={source}", this);
+            return true;
+        }
+
+        private void SpawnShot(string source)
+        {
+            if (!IsFired || IsFinished || PhysicsBody == null ||
+                PhysicsBody.State.X >= ResolveLevelWidthPixels())
+            {
+                MutinyDebugLog.Info("Seagull", $"queued shot discarded source={source}", this);
+                return;
             }
 
             Vector2 position = new Vector2(PhysicsBody.State.X + OriginalShotXOffset, PhysicsBody.State.Y);
@@ -204,7 +245,6 @@ namespace Mutiny.Simulation
             MutinyAudioManager.Instance?.PlaySFX($"poop{Random.Range(1, 4)}");
             MutinyDebugLog.Info("Seagull",
                 $"shot created source={source} pos=({position.x:F1},{position.y:F1}) activeShots={m_Shots.Count}", this);
-            return true;
         }
 
         private void AdvanceAnimation()

@@ -99,6 +99,10 @@
 | AUD-SFX-023 | `voodoo` | 玩家把巫毒目标改为另一角色后；选择同一目标不重播 | `TileSystem.as:692-700` |
 | AUD-SFX-024 | `voodoo` | AI 执行巫毒方案、写入速度与目标后的同一 tick | `VoodooDoll.as:91-97` |
 
+### Boulder 音频边界
+
+`Boulder.as`、对应 pcode 与 symbol 872/869 时间轴均没有专属发射、滚动或直接撞击音效。可静态确认的原版路径只有继承 `Solid.splashCheck` 的跨水面 `splash`，以及被推飞角色以后发生地形接触时由 `Character.contact` 产生的 `hitwall`。原版导出的 `smack` 存在于 SFX 管理器，但当前原版代码与时间轴证据没有发现其调用点，不能登记为原版 Boulder 行为。
+
 ### UI 和前导时间轴
 
 | 规则 | 声音 | 原版条件与时序 | 备注 |

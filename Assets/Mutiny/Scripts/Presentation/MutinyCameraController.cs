@@ -131,6 +131,20 @@ namespace Mutiny.Presentation
                 return;
             }
 
+            // TileSystem.advanceScrolling returns before the falling-chest branch
+            // while currentTeam.aiFinished is false. Unity evaluates synchronously,
+            // but exposes that interval so camera priority remains source-authentic.
+            MutinyAIController activeAi = TurnManager.CurrentTeam != null
+                ? TurnManager.CurrentTeam.GetComponent<MutinyAIController>()
+                : null;
+            if (ShouldPauseForAiThinking(
+                    TurnManager.CurrentTeam != null && TurnManager.CurrentTeam.IsAiControlled,
+                    activeAi != null && activeAi.IsEvaluatingCandidates))
+            {
+                m_EdgeVelocityPixelsPerSecond = Vector2.zero;
+                return;
+            }
+
             MutinyTreasureChest fallingChest = FindFallingChest();
             if (fallingChest != null)
             {
@@ -169,6 +183,9 @@ namespace Mutiny.Presentation
             AdvanceEdgeScrolling();
         }
 
+        internal static bool ShouldPauseForAiThinking(bool isAiControlled, bool isEvaluatingCandidates)
+            => isAiControlled && isEvaluatingCandidates;
+
         private void EnsureReferences()
         {
             if (m_Camera == null)
@@ -201,9 +218,20 @@ namespace Mutiny.Presentation
             // every launch and clears it on every intermediate resolution.
             if (m_TrackedWeapon != null)
             {
-                if (m_TrackedWeapon.IsFired && !m_TrackedWeapon.IsFinished)
-                    return m_TrackedWeapon.transform;
-                m_TrackedWeapon = null;
+                // VoodooDoll.advance permanently clears track when it hands the
+                // camera to its target. Never let a stale explicit reference
+                // override that source-authentic transition.
+                if (m_TrackedWeapon is MutinyVoodooDoll trackedDoll &&
+                    trackedDoll.IsTargetFocusRequested)
+                {
+                    m_TrackedWeapon = null;
+                }
+                else
+                {
+                    if (m_TrackedWeapon.IsFired && !m_TrackedWeapon.IsFinished)
+                        return m_TrackedWeapon.transform;
+                    m_TrackedWeapon = null;
+                }
             }
 
             // During the gap between coins, track=false and panToCharacter owns
@@ -215,8 +243,12 @@ namespace Mutiny.Presentation
             MutinyWeapon[] weapons = FindObjectsByType<MutinyWeapon>();
             for (int i = 0; i < weapons.Length; i++)
             {
-                if (weapons[i] is MutinyVoodooDoll doll && doll.CameraFocusTarget != null)
-                    return doll.CameraFocusTarget;
+                // After ten ticks the original doll sets track=false for the rest
+                // of its lifetime. panToCharacter owns the one-time move to the
+                // victim; once that move clears, neither the fading doll nor the
+                // moving victim is an automatic action target.
+                if (weapons[i] is MutinyVoodooDoll doll && doll.IsTargetFocusRequested)
+                    continue;
                 // Cannon.update sets trackX/trackY from its child cannonball in the
                 // Flash game. Keep the placed cannon stationary and follow that
                 // separate projectile directly in Unity.
@@ -260,6 +292,11 @@ namespace Mutiny.Presentation
             desired.z = transform.position.z;
             desired = ClampPosition(desired);
             return Vector2.Distance(transform.position, desired) < 0.01f;
+        }
+
+        public bool IsPanningToCharacter(MutinyCharacter character)
+        {
+            return character != null && m_TurnPanTarget == character.transform;
         }
 
         private MutinyCharacter FindTurnPanCharacter(MutinyTeam team)
@@ -363,6 +400,7 @@ namespace Mutiny.Presentation
             // the same weapon waits for the next throw.
             return TurnManager.CurrentPhase == TurnPhase.TurnActive ||
                    MutinyPiecesOfEight.HasPlayerAwaitingNextCoin(TurnManager.CurrentTeam) ||
+                   MutinyVoodooDoll.HasPlayerCameraHandoff(TurnManager.CurrentTeam) ||
                    IsAwaitingPlayerBoxPlacement();
         }
 

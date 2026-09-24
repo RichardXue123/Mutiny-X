@@ -111,17 +111,23 @@ namespace Mutiny.Presentation
 
         public void PlayMusic(string musicName, bool loop = true)
         {
-            if (!MusicEnabled || MusicSource == null || string.IsNullOrEmpty(musicName))
+            if (MusicSource == null || string.IsNullOrEmpty(musicName))
                 return;
 
             if (m_MusicClips.TryGetValue(musicName, out AudioClip clip))
             {
-                if (MusicSource.clip == clip && MusicSource.isPlaying)
-                    return;
+                bool alreadyPlaying = MusicSource.clip == clip && MusicSource.isPlaying;
 
+                // The requested menu/game track is logical state, so remember it even
+                // while music is disabled. Turning music back on must start the track
+                // belonging to the current screen instead of waiting for another request.
                 MusicSource.clip = clip;
                 MusicSource.loop = loop;
                 MusicSource.volume = MusicVolume;
+
+                if (!MusicEnabled || alreadyPlaying)
+                    return;
+
                 MusicSource.Play();
             }
         }
@@ -164,7 +170,6 @@ namespace Mutiny.Presentation
             {
                 if (MusicSource.clip != null)
                 {
-                    MusicSource.loop = true;
                     MusicSource.volume = MusicVolume;
                     MusicSource.Play();
                 }

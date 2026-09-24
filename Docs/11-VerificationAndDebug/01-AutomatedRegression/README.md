@@ -36,10 +36,32 @@
 - `AI-WPN-05`：通过同一生产分发器验证 Wooden Crate 获得至少 3 个合法 BoxWeapon 位置后进入候选；随后启动正式 `BeginAiPlacement` 并推进原版 40 tick 延迟，断言第一箱落地且三箱序列仍处于活动状态。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；`Assembly-CSharp` 与 `Assembly-CSharp-Editor` 编译通过；尚未在 Unity Play Mode 实际执行，不能登记为通过。
 
+## AI 原版预测与镜头回归
+
+- `AI-PHY-01`：通过生产 `SimulateWeaponImpact` 验证 Rum Bottle 首次接触即结束，Boulder/普通 Weapon 在无专用完成条件时执行原版 101 个预测 tick，且普通武器不会因仅仅越过水线提前结束模拟。
+- `AI-PHY-02`：长距离角色预测必须超过旧 70 tick 并持续到水线；注册共享箱体后，`hitsBoxes=true` 的 Cherry Bomb 候选必须在箱体处完成模拟。
+- `AI-WPN-06`：生产 Seagull 距离公式在 20 px 时分别得到敌方 `+0.5`、己方 `-1.0`，40 px 边界为 0。
+- `AI-CAM-01/02`：胜出角色通过生产镜头入口建立完成门；AI 控制与候选求值状态共同决定是否暂停宝箱等自动镜头分支。
+- 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；程序集编译通过；尚未在 Unity Play Mode 实际执行，不能登记为通过。
+
 ## Banana 轨迹一致性回归
 
 - `BAN-PHY-01`：通过生产 `MutinyWeaponFactory.SpawnAndLaunch()` 提交 400 px 满拉力，断言 Banana 实际初速为原版 `twangMaxForce=30`，不再错误套用 `Weapon.release` 的 20 上限。
 - `BAN-TRAJ-01`：以同一初速分别驱动生产预览 `PredictVelocityTick()` 和实际 `MutinyPhysicsBody.AdvanceSimulationTick()`，连续比较前 5 个无碰撞 tick 的坐标完全一致。
+- 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；待 Unity Play Mode 实际执行，不能登记为通过。
+
+## Seagull 飞行与投弹时序回归
+
+- `SEA-END-02`：在长地图上通过生产 `MutinyTurnManager.AdvanceSimulationTick()` 连续等待超过 150 tick，断言仍在正常飞行的海鸥不会被卡死武器看门狗强制完成或销毁。
+- `SEA-SHOT-02`：点击只登记一次投弹请求；驱动一次生产 `MutinyPhysicsBody.AdvanceSimulationTick()` 后，断言海鸥先前进 10 px，炸弹从移动后位置的 `x-10` 创建，并在同一 tick 前进 10 px、下落 1 px。子弹物理体保持非自治更新，防止同帧双步。
+- 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；待 Unity Play Mode 实际执行，不能登记为通过。
+
+## Voodoo Doll 运镜回归
+
+- `VOO-CAM-01`：生产目标绑定入口把镜头平移目标设为使用者；正式发射后清除该平移并显式跟随娃娃。
+- `VOO-CAM-02`：第 10 个娃娃物理 tick 同步释放娃娃跟随并把目标角色设为平移目标；平移未清除期间，目标等待计数不得推进。
+- `VOO-CAM-03`：目标取得保存速度后，通用 action-target 搜索不得重新选中仍在淡出的娃娃，也不持续锁定移动目标；没有其他高优先级目标时恢复手动滚屏资格。
+- `VOO-END-02`：目标镜头仍在远距离平移时连续驱动回合管理器超过 150 tick，娃娃不得被卡死武器看门狗强制完成。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；待 Unity Play Mode 实际执行，不能登记为通过。
 
 ## Mine 缺陷回归
@@ -48,6 +70,12 @@
 - `MIN-TRG-01/MIN-AIM-01`：通过 PlayerInput 的实际 Throw Self 拉线入口触发静止角色附近的 Mine；倒计时爆炸后确认角色已在空中、输入仍处于 Aiming，并可调用生产提交入口完成 Throw Self。
 - `MIN-TRG-02`：让角色携带非零速度进入半径，验证被动移动同样启动 warning/countdown。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`，尚未在 Unity Play Mode 实际执行，不能登记为通过。
+
+## 武器 ready / idle 动画回归
+
+- `VIS-WPN-IDLE-01/DYN-ANI-01`：创建正式 `MutinyDynamite`，保持 `IsFired=false`，通过生产 `MutinyPhysicsBody.AdvanceSimulationTick()` 验证 `lit` 可见帧严格按 1→2→3→4→1 循环，frame 5 动作帧不被显示。
+- `DYN-ANI-02`：通过生产 `EvaluateWaterState()` 触发入水回调，再推进正式物理 tick，断言画面保持原版 `unlit` frame 6。
+- 当前状态：`Assembly-CSharp`、`Assembly-CSharp-Editor` 编译通过；Unity 6000.6.0f1 batchmode 定向回归 2/2 通过。
 
 ## Pieces of Eight 镜头缺陷回归
 

@@ -25,13 +25,25 @@ namespace Mutiny.Simulation
         public bool HasTransferredTargetVelocity => m_TransferredTargetVelocity;
         public int FramesOnThis => m_FramesOnThis;
         public int FramesOnTarget => m_FramesOnTarget;
+        public override bool CanExpireFromTurnSafetyTimeout => false;
 
-        // VoodooDoll.advance switches TileSystem.panToCharacter to the target
-        // after ten doll ticks. The camera consumes this only until the transfer.
-        public Transform CameraFocusTarget => m_TargetFocusRequested && !m_TransferredTargetVelocity &&
-                                              TargetCharacter != null
-            ? TargetCharacter.transform
-            : null;
+        public static bool HasPlayerCameraHandoff(MutinyTeam inputTeam)
+        {
+            if (inputTeam == null || inputTeam.IsAiControlled)
+                return false;
+
+            MutinyVoodooDoll[] dolls = FindObjectsByType<MutinyVoodooDoll>();
+            for (int i = 0; i < dolls.Length; i++)
+            {
+                MutinyVoodooDoll doll = dolls[i];
+                if (doll != null && doll.IsFired && !doll.IsFinished &&
+                    doll.IsTargetFocusRequested && doll.Owner != null &&
+                    inputTeam.Characters.Contains(doll.Owner))
+                    return true;
+            }
+
+            return false;
+        }
 
         protected override void Awake()
         {
@@ -79,6 +91,9 @@ namespace Mutiny.Simulation
 
             TargetCharacter = target;
             IsTwangable = true;
+            // VoodooDoll.setTargetCharacter returns the camera to the owner
+            // before the player starts twanging the now-enabled doll.
+            MutinyCameraController.RequestPanToCharacter(Owner);
             MutinyDebugLog.Info("VoodooDoll", $"target bound target={target.name}; twang enabled", this);
             return true;
         }
@@ -99,6 +114,9 @@ namespace Mutiny.Simulation
                 return;
 
             m_ThrowVelocity = new Vector2(PhysicsBody.State.VelocityX, PhysicsBody.State.VelocityY);
+            // Weapon.twang sets track=true in the original. Register the exact
+            // equipped instance instead of relying on scene-order fallback.
+            MutinyCameraController.RequestTrackWeapon(this);
             MutinyDebugLog.Info("VoodooDoll",
                 $"fired target={TargetCharacter.name} velocity=({m_ThrowVelocity.x:F1},{m_ThrowVelocity.y:F1})", this);
         }
@@ -150,6 +168,10 @@ namespace Mutiny.Simulation
                 if (m_FramesOnThis <= 0)
                 {
                     m_TargetFocusRequested = true;
+                    // Original ordering: panToCharacter=target, then track=false.
+                    // Both occur in this same VoodooDoll.advance transition.
+                    MutinyCameraController.RequestPanToCharacter(TargetCharacter);
+                    MutinyCameraController.ReleaseWeaponTracking(this);
                     MutinyDebugLog.Info("VoodooDoll", $"owner flight complete; camera target={TargetCharacter?.name}", this);
                 }
                 return;
@@ -157,7 +179,7 @@ namespace Mutiny.Simulation
 
             if (!m_TransferredTargetVelocity)
             {
-                if (!IsTargetCameraFocused(assumeCameraFocused))
+                if (!HasTargetCameraPanCompleted(assumeCameraFocused))
                     return;
 
                 if (m_FramesOnTarget > 0)
@@ -173,13 +195,15 @@ namespace Mutiny.Simulation
             FadeAndFinish();
         }
 
-        private bool IsTargetCameraFocused(bool assumeCameraFocused)
+        private bool HasTargetCameraPanCompleted(bool assumeCameraFocused)
         {
             if (assumeCameraFocused)
                 return true;
 
             MutinyCameraController cameraController = FindAnyObjectByType<MutinyCameraController>();
-            return cameraController == null || cameraController.HasReachedVoodooTarget(TargetCharacter);
+            // VoodooDoll.as waits for TileSystem.panToCharacter to stop being the
+            // selected target. TileSystem clears it only after panTowards arrives.
+            return cameraController == null || !cameraController.IsPanningToCharacter(TargetCharacter);
         }
 
         private void TransferVelocityToTarget()

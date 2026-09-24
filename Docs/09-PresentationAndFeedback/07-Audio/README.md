@@ -26,10 +26,12 @@
 ### 已实现
 
 - `MutinyAudioManager` 单例、两个 `AudioSource`、资源加载、SFX 一次性播放、音乐循环、开关和 PlayerPrefs 持久化。
+- 音乐关闭期间仍记录菜单/战斗目标曲目；重新打开音乐时立即从当前逻辑曲目的开头播放，不再等待下一次 `PlayMusic` 请求。
 - 菜单/战斗曲目切换、角落音乐/SFX 按钮状态、队伍选择语音，以及多数武器、碰撞、落水、宝箱和环境事件的调用入口。
 - `MutinyFrontendController` 是曲目状态的唯一生产入口：主界面请求 `menu_music`，实际进入关卡后请求 `game_music`；后台初始化的回合管理器不再覆盖主界面曲目。
 - 37 个 SFX 与 2 首音乐的 Unity 资源导入。
 - 单人模式开场两句与胜方结算台词在气泡创建时各播放一次所属队伍类型语音；平局不播结算替代音。
+- 用户授权的滚石撞击反馈：Boulder 每次新撞上角色时播放一次原版导出的 `smack`，持续接触不连播，并遵守 SFX 开关。原版没有已证实的 Boulder→`smack` 调用，因此该项不计入原版一致性。
 
 ### 实际测试通过
 
@@ -47,7 +49,6 @@
 
 - `PlaySFX("cannon explosion")` 无法命中 Unity 资源 `cannon_explosion.wav`，开炮声当前静默。
 - `MutinyExplosion` 默认在动画第 3 帧播放 `pop`，造成若干重复、误触发或晚两帧的问题。
-- 音乐关闭期间的 `PlayMusic` 不记录目标曲目，重新开启可能恢复上一场景曲目。
 - Unity 武器发射流程额外播放 `click`；原版 `click` 的唯一 AS2 调用点是宝箱打开。
 - 原版 12 个 SFX 使用时间轴左右声道音量包络，Unity 当前以统一 `SfxVolume` 播放，未复刻单音效增益/声道差异。
 - 原版启动时间轴（MTV Arcade/Nitrome 前导动画）的 `ching`、`pop`、`nitrome_sound` 尚未接入 Unity 前端流程。
