@@ -118,6 +118,9 @@ namespace Mutiny.Simulation
                         m_Contents.RemoveAt(0);
                         m_ReleasedWeapon = releasedWeapon;
                         m_CharacterTouched.AddWeapon(releasedWeapon);
+                        // TreasureChest.advance queues the "collected" line on
+                        // the same tick it grants the weapon and plays its sound.
+                        m_Manager?.GetComponent<MutinyIngameTextArea>()?.SayCollected(releasedWeapon);
                         MutinyDebugLog.Info("Chest",
                             $"collected weapon={releasedWeapon} character={m_CharacterTouched.name} remaining={m_Contents.Count}", this);
                         PlaySequence(VisualSequence.WeaponOut);
