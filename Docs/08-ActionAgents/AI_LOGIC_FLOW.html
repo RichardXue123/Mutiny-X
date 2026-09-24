@@ -339,7 +339,7 @@
     <p class="eyebrow">Mutiny Flash → Unity</p>
     <h1>AI 完整逻辑流程</h1>
     <p class="lede">从回合门、角色移动、空投价值、15 种武器候选，到镜头等待与正式执行。本页同时标明原版规则、Unity 当前入口和仍需运行验证的边界。</p>
-    <div class="stamp">实现基线 2026-09-24 · 原版 AS2 静态证据已核对</div>
+    <div class="stamp">实现基线 2026-09-25 · 原版 AS2 静态证据已核对</div>
   </header>
 
   <div class="stats" aria-label="实现摘要">
@@ -369,12 +369,12 @@
         <h2>一回合总流程</h2>
         <p class="muted">AI 不是先写死“移动”或“开火”。它先制造候选，再让所有候选在同一个分数池里竞争。</p>
         <div class="flow">
-          <article class="flow-card"><b>进入 AI 回合</b><p>等待游戏、回合和行动执行门允许；标记正在评估候选。</p></article>
+          <article class="flow-card"><b>进入 AI 回合</b><p>等待游戏、回合和行动执行门允许；建立独立随机流与决策记录。</p></article>
           <article class="flow-card"><b>冻结自动运镜</b><p>思考期间不跟随下降宝箱，也不推进回合开始时预设的角色目标。</p></article>
           <article class="flow-card branch"><b>识别行动阶段</b><p>首次行动：全队竞选。移动后续：只看已选角色的武器。</p></article>
           <article class="flow-card"><b>遍历存活角色</b><p>首次行动中，每个有资格的角色都能贡献候选。</p></article>
-          <article class="flow-card"><b>生成移动候选</b><p>每个可移动角色固定生成 50 次 Throw Self 模拟。</p></article>
-          <article class="flow-card"><b>生成武器候选</b><p>按库存去重；普通武器随机弹道，复杂武器走专用模拟。</p></article>
+          <article class="flow-card"><b>先生成移动候选</b><p>每个可移动角色先生成 50 次 Throw Self 弹道，再逐条评分。</p></article>
+          <article class="flow-card"><b>再生成武器候选</b><p>按库存去重、逐件评价；普通武器读取正式初始化的物理状态。</p></article>
           <article class="flow-card branch"><b>严格选最高分</b><p>只在新分数严格更高时替换；同分保留先出现候选。</p></article>
           <article class="flow-card"><b>应用放弃规则</b><p>首次行动不能放弃；移动后的第二阶段只执行正分武器。</p></article>
           <article class="flow-card"><b>选中胜出角色</b><p>候选携带角色、武器、速度、目标或专用参数。</p></article>
@@ -508,8 +508,8 @@ force = random[5, twangMaxForce)</span>
       <section id="timing">
         <h2>执行、行动消耗与镜头</h2>
         <div class="timeline">
-          <div class="event"><b>思考开始</b><p><code>IsEvaluatingCandidates=true</code>；镜头仍允许 speech/popup，但跳过下降宝箱与后续自动跟随。</p></div>
-          <div class="event"><b>候选求值完成</b><p>输出决策日志：决策序号、阶段、候选数、胜出角色、武器、分数、速度和目标。</p></div>
+          <div class="event"><b>思考开始</b><p><code>IsEvaluatingCandidates=true</code>；约 30 ms 的重复工作预算，超预算在下一帧续算；镜头仍允许 speech/popup。</p></div>
+          <div class="event"><b>候选求值完成</b><p>输出决策日志并保存 JSON：种子、全部随机抽样、候选参数及最终胜出结果。</p></div>
           <div class="event"><b>镜头到胜出角色</b><p>调用生产镜头入口并等待 <code>IsPanningToTurnTarget=false</code>，不再固定等 0.35 秒。</p></div>
           <div class="event"><b>Throw Self</b><p>写入正式角色速度，只消耗 <code>CanThrow</code>；落稳后保留 <code>CanShoot</code>，进入第二阶段。</p></div>
           <div class="event"><b>使用武器</b><p>创建或启动正式武器，消耗移动与射击资格；回合管理器等待正式武器/连续放置序列完成。</p></div>
@@ -537,27 +537,30 @@ force = random[5, twangMaxForce)</span>
               <li>Parachute Bomb 候选恢复速度修正和顶部边界。</li>
               <li>Seagull 己方公式恢复为 <code>-(1.5-distance/40)</code>。</li>
               <li>胜出角色镜头完成门、AI 思考期宝箱镜头门已恢复。</li>
+              <li>按角色顺序先移动后武器、约 30 ms 分帧推进；随机抽样与候选可保存并重放。</li>
+              <li>普通武器预测从正式武器读取物理模板，Parachute 空气修正由预测和正式执行共用。</li>
             </ul>
           </article>
           <article class="card">
-            <h3>仍存在的已知差异</h3>
+            <h3>仍需运行核对的边界</h3>
             <ul>
-              <li>原版每帧最多约 30 ms 分片思考；Unity 仍同步一次性求值。</li>
-              <li><code>UnityEngine.Random</code> 尚未封装为可注入、可完整重放的样本序列。</li>
-              <li>候选使用轻量 <code>PhysicsBodyState</code>，不是逐个实例化正式武器对象。</li>
+              <li>单次 50 条弹道生成或一件复杂武器求值仍可能超过 30 ms；原版的单次 <code>aiThink()</code> 也不被中途抢占。</li>
+              <li>JSON 能重放相同 Unity 棋盘的随机调用和候选；原版 Flash 的 <code>Math.random()</code> 内部状态尚无证据可还原。</li>
+              <li>候选读取正式武器物理参数，并与正式对象共用物理步进及 Parachute 空气修正；各武器完整生命周期仍待逐项实测。</li>
               <li>本轮新增回归尚未在 Unity Play Mode 实际执行。</li>
             </ul>
           </article>
         </div>
+        <p class="muted">重放：从 <code>AI-Decision trace=</code> 日志复制 JSON 路径，填入 AI 控制器的 <code>ReplayDecisionTracePath</code>；该路径供下一次同队同阶段决策使用一次。固定实验可设置 <code>UseFixedDecisionSeed</code> 与 <code>FixedDecisionSeed</code>。</p>
       </section>
 
       <section id="verification">
         <h2>验证状态</h2>
         <div class="status-list">
           <div class="status-item ok"><b>静态确认</b><span>Team、Character、Weapon、各专用武器和 TileSystem 的 AS2 证据已核对。</span></div>
-          <div class="status-item ok"><b>已实现</b><span>15/15 候选入口、两阶段选择、箱体预测、专用公式、镜头门和决策日志。</span></div>
+          <div class="status-item ok"><b>已实现</b><span>15/15 候选入口、30 ms 可恢复步骤、完整抽样重放、正式武器物理模板、镜头门。</span></div>
           <div class="status-item ok"><b>编译验证</b><span><code>Assembly-CSharp</code> 与 <code>Assembly-CSharp-Editor</code>：0 error。</span></div>
-          <div class="status-item wait"><b>待运行验证</b><span>新增 AI 物理、Seagull、Anchor、Crate、镜头以及 15 武器真实整回合 Play Mode。</span></div>
+          <div class="status-item wait"><b>待运行验证</b><span>分帧、随机重放、正式/预测轨迹，以及 15 武器真实整回合 Play Mode。</span></div>
         </div>
         <p class="muted">编译通过只证明程序集可构建，不等于 Play Mode 行为通过。详细规则与验收矩阵见 <a href="AI_IMPLEMENTATION_STATUS.md">AI_IMPLEMENTATION_STATUS.md</a>。</p>
       </section>

@@ -48,7 +48,6 @@
 | AUD-SFX-022 宝箱收集 | `MutinyTreasureChest` | 每件实际入库存武器一次 | 已实现；待多物品宝箱计数验证 |
 | AUD-SFX-023 玩家巫毒改目标 | `MutinyPlayerInput.TrySelectVoodooTarget` | 改为不同目标时一次；重复同目标不播 | 已实现；现有入口测试覆盖，待完整输入运行 |
 | AUD-SFX-024 AI 巫毒执行 | `MutinyVoodooDoll` | 写入 AI 方案后一次 | 已实现；待运行验证 |
-| AUD-EXT-BLD-001 滚石直接撞击反馈 | `MutinyBoulder.ApplyCharacterContacts` | 玩家生产入口抛出巨石；有横向速度的新接触播放一次原版导出 `smack`，持续或静止接触不连播，分离重入可重播；SFX 关闭静默 | 用户授权扩展；原版没有已证实的 Boulder→`smack` 调用；已实现并新增生产入口回归，待 Unity 运行听音 |
 
 ## UI、时间轴与非原版扩展
 

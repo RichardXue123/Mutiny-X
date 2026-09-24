@@ -11,6 +11,7 @@ namespace Mutiny.Simulation
         private const int OriginalFrameCount = 12;
         private readonly List<Sprite> m_Frames = new List<Sprite>(OriginalFrameCount);
         private int m_CurrentFrame;
+        private float m_MotionStartX;
 
         protected override void Awake()
         {
@@ -53,8 +54,16 @@ namespace Mutiny.Simulation
             // RumBottle.as constructor: hitsBoxes = true.
             PhysicsBody.State.HitsBoxes = true;
             m_CurrentFrame = 0;
+            m_MotionStartX = PhysicsBody.State.X;
+            PhysicsBody.OnBeforeSimulationStep -= CaptureMotionStartX;
+            PhysicsBody.OnBeforeSimulationStep += CaptureMotionStartX;
             PhysicsBody.OnSimulationStep -= AdvanceOriginalPresentationTick;
             PhysicsBody.OnSimulationStep += AdvanceOriginalPresentationTick;
+        }
+
+        private void CaptureMotionStartX()
+        {
+            m_MotionStartX = PhysicsBody.State.X;
         }
 
         protected override void Update()
@@ -82,7 +91,11 @@ namespace Mutiny.Simulation
             if (IsFinished)
                 return;
 
-            Vector2 posPx = new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y);
+            // Solid.advanceMotion calls contact during the vertical collision
+            // branch, before it moves X. Unity publishes collision events after
+            // both axes, so restore that contact-time X for floor/ceiling hits.
+            float impactX = side == CollisionSide.Wall ? PhysicsBody.State.X : m_MotionStartX;
+            Vector2 posPx = new Vector2(impactX, PhysicsBody.State.Y);
             bool createFlames = side == CollisionSide.Floor;
             string[,] terrain = null;
             int terrainWidth = 0;
@@ -138,16 +151,6 @@ namespace Mutiny.Simulation
                 MutinyRumBottleSmokeTrail.Spawn(new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y));
         }
 
-        public override void Twang(Vector2 startPx, Vector2 dragPx)
-        {
-            // RumBottle raises its drag gauge to 30, but Weapon.release clamps the
-            // committed velocity to the common 20 px/tick limit.
-            Vector2 launchVelocity = MutinyPhysics.CalculateTwangVelocity(startPx, dragPx, TwangMaxForce);
-            if (launchVelocity.sqrMagnitude > MutinyPhysics.DefaultTwangMaxForce * MutinyPhysics.DefaultTwangMaxForce)
-                launchVelocity = launchVelocity.normalized * MutinyPhysics.DefaultTwangMaxForce;
-            Fire(launchVelocity);
-        }
-
         private static Vector2 FindOriginalFlameOrigin(
             Vector2 impact, string[,] terrain, int width, int height)
         {
@@ -163,7 +166,10 @@ namespace Mutiny.Simulation
         private void OnDestroy()
         {
             if (PhysicsBody != null)
+            {
+                PhysicsBody.OnBeforeSimulationStep -= CaptureMotionStartX;
                 PhysicsBody.OnSimulationStep -= AdvanceOriginalPresentationTick;
+            }
         }
     }
 }

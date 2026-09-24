@@ -38,6 +38,10 @@
 
 ## AI 原版预测与镜头回归
 
+- `AI-SLICE-01`：通过生产可恢复决策迭代器，在同一固定种子棋盘上与同步入口比较胜出行动、分数和速度；断言移动评价至少跨越 51 个可恢复步骤。真实 30 ms 帧预算仍需 Unity Play Mode 计时。
+- `AI-RNG-01`：记录一次生产决策的全部随机抽样和候选，用该记录逐项重放；篡改一个抽样边界必须显式失败。JSON 路径、跨进程加载和复杂关卡还需运行验收。
+- `AI-PHY-03`：候选从正式 Mine 初始化结果读取重量、弹性、摩擦、边界和箱体属性，确认候选没有消耗库存/射击资格/生命；与正式 Mine 以同一初态推进 3 tick 比较位置与速度。Parachute Bomb 的空气修正和顶部边界由正式/预测共用纯函数，再比较 3 tick 轨迹。
+
 - `AI-PHY-01`：通过生产 `SimulateWeaponImpact` 验证 Rum Bottle 首次接触即结束，Boulder/普通 Weapon 在无专用完成条件时执行原版 101 个预测 tick，且普通武器不会因仅仅越过水线提前结束模拟。
 - `AI-PHY-02`：长距离角色预测必须超过旧 70 tick 并持续到水线；注册共享箱体后，`hitsBoxes=true` 的 Cherry Bomb 候选必须在箱体处完成模拟。
 - `AI-WPN-06`：生产 Seagull 距离公式在 20 px 时分别得到敌方 `+0.5`、己方 `-1.0`，40 px 边界为 0。
@@ -50,10 +54,23 @@
 - `BAN-TRAJ-01`：以同一初速分别驱动生产预览 `PredictVelocityTick()` 和实际 `MutinyPhysicsBody.AdvanceSimulationTick()`，连续比较前 5 个无碰撞 tick 的坐标完全一致。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；待 Unity Play Mode 实际执行，不能登记为通过。
 
+## 武器共享初速限速回归
+
+- `WPN-VEL-01`：经生产 `MutinyCherryBomb.Twang()` 满拉力提交，断言普通拉拽仍限制为 20；核对工厂预览上限中 Banana、Parachute Bomb、Rum Bottle 各为 30，Voodoo Doll 为 20。三种 30 武器的实际发射另由 `BAN-PHY-01`、`WPN-08-INT-01`、`RUM-PHY-01` 覆盖。
+- `WPN-VEL-02`：经生产 `MutinyWeapon.Fire()` 分别给普通 Cherry Bomb 和 30 力 Banana 直接传入模长 45 的速度，断言各轴原样保留；确认原版 `Weapon.fire` 未调用 `Weapon.release` 或 `Solid.twang` 的截断。
+- 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；待 Unity Play Mode 实际执行，不能登记为通过。
+
+## Rum Bottle 弹道与爆炸位置回归
+
+- `RUM-PHY-01/RUM-TRAJ-01`：调用生产 `MutinyRumBottle.Twang()` 提交 400 px 满拉力，验证初速 30；随后驱动生产物理 tick，将无碰撞的前 5 个位置逐一与生产预览速度计算比较。
+- `RUM-HIT-02`：让燃烧瓶斜向落地，并在同一个物理 tick 保持横向位移；断言瓶体继续横移，但生产爆炸与两条初始火焰使用纵向碰撞时的横移前坐标。
+- 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；待 Unity Play Mode 实际执行，不能登记为通过。
+
 ## Seagull 飞行与投弹时序回归
 
 - `SEA-END-02`：在长地图上通过生产 `MutinyTurnManager.AdvanceSimulationTick()` 连续等待超过 150 tick，断言仍在正常飞行的海鸥不会被卡死武器看门狗强制完成或销毁。
 - `SEA-SHOT-02`：点击只登记一次投弹请求；驱动一次生产 `MutinyPhysicsBody.AdvanceSimulationTick()` 后，断言海鸥先前进 10 px，炸弹从移动后位置的 `x-10` 创建，并在同一 tick 前进 10 px、下落 1 px。子弹物理体保持非自治更新，防止同帧双步。
+- `SEA-VIS-01`：通过同一生产投弹入口生成炸弹后，断言其 SpriteRenderer 与海鸥处于相同 Sorting Layer，但 order 更低；覆盖原先 `WeaponSortingOrder + 1` 导致炸弹盖住海鸥的回归。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；待 Unity Play Mode 实际执行，不能登记为通过。
 
 ## Voodoo Doll 运镜回归

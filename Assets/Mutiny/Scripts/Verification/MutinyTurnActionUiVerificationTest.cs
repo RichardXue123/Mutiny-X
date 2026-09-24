@@ -63,6 +63,7 @@ namespace Mutiny.Verification
             VerifyGameEndPopup(result);
             VerifyWeaponReadyAndCancel(result);
             VerifyProductionActionMethods(result);
+            VerifyWeaponVelocityLimits(result);
             VerifyOriginalSplashTimeline(result);
             VerifyCherryBombWaterSplash(result);
             VerifyAiDecisionFlow(result);
@@ -101,6 +102,49 @@ namespace Mutiny.Verification
             var result = new MutinyLevel1VerificationResult();
             VerifyWeaponIdleAnimations(result);
             return result;
+        }
+
+        private static void VerifyWeaponVelocityLimits(MutinyLevel1VerificationResult result)
+        {
+            GameObject ordinaryTwangObject = null;
+            GameObject directFireObject = null;
+            GameObject specialDirectFireObject = null;
+            try
+            {
+                ordinaryTwangObject = new GameObject("WeaponVelocityVerification_OrdinaryTwang");
+                MutinyCherryBomb ordinaryTwang = ordinaryTwangObject.AddComponent<MutinyCherryBomb>();
+                ordinaryTwang.Initialize(null);
+                ordinaryTwang.Twang(Vector2.zero, new Vector2(-200f, 0f));
+
+                directFireObject = new GameObject("WeaponVelocityVerification_DirectFire");
+                MutinyCherryBomb directFire = directFireObject.AddComponent<MutinyCherryBomb>();
+                directFire.Initialize(null);
+                directFire.Fire(new Vector2(27f, -36f));
+
+                specialDirectFireObject = new GameObject("WeaponVelocityVerification_SpecialDirectFire");
+                MutinyBanana specialDirectFire = specialDirectFireObject.AddComponent<MutinyBanana>();
+                specialDirectFire.Initialize(null);
+                specialDirectFire.Fire(new Vector2(36f, -27f));
+
+                result.Assert(Mathf.Approximately(ordinaryTwang.PhysicsBody.State.VelocityX, 20f) &&
+                              Mathf.Approximately(ordinaryTwang.PhysicsBody.State.VelocityY, 0f) &&
+                              Mathf.Approximately(MutinyWeaponFactory.GetTwangMaxForce("banana"), 30f) &&
+                              Mathf.Approximately(MutinyWeaponFactory.GetTwangMaxForce("parachuteBomb"), 30f) &&
+                              Mathf.Approximately(MutinyWeaponFactory.GetTwangMaxForce("rumBottle"), 30f) &&
+                              Mathf.Approximately(MutinyWeaponFactory.GetTwangMaxForce("voodooDoll"), 20f),
+                    "WPN-VEL-01 production twang limits ordinary weapons to 20 and preserves the three original 30-force exceptions");
+                result.Assert(Mathf.Approximately(directFire.PhysicsBody.State.VelocityX, 27f) &&
+                              Mathf.Approximately(directFire.PhysicsBody.State.VelocityY, -36f) &&
+                              Mathf.Approximately(specialDirectFire.PhysicsBody.State.VelocityX, 36f) &&
+                              Mathf.Approximately(specialDirectFire.PhysicsBody.State.VelocityY, -27f),
+                    "WPN-VEL-02 production Weapon.fire preserves supplied velocities above the twang limit");
+            }
+            finally
+            {
+                DestroyNow(specialDirectFireObject);
+                DestroyNow(directFireObject);
+                DestroyNow(ordinaryTwangObject);
+            }
         }
 
         private static void VerifyWeaponIdleAnimations(MutinyLevel1VerificationResult result)
@@ -931,18 +975,8 @@ namespace Mutiny.Verification
             GameObject edgeTargetObject = null;
             GameObject outsideTargetObject = null;
             GameObject inputObject = null;
-            MutinyAudioManager audio = MutinyAudioManager.Instance;
-            bool previousSfxEnabled = audio != null && audio.SfxEnabled;
-            var playedSounds = new List<string>();
-            System.Action<string> recordSfx = soundName => playedSounds.Add(soundName);
             try
             {
-                if (audio != null)
-                {
-                    audio.SfxEnabled = true;
-                    audio.SfxPlayed += recordSfx;
-                }
-
                 teamObject = new GameObject("BoulderVerification_Team");
                 MutinyTeam team = teamObject.AddComponent<MutinyTeam>();
                 team.TeamNumber = 1;
@@ -1048,45 +1082,6 @@ namespace Mutiny.Verification
                               Mathf.Approximately(boulderRotation, -25f),
                     "WPN-04-EFF-01/02 production Boulder advances Solid before inclusive 32px contacts, then applies directional shove, abs(vx)*1.5 damage, and vx*2.5 only to its rotating child layer");
 
-                int firstImpactSounds = playedSounds.FindAll(sound => sound == "smack").Count;
-                PhysicsBodyState outsideState = outsideTarget.PhysicsBody.State;
-                outsideState.X = 500f;
-                outsideTarget.PhysicsBody.State = outsideState;
-                boulder.AdvanceOriginalTickForVerification();
-                int continuousImpactSounds = playedSounds.FindAll(sound => sound == "smack").Count;
-
-                PhysicsBodyState rightState = rightTarget.PhysicsBody.State;
-                PhysicsBodyState leftState = leftTarget.PhysicsBody.State;
-                PhysicsBodyState edgeState = edgeTarget.PhysicsBody.State;
-                rightState.X = 500f;
-                leftState.X = 500f;
-                edgeState.X = 500f;
-                rightTarget.PhysicsBody.State = rightState;
-                leftTarget.PhysicsBody.State = leftState;
-                edgeTarget.PhysicsBody.State = edgeState;
-                boulder.AdvanceOriginalTickForVerification();
-
-                rightState = rightTarget.PhysicsBody.State;
-                rightState.X = boulder.PhysicsBody.State.X + boulder.PhysicsBody.State.VelocityX + 10f;
-                rightTarget.PhysicsBody.State = rightState;
-                boulder.AdvanceOriginalTickForVerification();
-                int reentryImpactSounds = playedSounds.FindAll(sound => sound == "smack").Count;
-
-                rightState = rightTarget.PhysicsBody.State;
-                rightState.X = 500f;
-                rightTarget.PhysicsBody.State = rightState;
-                boulder.AdvanceOriginalTickForVerification();
-                audio.SfxEnabled = false;
-                rightState = rightTarget.PhysicsBody.State;
-                rightState.X = boulder.PhysicsBody.State.X + boulder.PhysicsBody.State.VelocityX + 10f;
-                rightTarget.PhysicsBody.State = rightState;
-                boulder.AdvanceOriginalTickForVerification();
-                int mutedImpactSounds = playedSounds.FindAll(sound => sound == "smack").Count;
-                audio.SfxEnabled = true;
-                result.Assert(firstImpactSounds == 1 && continuousImpactSounds == 1 &&
-                              reentryImpactSounds == 2 && mutedImpactSounds == 2,
-                    "BLD-AUD-EXT-01 production Boulder emits one exported smack on contact entry, suppresses continuous overlap, replays after separation, and respects the SFX switch");
-
                 boulderState = boulder.PhysicsBody.State;
                 boulderState.X = 100f;
                 boulderState.Y = 19f;
@@ -1129,11 +1124,6 @@ namespace Mutiny.Verification
             }
             finally
             {
-                if (audio != null)
-                {
-                    audio.SfxPlayed -= recordSfx;
-                    audio.SfxEnabled = previousSfxEnabled;
-                }
                 DestroyNow(inputObject);
                 DestroyNow(outsideTargetObject);
                 DestroyNow(edgeTargetObject);
@@ -1472,6 +1462,9 @@ namespace Mutiny.Verification
                 aiTeam.TeamNumber = 2;
                 aiTeam.IsAiControlled = true;
                 MutinyAIController ai = aiTeamObject.AddComponent<MutinyAIController>();
+                ai.UseFixedDecisionSeed = true;
+                ai.FixedDecisionSeed = 24680;
+                ai.SaveDecisionTrace = false;
 
                 enemyTeamObject = new GameObject("AiParityVerification_EnemyTeam");
                 MutinyTeam enemyTeam = enemyTeamObject.AddComponent<MutinyTeam>();
@@ -1504,6 +1497,47 @@ namespace Mutiny.Verification
                 result.Assert(firstAction.MoveType == AIMoveType.SelfThrow &&
                               firstAction.Character == pirate && firstAction.Score <= 0f,
                     "AI-SEL-02 production evaluator keeps and selects a non-positive first-phase jump candidate");
+
+                MutinyAIDecisionTrace recorded = ai.LastDecisionTrace;
+                AIMove steppedAction = default;
+                int decisionSteps = 0;
+                var decisionIterator = ai.EvaluateBestMoveStepsForVerification(move => steppedAction = move);
+                while (decisionIterator.MoveNext())
+                    decisionSteps++;
+                result.Assert(decisionSteps >= 51 && recorded != null &&
+                              recorded.Candidates.Count == 50 &&
+                              steppedAction.MoveType == firstAction.MoveType &&
+                              Mathf.Approximately(steppedAction.Score, firstAction.Score) &&
+                              Vector2.Distance(steppedAction.LaunchVelocity, firstAction.LaunchVelocity) < 0.001f,
+                    "AI-SLICE-01 production decision iterator preserves the fixed-seed result across more than 50 resumable steps");
+                result.Assert(!MutinyAIController.ShouldYieldDecisionFrame(false, 29) &&
+                              MutinyAIController.ShouldYieldDecisionFrame(false, 30) &&
+                              MutinyAIController.ShouldYieldDecisionFrame(true, 0),
+                    "AI-SLICE-01 production frame gate uses the original 30 ms threshold and a character boundary");
+
+                ai.SetReplayTraceForVerification(recorded);
+                AIMove replayedAction = ai.EvaluateBestMove();
+                result.Assert(replayedAction.MoveType == firstAction.MoveType &&
+                              Mathf.Approximately(replayedAction.Score, firstAction.Score) &&
+                              Vector2.Distance(replayedAction.LaunchVelocity, firstAction.LaunchVelocity) < 0.001f &&
+                              ai.LastDecisionTrace.Draws.Count == recorded.Draws.Count,
+                    "AI-RNG-01 production decision replays every recorded draw and candidate on the same board");
+
+                MutinyAIDecisionTrace altered = JsonUtility.FromJson<MutinyAIDecisionTrace>(
+                    JsonUtility.ToJson(recorded));
+                altered.Draws[0].Maximum += 1f;
+                bool rejectedAlteredTrace = false;
+                try
+                {
+                    ai.SetReplayTraceForVerification(altered);
+                    ai.EvaluateBestMove();
+                }
+                catch (System.IO.InvalidDataException)
+                {
+                    rejectedAlteredTrace = true;
+                }
+                result.Assert(rejectedAlteredTrace,
+                    "AI-RNG-01 replay rejects a draw whose recorded bound differs from the production call");
 
                 pirate.CanThrow = false;
                 pirate.CanShoot = true;
@@ -1681,6 +1715,9 @@ namespace Mutiny.Verification
             GameObject obstacleObject = null;
             GameObject cameraObject = null;
             GameObject cameraCharacterObject = null;
+            GameObject formalOwnerObject = null;
+            MutinyWeapon formalMine = null;
+            MutinyParachuteBomb formalParachute = null;
             try
             {
                 string[,] terrain = new string[10, 12];
@@ -1728,6 +1765,62 @@ namespace Mutiny.Verification
                 result.Assert(boxSteps < 101 && boxImpact.x < obstacleState.X - obstacleState.LeftExtent,
                     "AI-PHY-02 hitsBoxes weapon prediction collides with the shared production box registry");
 
+                MutinyBoxRegistry.ResetForLevel();
+                formalOwnerObject = new GameObject("AiPredictionParity_FormalOwner");
+                MutinyCharacter formalOwner = formalOwnerObject.AddComponent<MutinyCharacter>();
+                PhysicsBodyState ownerState = PhysicsBodyState.CreateDefault(80f, 0f);
+                formalOwner.PhysicsBody.State = ownerState;
+                formalOwner.PhysicsBody.SetTerrain(null, 0, 0);
+                formalOwner.AddWeapon("mine");
+                formalOwner.CanShoot = true;
+                float healthBeforePrediction = formalOwner.Health;
+                formalMine = MutinyWeaponFactory.SpawnWeapon("mine", formalOwner);
+                formalMine.PhysicsBody.SetTerrain(null, 0, 0);
+                PhysicsBodyState template = MutinyAIController.CreateFormalWeaponPredictionTemplateForVerification(
+                    formalOwner, "mine");
+                PhysicsBodyState actualTemplate = formalMine.PhysicsBody.State;
+                bool sameInitialPhysics = template.Weight == actualTemplate.Weight &&
+                                          template.Bounce == actualTemplate.Bounce &&
+                                          template.Friction == actualTemplate.Friction &&
+                                          template.LeftExtent == actualTemplate.LeftExtent &&
+                                          template.BottomExtent == actualTemplate.BottomExtent &&
+                                          template.HitsBoxes == actualTemplate.HitsBoxes &&
+                                          formalOwner.HasWeapon("mine") && formalOwner.CanShoot &&
+                                          Mathf.Approximately(formalOwner.Health, healthBeforePrediction);
+                formalMine.Fire(new Vector2(10f, -5f));
+                PhysicsBodyState predictedMine = formalMine.PhysicsBody.State;
+                for (int tick = 0; tick < 3; tick++)
+                {
+                    MutinyPhysics.Step(ref predictedMine, null, 0, 0, null);
+                    formalMine.PhysicsBody.AdvanceSimulationTick();
+                }
+                PhysicsBodyState actualMine = formalMine.PhysicsBody.State;
+                result.Assert(sameInitialPhysics &&
+                              Mathf.Abs(predictedMine.X - actualMine.X) < 0.001f &&
+                              Mathf.Abs(predictedMine.Y - actualMine.Y) < 0.001f &&
+                              Mathf.Abs(predictedMine.VelocityX - actualMine.VelocityX) < 0.001f &&
+                              Mathf.Abs(predictedMine.VelocityY - actualMine.VelocityY) < 0.001f,
+                    "AI-PHY-03 candidate template uses formal Mine initialization and matches three actual weapon ticks without collision");
+
+                formalParachute = MutinyWeaponFactory.SpawnWeapon("parachuteBomb", formalOwner)
+                    as MutinyParachuteBomb;
+                formalParachute.PhysicsBody.SetTerrain(null, 0, 0);
+                formalParachute.Fire(new Vector2(10f, -5f));
+                PhysicsBodyState predictedParachute = formalParachute.PhysicsBody.State;
+                for (int tick = 0; tick < 3; tick++)
+                {
+                    MutinyParachuteBomb.ApplyOriginalAirMotion(ref predictedParachute);
+                    MutinyPhysics.Step(ref predictedParachute, null, 0, 0, null);
+                    MutinyParachuteBomb.ApplyOriginalCeilingClamp(ref predictedParachute);
+                    formalParachute.AdvanceOriginalTickForVerification(false, 0f);
+                }
+                PhysicsBodyState actualParachute = formalParachute.PhysicsBody.State;
+                result.Assert(Mathf.Abs(predictedParachute.X - actualParachute.X) < 0.001f &&
+                              Mathf.Abs(predictedParachute.Y - actualParachute.Y) < 0.001f &&
+                              Mathf.Abs(predictedParachute.VelocityX - actualParachute.VelocityX) < 0.001f &&
+                              Mathf.Abs(predictedParachute.VelocityY - actualParachute.VelocityY) < 0.001f,
+                    "AI-PHY-03 Parachute prediction air motion and ceiling clamp match three production weapon ticks");
+
                 result.Assert(
                     Mathf.Approximately(MutinyAIController.ScoreSeagullDistanceForVerification(20f, false), 0.5f) &&
                     Mathf.Approximately(MutinyAIController.ScoreSeagullDistanceForVerification(20f, true), -1f) &&
@@ -1754,6 +1847,9 @@ namespace Mutiny.Verification
                 DestroyNow(cameraCharacterObject);
                 DestroyNow(cameraObject);
                 DestroyNow(obstacleObject);
+                DestroyNow(formalMine != null ? formalMine.gameObject : null);
+                DestroyNow(formalParachute != null ? formalParachute.gameObject : null);
+                DestroyNow(formalOwnerObject);
             }
         }
 
@@ -3567,6 +3663,7 @@ namespace Mutiny.Verification
         {
             GameObject twangObject = null;
             GameObject bottleObject = null;
+            GameObject obliqueBottleObject = null;
             GameObject targetObject = null;
             try
             {
@@ -3582,15 +3679,38 @@ namespace Mutiny.Verification
                 result.Assert(flameFramesPresent,
                     "WPN-10-ANI-02 all 11 original sweepingFlame timeline frames load through Resources");
 
-                // RumBottle uses the original 30-force drag gauge, then Weapon.release
-                // commits at the shared 20 px/tick cap.
+                // TileSystem.mouseUp calls twanging.twang, so the preview and
+                // committed RumBottle flight both use its own 30-force limit.
                 twangObject = new GameObject("RumBottleVerification_Twang");
                 MutinyRumBottle twangBottle = twangObject.AddComponent<MutinyRumBottle>();
                 twangBottle.Initialize(null);
-                twangBottle.Twang(Vector2.zero, new Vector2(-400f, 0f));
-                result.Assert(Mathf.Approximately(twangBottle.PhysicsBody.State.VelocityX, 20f) &&
+                twangBottle.PhysicsBody.SetTerrain(new string[32, 32], 32, 32);
+                PhysicsBodyState twangState = twangBottle.PhysicsBody.State;
+                twangState.X = 320f;
+                twangState.Y = 192f;
+                twangBottle.PhysicsBody.State = twangState;
+                Vector2 trajectoryStart = new Vector2(320f, 192f);
+                Vector2 trajectoryDrag = new Vector2(-80f, 192f);
+                twangBottle.Twang(trajectoryStart, trajectoryDrag);
+                result.Assert(Mathf.Approximately(twangBottle.PhysicsBody.State.VelocityX, 30f) &&
                               Mathf.Approximately(twangBottle.PhysicsBody.State.VelocityY, 0f),
-                    "WPN-10-EFF-01 production RumBottle release clamps its 30-force drag to 20 px/tick");
+                    "RUM-PHY-01 production RumBottle twang commits the original 30px/tick full pull");
+
+                Vector2 expectedPosition = trajectoryStart;
+                Vector2 expectedVelocity = MutinyPhysics.CalculateTwangVelocity(
+                    trajectoryStart, trajectoryDrag, MutinyWeaponFactory.GetTwangMaxForce("rumBottle"));
+                bool trajectoryMatches = true;
+                for (int tick = 0; tick < 5; tick++)
+                {
+                    expectedVelocity = MutinyTrajectoryRenderer.PredictVelocityTick(
+                        "rumBottle", expectedVelocity, MutinyWeaponFactory.GetPredictionWeight("rumBottle"));
+                    expectedPosition += expectedVelocity;
+                    twangBottle.PhysicsBody.AdvanceSimulationTick();
+                    trajectoryMatches &= Mathf.Approximately(twangBottle.PhysicsBody.State.X, expectedPosition.x) &&
+                                         Mathf.Approximately(twangBottle.PhysicsBody.State.Y, expectedPosition.y);
+                }
+                result.Assert(trajectoryMatches,
+                    "RUM-TRAJ-01 production preview ticks match five collision-free RumBottle physics ticks");
 
                 // The production physics route must contact the floor, create its
                 // 80/25 explosion, and seed left/right flames from the exposed top of
@@ -3643,6 +3763,33 @@ namespace Mutiny.Verification
                               initialFlames[0].GetComponent<SpriteRenderer>().sprite == propagationFrame &&
                               initialFlames[1].GetComponent<SpriteRenderer>().sprite == propagationFrame,
                     "WPN-10-ANI-02 production flame plays original frame 4 while propagating 8px in both directions across exposed ground");
+
+                string[,] obliqueTerrain = new string[5, 16];
+                for (int column = 12; column <= 14; column++)
+                    obliqueTerrain[2, column] = "solid";
+                obliqueBottleObject = new GameObject("RumBottleVerification_ObliqueImpact");
+                MutinyRumBottle obliqueBottle = obliqueBottleObject.AddComponent<MutinyRumBottle>();
+                obliqueBottle.Initialize(null);
+                obliqueBottle.PhysicsBody.SetTerrain(obliqueTerrain, 16, 5);
+                PhysicsBodyState obliqueState = obliqueBottle.PhysicsBody.State;
+                obliqueState.X = 405f;
+                obliqueState.Y = 48f;
+                obliqueBottle.PhysicsBody.State = obliqueState;
+                obliqueBottle.Fire(new Vector2(20f, 2f));
+                obliqueBottle.PhysicsBody.AdvanceSimulationTick();
+                bool explosionAtVerticalContact = false;
+                MutinyExplosion[] obliqueExplosions = Object.FindObjectsByType<MutinyExplosion>();
+                for (int i = 0; i < obliqueExplosions.Length; i++)
+                    explosionAtVerticalContact |= Mathf.Approximately(obliqueExplosions[i].PixelX, 405f);
+                int flamesAtVerticalContact = 0;
+                MutinySweepingFlame[] obliqueFlames = Object.FindObjectsByType<MutinySweepingFlame>();
+                for (int i = 0; i < obliqueFlames.Length; i++)
+                    if (Mathf.Approximately(MutinyPhysics.UnityToPixel(obliqueFlames[i].transform.position).x, 384f))
+                        flamesAtVerticalContact++;
+                result.Assert(obliqueBottle.IsFinished &&
+                              Mathf.Approximately(obliqueBottle.PhysicsBody.State.X, 425f) &&
+                              explosionAtVerticalContact && flamesAtVerticalContact == 2,
+                    "RUM-HIT-02 production floor contact creates blast and twin flames at pre-horizontal X while the bottle completes its motion tick");
             }
             finally
             {
@@ -3655,6 +3802,7 @@ namespace Mutiny.Verification
                     DestroyNow(explosions[i].gameObject);
 
                 DestroyNow(bottleObject);
+                DestroyNow(obliqueBottleObject);
                 DestroyNow(targetObject);
                 DestroyNow(twangObject);
             }
@@ -3720,6 +3868,7 @@ namespace Mutiny.Verification
                 result.Assert(!seagull.IsFinished && !seagull.CanExpireFromTurnSafetyTimeout,
                     "SEA-END-02 production turn watchdog does not expire a normally flying Seagull after 150 ticks");
 
+                seagull.SpriteRenderer.sortingOrder = MutinyWeapon.WeaponSortingOrder + 5;
                 bool acceptedShot = MutinySeagull.TryRequestPlayerShot(team);
                 MutinySeagullFire[] shots = Object.FindObjectsByType<MutinySeagullFire>();
                 result.Assert(acceptedShot && shots.Length == 0 && seagull.ActiveShotCount == 0,
@@ -3736,6 +3885,19 @@ namespace Mutiny.Verification
                               shots[0].PhysicsBody.SimulationTickCount == 1 &&
                               !shots[0].PhysicsBody.IsActive,
                     "SEA-SHOT-02 production tick moves bird first, creates at x-10, then advances the parent-owned shot exactly once");
+
+                if (shots.Length > 0)
+                {
+                    SpriteRenderer shotRenderer = shots[0].GetComponent<SpriteRenderer>();
+                    result.Assert(shotRenderer != null &&
+                                  shotRenderer.sortingLayerID == seagull.SpriteRenderer.sortingLayerID &&
+                                  shotRenderer.sortingOrder < seagull.SpriteRenderer.sortingOrder,
+                        "SEA-VIS-01 production shot is rendered below its parent Seagull in the same sorting layer");
+                }
+                else
+                {
+                    result.Assert(false, "SEA-VIS-01 production shot exists for rendering-order verification");
+                }
 
                 firstShotObject = shots.Length > 0 ? shots[0].gameObject : null;
                 if (shots.Length > 0)

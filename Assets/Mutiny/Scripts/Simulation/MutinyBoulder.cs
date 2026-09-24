@@ -23,8 +23,6 @@ namespace Mutiny.Simulation
         // inherits Weapon.advance, so it uses this one-shot crossing check rather
         // than Character's continuous underwater movement.
         private bool m_OverWater = true;
-        private readonly HashSet<MutinyCharacter> m_PreviousCharacterContacts = new HashSet<MutinyCharacter>();
-        private readonly HashSet<MutinyCharacter> m_CurrentCharacterContacts = new HashSet<MutinyCharacter>();
         private SpriteRenderer m_RotatingRenderer;
         public float Visibility => m_Visibility;
         public bool IsOverWater => m_OverWater;
@@ -59,8 +57,6 @@ namespace Mutiny.Simulation
             PhysicsBody.OnSimulationStep += AdvanceOriginalTick;
             m_Visibility = 2f;
             m_OverWater = true;
-            m_PreviousCharacterContacts.Clear();
-            m_CurrentCharacterContacts.Clear();
             if (SpriteRenderer != null)
             {
                 SpriteRenderer.color = Color.white;
@@ -190,9 +186,6 @@ namespace Mutiny.Simulation
         private void ApplyCharacterContacts(PhysicsBodyState boulderState)
         {
             // Boulder.as iterates Controller.teams, not arbitrary scene objects.
-            m_CurrentCharacterContacts.Clear();
-            bool beganNewContact = false;
-            bool hasImpactVelocity = !Mathf.Approximately(boulderState.VelocityX, 0f);
             MutinyTeam[] teams = FindObjectsByType<MutinyTeam>();
             for (int teamIndex = 0; teamIndex < teams.Length; teamIndex++)
             {
@@ -212,13 +205,6 @@ namespace Mutiny.Simulation
                         Mathf.Abs(characterState.X - boulderState.X) > CharacterContactExtent)
                         continue;
 
-                    if (hasImpactVelocity)
-                    {
-                        m_CurrentCharacterContacts.Add(character);
-                        if (!m_PreviousCharacterContacts.Contains(character))
-                            beganNewContact = true;
-                    }
-
                     if (characterState.X > boulderState.X)
                     {
                         characterState.X = boulderState.X + CharacterContactExtent;
@@ -236,16 +222,6 @@ namespace Mutiny.Simulation
                     character.TakeDamage(Mathf.Abs(boulderState.VelocityX) * DamagePerVelocityX);
                 }
             }
-
-            // The original Boulder has no dedicated impact call. This explicit,
-            // user-authorized feedback reuses the original exported smack clip,
-            // once per contact episode rather than once per overlapping damage tick.
-            if (beganNewContact)
-                Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("smack");
-
-            m_PreviousCharacterContacts.Clear();
-            foreach (MutinyCharacter character in m_CurrentCharacterContacts)
-                m_PreviousCharacterContacts.Add(character);
         }
 
         private void ApplyWhiteOut(float visibility)

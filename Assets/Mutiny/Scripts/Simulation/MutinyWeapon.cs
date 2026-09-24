@@ -186,16 +186,9 @@ namespace Mutiny.Simulation
             m_LifetimeTimer = 0f;
             m_WaterTimer = 0f;
 
-            // Fire receives both direct/AI velocities and normal twang velocities.
-            // Clamp to this weapon's own force limit. Normal pointer release calls
-            // Solid/Weapon.twang in Flash and does not pass through Weapon.release's
-            // unrelated 20 px/tick draggable-object cap.
-            float sqrLen = velocityPx.sqrMagnitude;
-            if (sqrLen > TwangMaxForce * TwangMaxForce)
-            {
-                velocityPx = velocityPx.normalized * TwangMaxForce;
-            }
-
+            // Weapon.fire(vx, vy) assigns the supplied velocity without a cap.
+            // Only Solid.twang (below) clamps a pointer throw to twangMaxForce;
+            // Weapon.release's separate 20 px/tick rule is not this path.
             PhysicsBody.SetVelocity(velocityPx.x, velocityPx.y);
             MutinyDebugLog.Info("Weapon",
                 $"fired type={WeaponType} owner={(Owner == null ? "none" : Owner.name)} velocity={velocityPx}", this);

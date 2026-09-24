@@ -15,10 +15,17 @@
 - 首次点击选择飞行高度，从 x=-300 以 vx=10 向右飞。
 - 飞行中每次点击都可投一枚弹，原版没有固定弹数；弹从 `(bird.x-10,bird.y)` 生成。
 - 每个原版 tick 先移动海鸥，再消费投弹输入；新弹会在同一 tick 内立即推进一次，后续子弹也由海鸥逐 tick 统一推进。
+- 投弹时先显示炸弹，随即将海鸥 `hide(); show()` 重新挂到同一 Character 层最高深度；两者重叠时海鸥遮住炸弹。
 - 弹碰 Solid 爆炸 `50/50`，落水只销毁；鸟越界且活动弹清空后才结束。
 - 海鸥没有飞行时间上限，不参与 Unity 的 150 tick 卡死武器强制回收。
 
 来源：`Seagull.as`。规则：`SEA-*`，见 [完整审计](../IMPLEMENTATION_DETAILS.md#611-seagull)。
+
+## 投弹图层验收
+
+| ID | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
+| --- | --- | --- | --- | --- |
+| SEA-VIS-01 | `Seagull.as::advance` 中 `shot.show(); this.hide(); this.show()`；`Clip.as::show` 使用同一父层的 `getNextHighestDepth()` | `MutinySeagull.SpawnShot` → `MutinySeagullFire.Initialize` | 通过生产投弹请求推进一个海鸥 tick，断言新弹和海鸥同 Sorting Layer 且新弹 order 小于海鸥 | 原版静态确认；已修复，待 Unity 运行验证 |
 
 ## AI 候选
 

@@ -126,11 +126,8 @@ namespace Mutiny.Simulation
             if (!HasTarget)
                 return;
 
-            // Weapon.release clamps all conventional thrown weapons to 20 px/tick.
-            Vector2 velocity = MutinyPhysics.CalculateTwangVelocity(startPx, dragPx, TwangMaxForce);
-            if (velocity.sqrMagnitude > MutinyPhysics.DefaultTwangMaxForce * MutinyPhysics.DefaultTwangMaxForce)
-                velocity = velocity.normalized * MutinyPhysics.DefaultTwangMaxForce;
-            Fire(velocity);
+            // VoodooDoll inherits Solid's ordinary 20-force twang limit.
+            base.Twang(startPx, dragPx);
         }
 
         public void FireForAi(Vector2 velocityPx)

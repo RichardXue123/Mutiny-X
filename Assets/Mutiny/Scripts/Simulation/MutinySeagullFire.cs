@@ -33,7 +33,7 @@ namespace Mutiny.Simulation
         private void Awake()
         {
             SpriteRenderer renderer = GetComponent<SpriteRenderer>();
-            renderer.sortingOrder = MutinyWeapon.WeaponSortingOrder + 1;
+            renderer.sortingOrder = MutinyWeapon.WeaponSortingOrder - 1;
             Texture2D texture = Resources.Load<Texture2D>("Art/Weapons/SeagullFire/1");
             if (texture != null)
             {
@@ -55,6 +55,14 @@ namespace Mutiny.Simulation
         {
             m_Parent = parent;
             m_Owner = parent != null ? parent.Owner : null;
+            if (parent != null && parent.SpriteRenderer != null)
+            {
+                // Seagull.as shows the shot, then hides and re-shows the bird in
+                // the same Character layer, placing the bird above its shot.
+                SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+                renderer.sortingLayerID = parent.SpriteRenderer.sortingLayerID;
+                renderer.sortingOrder = parent.SpriteRenderer.sortingOrder - 1;
+            }
             m_PhysicsBody.State = PhysicsBodyState.CreateDefault(position.x, position.y);
             m_PhysicsBody.State.LeftExtent = OriginalExtent;
             m_PhysicsBody.State.RightExtent = OriginalExtent;

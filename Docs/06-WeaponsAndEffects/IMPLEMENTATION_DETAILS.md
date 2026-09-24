@@ -70,8 +70,10 @@
 | --- | --- | --- | --- |
 | WPN-AIM-01 | 30 px 命中半径内才进入拉拽；松开立即提交 | `TileSystem.as::mouseDown/mouseUp` | 已实现；待运行验证 |
 | WPN-AIM-02 | 拉力系数 0.25，预测 15 tick，默认上限 20 | `Solid.as::twang/drawTwangLine` | 已实现 |
-| WPN-AIM-03 | Banana、ParachuteBomb、RumBottle 的实际提交上限是 30 | 三个武器构造器 + `Solid.twang` | ParachuteBomb 已实现；Banana 本轮修复；RumBottle 当前仍错误截到 20 |
+| WPN-AIM-03 | Banana、ParachuteBomb、RumBottle 的实际提交上限是 30 | 三个武器构造器 + `Solid.twang` | 三者均已实现；待 Unity 运行验证 |
 | WPN-AIM-04 | 放置型武器不进入通用 twang；各自消费点击/拖动 | `TileSystem.as` 与专用类 | 已实现 |
+| WPN-VEL-01 | 仅普通拉拽受默认 20 上限；Banana、ParachuteBomb、RumBottle 各为 30，预览与提交一致 | `Solid.as::twang/drawTwangLine`、三种武器构造器 | `MutinyWeapon.Twang`、`MutinyWeaponFactory.GetTwangMaxForce` 已实现；待运行验证 |
+| WPN-VEL-02 | 直接 `Weapon.fire(vx,vy)` 不限速；`Weapon.release` 的 20 限速属于另一种拖拽提交路径 | `Weapon.as::fire/release`、`TileSystem.as::mouseUp` | `MutinyWeapon.Fire` 已修复；待运行验证 |
 
 ### 4.2 Weapon 公共状态
 
@@ -159,8 +161,6 @@
 | BLD-HIT-01 | 不命中 owner；纵向与巨石中心 ±32 且横向距离 ≤32 时，把角色推到巨石边缘 | `Boulder.as::advanceMotion` | `ApplyCharacterContacts` | 已实现；待运行验证 |
 | BLD-DMG-01 | 每个接触 tick 伤害为 `abs(vx)*1.5`，只沿巨石当前运动方向追加横向速度 | 同上 | 同上 | 已实现 |
 | BLD-END-01 | 无爆炸；继承 Weapon 的静止/地图底部结束。源码另有白化计数，但共享静止检查会在同 tick 结束，不能单独假定完整淡出 | `Boulder.as` + `Weapon.as` | `AdvanceOriginalTick` | 已实现；运行时序待验证 |
-| BLD-AUD-01 | 原版 Boulder 无专属发射/滚动/撞击声；只继承跨水面 `splash`，角色后续地形碰撞可产生 `hitwall` | `Boulder.as`、pcode、symbol 872/869、`Solid.as::splashCheck`、`Character.as::contact` | `AdvanceSplashCheck`、角色接触音频 | 已实现；待听音验证 |
-| BLD-AUD-EXT-01 | 用户授权扩展：有横向撞击速度时，每次新开始的角色接触播放一次原版导出 `smack`；持续重叠不连播、静止重叠静默，同 tick 多目标合并为一次 | 原版 `smack` 资源存在但没有已证实调用点 | `ApplyCharacterContacts` | 已实现；新增生产入口回归，待 Unity 运行听音 |
 
 ### 6.5 Cannon / Cannonball
 
@@ -222,8 +222,10 @@
 
 | ID | 可观察行为 | 来源 | Unity 入口 | 状态 |
 | --- | --- | --- | --- | --- |
-| RUM-PHY-01 | extent 14、twangMaxForce 30；飞行旋转 `vx*2` | `RumBottle.as` | `MutinyRumBottle` | 旋转已实现；提交错误截为 20 |
+| RUM-PHY-01 | extent 14、twangMaxForce 30；正常松手走 `TileSystem.mouseUp → Weapon.twang → Solid.twang`，实际初速上限 30；飞行旋转 `vx*2` | `RumBottle.as`、`TileSystem.as::mouseUp`、`Solid.as::twang` | `MutinyRumBottle.Twang` | 已实现；待运行验证 |
+| RUM-TRAJ-01 | 预览和正常松手共用 30 上限及逐 tick 先加 weight=1 再移动的轨迹 | `Solid.as::drawTwangLine/twangPrediction/advanceMotion` | `MutinyTrajectoryRenderer`、`MutinyRumBottle.Twang`、`MutinyPhysicsBody.AdvanceSimulationTick` | 已实现；待运行验证 |
 | RUM-HIT-01 | 任一 Solid 接触产生 80/25 爆炸；只有 `side==FLOOR` 才生成火焰 | `RumBottle.as::contact` | `Explode(side)` | 已实现 |
+| RUM-HIT-02 | `Solid.advanceMotion` 先处理纵向碰撞并立即调用 `contact`，再处理横向位移；地面/天花板爆炸中心和地面火焰格取横移前 X，墙面碰撞取横移后 X | `Solid.as::advanceMotion`、`RumBottle.as::contact` | `MutinyRumBottle.OnContact`、`Explode` | 已实现；待运行验证 |
 | RUM-FIRE-01 | 地面格向上找到表面后，在同一点创建左右各一个 SweepingFlame | 同上 | `FindOriginalFlameOrigin` + 双 Spawn | 已实现 |
 | RUM-FIRE-02 | 每段火焰创建时，脚点距离平方 `<64` 的角色受 30 伤害，速度改为随机 `vx∈[-4,4)`、`vy∈[-8,-6)` | `SweepingFlame.as::constructor` | `MutinySweepingFlame` | 已实现；随机边界待验证 |
 | RUM-FIRE-03 | 时间轴第 4 帧沿方向前进 8 px；下一格必须有实体且其上方为空，否则停止 | `SweepingFlame.as::createNext` + 时间轴 | propagation tick | 已实现；待运行验证 |
@@ -235,6 +237,7 @@
 | SEA-PLACE-01 | 未发射时水平虚线跟随鼠标 Y；首次点击在 `x=-300`、所选 Y 开始，vx=10 | `Seagull.as::constructor/place/advance` | `PlaceAtFlightHeight` | 飞行逻辑已实现；虚线表现另验 |
 | SEA-SHOT-01 | 飞行中每次点击都可投一枚弹，没有固定弹数；弹起点 `(bird.x-10,bird.y)`，继承 vx=10、weight=1 | `Seagull.as::advance` | `TryRequestPlayerShot`、`MutinySeagullFire.Spawn` | 已实现 |
 | SEA-SHOT-02 | 投弹输入在海鸥本 tick 完成移动后消费；新弹从 `bird.x-10` 创建，并在同一个 `Seagull.advance` 中立刻前进一次，之后每 tick 继续由海鸥统一推进 | `Seagull.as::advance` 中 `super.advance`、创建 shot、遍历 `shots[].advance` 的顺序 | `RequestShot`、`AdvanceOriginalTick`、`MutinySeagullFire.AdvanceOriginalTick` | 已实现；待运行验证 |
+| SEA-VIS-01 | 炸弹 `show()` 后海鸥立刻 `hide(); show()`，在相同 Character 层重新取得更高深度，因此重叠时海鸥遮住炸弹 | `Seagull.as::advance`、`Clip.as::show` | `MutinySeagullFire.Initialize` 的 SpriteRenderer 排序 | 原版静态确认；已修复，待 Unity 运行验证 |
 | SEA-HIT-01 | 弹碰 Solid 爆炸 50/50；落水只销毁不爆 | 动态 shot 函数 | `MutinySeagullFire` | 已实现；待运行验证 |
 | SEA-END-01 | 鸟越过 `levelWidth*32+275` 且所有弹已结束，武器才结束 | `Seagull.as::advance/endShot` | `AdvanceOriginalTick` | 已实现 |
 | SEA-END-02 | 原版没有飞行时限；即使阻塞回合超过 Unity 的 150 tick 安全阈值，也不得强制回收正常飞行的海鸥 | `Seagull.as::advance` 仅有 `levelWidth*32+275 && shots.length<1` 完成条件 | `CanExpireFromTurnSafetyTimeout` | 已实现；待运行验证 |
