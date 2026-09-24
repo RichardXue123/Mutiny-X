@@ -44,6 +44,34 @@ namespace Mutiny.Simulation
         public bool IsArmingAnimation => m_PresentationState == PresentationState.Arming;
         public bool IsWarningAnimation => m_PresentationState == PresentationState.Warning;
 
+        // Controller.unloadLevel destroys the stored mines separately from the
+        // level tiles. Unity weapon instances are also spawned outside the level
+        // root, so remove them before a rebuilt level can observe the old map.
+        public static int ClearForLevelEnd()
+        {
+            MutinyMine[] mines = FindObjectsByType<MutinyMine>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+            for (int i = 0; i < mines.Length; i++)
+            {
+                MutinyMine mine = mines[i];
+                if (mine == null)
+                    continue;
+
+                if (mine.PhysicsBody != null)
+                    mine.PhysicsBody.IsActive = false;
+                mine.gameObject.SetActive(false);
+#if UNITY_EDITOR
+                if (!Application.isPlaying)
+                    DestroyImmediate(mine.gameObject);
+                else
+                    Destroy(mine.gameObject);
+#else
+                Destroy(mine.gameObject);
+#endif
+            }
+            return mines.Length;
+        }
+
         public static readonly Vector2 OriginalPivot = new Vector2(18f / 38f, 17f / 35f); // Symbol 1024: origin (18, 18) of 38x35
 
         protected override void Awake()

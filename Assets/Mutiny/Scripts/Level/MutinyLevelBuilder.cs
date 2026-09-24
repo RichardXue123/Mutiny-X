@@ -39,6 +39,7 @@ namespace Mutiny.Levels
             // level. Do this synchronously because the prior Unity root is normally
             // destroyed at end-of-frame during restart/next-level transitions.
             MutinyBoxRegistry.ResetForLevel();
+            MutinyMine.ClearForLevelEnd();
 
             string rootName = string.IsNullOrEmpty(levelData.Name) || levelData.Name == "undefined"
                 ? "MutinyLevel"

@@ -72,6 +72,7 @@ namespace Mutiny.Verification
             VerifyParachuteBomb(result);
             VerifyPiecesOfEight(result);
             VerifyRumBottle(result);
+            VerifyMineCameraAndLevelCleanup(result);
             VerifySeagull(result);
             VerifyTidalWave(result);
             VerifyVoodooDoll(result);
@@ -3247,15 +3248,21 @@ namespace Mutiny.Verification
                 result.Assert(flameFramesPresent,
                     "WPN-10-ANI-02 all 11 original sweepingFlame timeline frames load through Resources");
 
-                // RumBottle uses the original 30-force drag gauge, then Weapon.release
-                // commits at the shared 20 px/tick cap.
+                // RumBottle.twang uses Solid.twang's 30-force limit. Weapon.release's
+                // 20-force cap applies to draggable placement, not this throw.
                 twangObject = new GameObject("RumBottleVerification_Twang");
                 MutinyRumBottle twangBottle = twangObject.AddComponent<MutinyRumBottle>();
                 twangBottle.Initialize(null);
-                twangBottle.Twang(Vector2.zero, new Vector2(-400f, 0f));
-                result.Assert(Mathf.Approximately(twangBottle.PhysicsBody.State.VelocityX, 20f) &&
-                              Mathf.Approximately(twangBottle.PhysicsBody.State.VelocityY, 0f),
-                    "WPN-10-EFF-01 production RumBottle release clamps its 30-force drag to 20 px/tick");
+                Vector2 drag = new Vector2(-400f, -300f);
+                Vector2 previewVelocity = MutinyPhysics.CalculateTwangVelocity(
+                    Vector2.zero, drag, MutinyWeaponFactory.GetTwangMaxForce("rumBottle"));
+                twangBottle.Twang(Vector2.zero, drag);
+                Vector2 firedVelocity = new Vector2(twangBottle.PhysicsBody.State.VelocityX,
+                    twangBottle.PhysicsBody.State.VelocityY);
+                result.Assert(Mathf.Approximately(twangBottle.TwangMaxForce, 30f) &&
+                              Mathf.Approximately(previewVelocity.magnitude, 30f) &&
+                              Vector2.Distance(firedVelocity, previewVelocity) < 0.001f,
+                    "WPN-10-EFF-01 fired RumBottle matches the trajectory preview at its 30 px/tick limit");
 
                 // The production physics route must contact the floor, create its
                 // 80/25 explosion, and seed left/right flames from the exposed top of
@@ -3322,6 +3329,51 @@ namespace Mutiny.Verification
                 DestroyNow(bottleObject);
                 DestroyNow(targetObject);
                 DestroyNow(twangObject);
+            }
+        }
+
+        private static void VerifyMineCameraAndLevelCleanup(MutinyLevel1VerificationResult result)
+        {
+            GameObject mineObject = null;
+            GameObject cameraObject = null;
+            GameObject managerObject = null;
+            GameObject controllerObject = null;
+            try
+            {
+                mineObject = new GameObject("MineVerification_OutsideLevelRoot");
+                MutinyMine mine = mineObject.AddComponent<MutinyMine>();
+                mine.Initialize(null);
+                mine.Fire(new Vector2(1f, 0f));
+
+                managerObject = new GameObject("MineVerification_TurnManager");
+                MutinyTurnManager manager = managerObject.AddComponent<MutinyTurnManager>();
+                manager.CurrentPhase = TurnPhase.ActionExecuting;
+                cameraObject = new GameObject("MineVerification_Camera");
+                cameraObject.AddComponent<Camera>();
+                MutinyCameraController camera = cameraObject.AddComponent<MutinyCameraController>();
+                camera.TurnManager = manager;
+
+                bool followedFlyingMine = camera.FindActionTargetForVerification() == mine.transform;
+                mine.PhysicsBody.SetVelocity(0f, 0f);
+                mine.AdvanceOriginalTickForVerification();
+                camera.TrackWeapon(mine);
+                result.Assert(followedFlyingMine && mine.IsStored &&
+                              camera.FindActionTargetForVerification() == null,
+                    "MINE-CAM-01 camera follows a flying mine but releases it after placement, including explicit tracking");
+
+                controllerObject = new GameObject("MineVerification_LevelController");
+                MutinyLevelController controller = controllerObject.AddComponent<MutinyLevelController>();
+                controller.ClearLevel();
+                result.Assert(!mineObject.activeSelf &&
+                              Object.FindObjectsByType<MutinyMine>().Length == 0,
+                    "MINE-LVL-01 level rebuild immediately removes an unparented stored mine and its physics");
+            }
+            finally
+            {
+                DestroyNow(mineObject);
+                DestroyNow(cameraObject);
+                DestroyNow(managerObject);
+                DestroyNow(controllerObject);
             }
         }
 
