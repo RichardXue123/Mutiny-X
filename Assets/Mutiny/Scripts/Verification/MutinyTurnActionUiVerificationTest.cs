@@ -2122,12 +2122,19 @@ namespace Mutiny.Verification
                     "TXT-TURN-02 after speech the stage-centered DangleFont notice rises into view");
 
                 textArea.SayCollected("tidalWave");
-                for (int tick = 0; tick < 94; tick++)
+                for (int tick = 0; tick < 58; tick++)
                     textArea.AdvanceOriginalTick();
+                result.Assert(textArea.VisibleText == "Player 1, take your turn" &&
+                              textArea.PendingLineCount == 1,
+                    "TXT-QUEUE-01 first notice remains active through frame 59 while collected notices wait");
+                textArea.AdvanceOriginalTick();
+                result.Assert(textArea.VisibleText == null &&
+                              textArea.PendingLineCount == 1,
+                    "TXT-QUEUE-02 first notice clears on frame 60 after the 40-frame hold");
                 textArea.AdvanceOriginalTick();
                 result.Assert(textArea.VisibleText == "collected tidal wave" &&
                               textArea.PendingLineCount == 0,
-                    "TXT-QUEUE-01 later collection notices wait their turn and retain the original display name");
+                    "TXT-QUEUE-03 next tick displays the queued collection notice with the original name");
             }
             finally
             {
