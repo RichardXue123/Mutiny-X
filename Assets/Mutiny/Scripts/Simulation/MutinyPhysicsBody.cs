@@ -29,6 +29,9 @@ namespace Mutiny.Simulation
         public event Action OnSimulationStep;
 
         private float m_TimeAccumulator;
+        private Vector2 m_PreviousTickPositionPixels;
+        private Vector2 m_CurrentTickPositionPixels;
+        private bool m_HasPresentationTick;
         private string[,] m_CachedTerrain;
         private int m_GridWidth;
         private int m_GridHeight;
@@ -37,6 +40,26 @@ namespace Mutiny.Simulation
         public long SimulationTickCount { get; private set; }
         public float SimulationInterpolationAlpha =>
             Mathf.Clamp01(m_TimeAccumulator / MutinyPhysics.TimeStep);
+
+        // The authoritative State and Transform still move at 25 Hz. Camera
+        // presentation can sample the last two completed ticks between renders.
+        public Vector3 PresentationPosition => SamplePresentationPosition(SimulationInterpolationAlpha);
+
+        public Vector3 SamplePresentationPosition(float alpha)
+        {
+            if (!SyncTransform || !m_HasPresentationTick)
+                return transform.position;
+
+            Vector2 current = new Vector2(State.X, State.Y);
+            // Placement/teleport code may assign State outside a physics tick.
+            // Never interpolate that new position from an unrelated old path.
+            if ((current - m_CurrentTickPositionPixels).sqrMagnitude > 0.0001f)
+                return MutinyPhysics.PixelToUnity(current.x, current.y);
+
+            Vector2 sampled = Vector2.Lerp(m_PreviousTickPositionPixels,
+                m_CurrentTickPositionPixels, Mathf.Clamp01(alpha));
+            return MutinyPhysics.PixelToUnity(sampled.x, sampled.y);
+        }
 
         private void Awake()
         {
@@ -106,6 +129,16 @@ namespace Mutiny.Simulation
 
         private void Update()
         {
+            AdvanceSimulationFrame(Time.deltaTime);
+        }
+
+        internal void AdvanceSimulationFrameForVerification(float deltaTime)
+        {
+            AdvanceSimulationFrame(deltaTime);
+        }
+
+        private void AdvanceSimulationFrame(float deltaTime)
+        {
             if (!IsActive)
                 return;
 
@@ -114,7 +147,7 @@ namespace Mutiny.Simulation
                 CacheLevelTerrain();
             }
 
-            m_TimeAccumulator += Time.deltaTime;
+            m_TimeAccumulator += deltaTime;
             int maxSubSteps = 5; // Prevent spiral of death
             int steps = 0;
 
@@ -133,6 +166,7 @@ namespace Mutiny.Simulation
 
         public StepResult AdvanceSimulationTick()
         {
+            Vector2 tickStartPosition = new Vector2(State.X, State.Y);
             SimulationTickCount++;
             // Flash weapon advanceMotion overrides rotate before Solid.advanceMotion.
             OnBeforeSimulationStep?.Invoke();
@@ -161,6 +195,9 @@ namespace Mutiny.Simulation
             OnAfterMotionStep?.Invoke();
             EvaluateWaterState();
             OnSimulationStep?.Invoke();
+            m_PreviousTickPositionPixels = tickStartPosition;
+            m_CurrentTickPositionPixels = new Vector2(State.X, State.Y);
+            m_HasPresentationTick = true;
             return result;
         }
 

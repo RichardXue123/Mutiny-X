@@ -103,6 +103,11 @@ namespace Mutiny.Presentation
 
         private void LateUpdate()
         {
+            AdvanceCamera(Time.deltaTime);
+        }
+
+        private void AdvanceCamera(float deltaTime)
+        {
             ApplyViewportLetterbox();
             EnsureReferences();
             if (m_Camera == null || m_LevelRoot == null || TurnManager == null)
@@ -127,7 +132,7 @@ namespace Mutiny.Presentation
             if (m_Speech != null && m_Speech.HasActiveBubble)
             {
                 m_EdgeVelocityPixelsPerSecond = Vector2.zero;
-                PanTowards(m_Speech.BubbleWorldPosition, 50f, 0f);
+                PanTowards(m_Speech.BubbleWorldPosition, 50f, 0f, deltaTime);
                 return;
             }
 
@@ -155,7 +160,7 @@ namespace Mutiny.Presentation
                         $"airdrop tracking started chest={fallingChest.name} timeTaken={fallingChest.TimeTaken} speed=50px/tick", this);
                 }
                 m_EdgeVelocityPixelsPerSecond = Vector2.zero;
-                PanTowards(fallingChest.transform.position, 50f, 0f);
+                PanTowards(GetPresentationPosition(fallingChest.transform), 50f, 0f, deltaTime);
                 return;
             }
             if (m_AirDropCameraWasLocked)
@@ -169,13 +174,20 @@ namespace Mutiny.Presentation
             if (actionTarget != null)
             {
                 m_EdgeVelocityPixelsPerSecond = Vector2.zero;
-                PanTowards(actionTarget.position, OriginalTrackingPixelsPerTick);
+                // Seagull.advance replaces Weapon.trackY with y + 100. In
+                // Unity's upward Y this places the camera 50 px below the bird.
+                float verticalOffset = actionTarget.GetComponent<MutinySeagull>() != null
+                    ? -OriginalTrackingVerticalOffsetPixels
+                    : OriginalTrackingVerticalOffsetPixels;
+                PanTowards(GetPresentationPosition(actionTarget),
+                    OriginalTrackingPixelsPerTick, verticalOffset, deltaTime);
                 return;
             }
 
             if (m_TurnPanTarget != null)
             {
-                if (PanTowards(m_TurnPanTarget.position, OriginalTrackingPixelsPerTick))
+                if (PanTowards(GetPresentationPosition(m_TurnPanTarget), OriginalTrackingPixelsPerTick,
+                        OriginalTrackingVerticalOffsetPixels, deltaTime))
                     m_TurnPanTarget = null;
                 return;
             }
@@ -275,11 +287,14 @@ namespace Mutiny.Presentation
 
         internal Transform FindActionTargetForVerification() => FindActionTarget();
         internal MutinyWeapon TrackedWeaponForVerification => m_TrackedWeapon;
+        internal void SetLevelRootForVerification(MutinyLevelRoot root) => m_LevelRoot = root;
+        internal void AdvanceCameraForVerification(float deltaTime) => AdvanceCamera(deltaTime);
         internal void AdvanceCameraForVerification()
         {
             EnsureReferences();
             if (m_TurnPanTarget != null &&
-                PanTowards(m_TurnPanTarget.position, OriginalTrackingPixelsPerTick))
+                PanTowards(GetPresentationPosition(m_TurnPanTarget), OriginalTrackingPixelsPerTick,
+                    OriginalTrackingVerticalOffsetPixels, Time.deltaTime))
                 m_TurnPanTarget = null;
         }
         internal bool CanAcceptManualScrollingForVerification()
@@ -508,18 +523,24 @@ namespace Mutiny.Presentation
             return null;
         }
 
-        private bool PanTowards(Vector3 targetWorld, float pixelsPerTick, float verticalOffsetPixels = OriginalTrackingVerticalOffsetPixels)
+        private static Vector3 GetPresentationPosition(Transform target)
+        {
+            MutinyPhysicsBody body = target.GetComponent<MutinyPhysicsBody>();
+            return body != null ? body.PresentationPosition : target.position;
+        }
+
+        private bool PanTowards(Vector3 targetWorld, float pixelsPerTick, float verticalOffsetPixels, float deltaTime)
         {
             Vector3 desired = targetWorld;
             desired.y += verticalOffsetPixels / MutinyPhysics.PixelsPerUnit;
             desired.z = transform.position.z;
-            desired = ClampPosition(desired);
+            Vector3 reachable = ClampPosition(desired);
 
             float speedWorldPerSecond = pixelsPerTick /
                                         (MutinyPhysics.PixelsPerUnit * MutinyPhysics.TimeStep);
-            Vector3 next = Vector3.MoveTowards(transform.position, desired, speedWorldPerSecond * Time.deltaTime);
+            Vector3 next = Vector3.MoveTowards(transform.position, desired, speedWorldPerSecond * deltaTime);
             SetClampedPosition(next);
-            return Vector2.Distance(transform.position, desired) < 0.01f;
+            return Vector2.Distance(transform.position, reachable) < 0.01f;
         }
 
         private void SetClampedPosition(Vector3 position)

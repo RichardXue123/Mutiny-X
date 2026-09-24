@@ -20,3 +20,9 @@
 - 不同步娃娃的伤害、后续碰撞或位置；旧“100%伤害同调”结论错误。
 
 来源：`VoodooDoll.as`。规则：`VOO-*`，见 [完整审计](../IMPLEMENTATION_DETAILS.md#613-voodoo-doll)。
+
+## 目标选择光标
+
+| ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
+| --- | --- | --- | --- | --- | --- |
+| VOO-CUR-01 | 人类尚未选目标且鼠标不在娃娃自身上时，显示原版 `voodooDoll` 光标；鼠标移到娃娃上、选定目标、投掷或取消后恢复普通鼠标 | `TileSystem.as::advance` 的 `voodooDoll` 分支、DefineSprite 1813 帧 40 | `MutinyPlayerInput.UpdateSpecialWeaponCursor`、`MutinySpecialWeaponCursor` | 经生产选中/绑定目标流程检查 Mode，鼠标越过娃娃边界时检查恢复；校验 31×22 原版图 | 原版静态确认；已修复，待 Unity 运行验证 |

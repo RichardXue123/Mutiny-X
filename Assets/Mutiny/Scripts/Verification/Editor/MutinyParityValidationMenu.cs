@@ -74,6 +74,18 @@ namespace Mutiny.Verification.Editor
                                string.Join("\n", result.Failures));
         }
 
+        [MenuItem("Mutiny/Parity/Validate Camera Follow")]
+        public static void ValidateCameraFollow()
+        {
+            MutinyLevel1VerificationResult result =
+                MutinyTurnActionUiVerificationTest.RunCameraFollow();
+            if (result.Passed)
+                Debug.Log($"[Mutiny Parity] Camera follow verification passed: {result.PassedAssertions}/{result.TotalAssertions} assertions.");
+            else
+                Debug.LogError("[Mutiny Parity] Camera follow verification failed:\n" +
+                               string.Join("\n", result.Failures));
+        }
+
         [MenuItem("Mutiny/Parity/Validate Weapon Idle Animations")]
         public static void ValidateWeaponIdleAnimations()
         {

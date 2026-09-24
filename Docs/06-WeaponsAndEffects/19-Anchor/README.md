@@ -24,3 +24,4 @@
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
 | --- | --- | --- | --- | --- | --- |
 | AI-WPN-04 | AI 在全图随机 X，从顶部垂直模拟 Anchor；只接纳触地样本，评分乘 `0.5`，胜出后等待 20 tick 再下落 | `Anchor.as::randomThrows/aiPerform` | `MutinyAIController.EvaluateAnchor()`、`MutinyAnchor.DropForAi()` | 固定种子与地面，核对样本数、X 范围、胜出类型、正式对象和库存消耗 | 已实现；自动回归已写；待 Unity 运行验证 |
+| ANC-CUR-01 | 人类选中 Anchor 且尚未投放时，显示原版 cursor 时间轴 `anchor` 标签图标；投放或取消后恢复普通鼠标 | `TileSystem.as::advance` 的 `anchor` 分支、DefineSprite 1813 帧 1 | `MutinyPlayerInput.UpdateSpecialWeaponCursor`、`MutinySpecialWeaponCursor` | 生产选中后检查 Anchor Mode 与 31×22 原版图，取消/投放后检查 None | 原版静态确认；已修复，待 Unity 运行验证 |

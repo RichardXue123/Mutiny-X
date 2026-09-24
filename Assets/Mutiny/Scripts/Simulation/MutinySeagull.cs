@@ -17,7 +17,9 @@ namespace Mutiny.Simulation
         public const float OriginalShotXOffset = -10f;
         private const int OriginalFrameCount = 14;
         private const int FlyingFrameCount = 8;
-        private const int ShotFrameStart = 10;
+        // DefineSprite 982 frame 9 jumps back to "flying"; frame 10 is also
+        // blank. The "shot" label begins at visible frame 11.
+        private const int ShotFrameStart = 11;
         private const int ShotFrameEnd = 14;
 
         // Symbol 982: 26x20 px, registration origin (13, 10).
@@ -256,7 +258,11 @@ namespace Mutiny.Simulation
             {
                 m_ShotFrame++;
                 if (m_ShotFrame > ShotFrameEnd)
+                {
                     m_ShotFrame = 0;
+                    m_FlyingFrame = 0;
+                    SpriteRenderer.sprite = m_Frames[0];
+                }
                 else
                     SpriteRenderer.sprite = m_Frames[m_ShotFrame - 1];
                 return;

@@ -71,10 +71,13 @@
 - `SEA-END-02`：在长地图上通过生产 `MutinyTurnManager.AdvanceSimulationTick()` 连续等待超过 150 tick，断言仍在正常飞行的海鸥不会被卡死武器看门狗强制完成或销毁。
 - `SEA-SHOT-02`：点击只登记一次投弹请求；驱动一次生产 `MutinyPhysicsBody.AdvanceSimulationTick()` 后，断言海鸥先前进 10 px，炸弹从移动后位置的 `x-10` 创建，并在同一 tick 前进 10 px、下落 1 px。子弹物理体保持非自治更新，防止同帧双步。
 - `SEA-VIS-01`：通过同一生产投弹入口生成炸弹后，断言其 SpriteRenderer 与海鸥处于相同 Sorting Layer，但 order 更低；覆盖原先 `WeaponSortingOrder + 1` 导致炸弹盖住海鸥的回归。
+- `SEA-ANI-01`：通过同一生产投弹入口与 25 Hz 物理 tick，读取海鸥实际 SpriteRenderer 的纹理，断言投弹时 11→12→13→14→飞行 1，随后飞行 2..8→1；不显示原版跳转/空白帧 9、10。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；待 Unity Play Mode 实际执行，不能登记为通过。
 
 ## Voodoo Doll 运镜回归
 
+- `CUR-SCALE-01`：经生产武器选中/投掷后的特殊光标刷新入口，分别取 Anchor 与 Parachute Bomb fan 的实际绘制矩形；在模拟 1100×800 窗口下，31×22 / 31×21 原版图应分别绘制为 62×44 / 62×42，鼠标热点偏移也加倍。用例已添加，待 Unity 运行，尚不能登记为通过。
+- `ANC-CUR-01/VOO-CUR-01`：经生产武器选中、取消及巫毒目标绑定入口刷新特殊光标；检查 Anchor 和 Voodoo Doll 分别使用原版 31×22 光标图，巫毒鼠标移到娃娃自身上及选定目标后恢复普通光标。
 - `VOO-CAM-01`：生产目标绑定入口把镜头平移目标设为使用者；正式发射后清除该平移并显式跟随娃娃。
 - `VOO-CAM-02`：第 10 个娃娃物理 tick 同步释放娃娃跟随并把目标角色设为平移目标；平移未清除期间，目标等待计数不得推进。
 - `VOO-CAM-03`：目标取得保存速度后，通用 action-target 搜索不得重新选中仍在淡出的娃娃，也不持续锁定移动目标；没有其他高优先级目标时恢复手动滚屏资格。

@@ -16,20 +16,28 @@ namespace Mutiny.Presentation
         internal enum Mode
         {
             None,
+            Anchor,
             Seagull,
             TidalWave,
+            VoodooDoll,
             ParachuteFan,
             WoodenCrate,
             GunpowderBarrel,
             Cross
         }
 
+        // DefineSprite_1813_cursor frame 1, labelled "anchor".
+        private const string AnchorCursorPng =
+            "iVBORw0KGgoAAAANSUhEUgAAAB8AAAAWCAYAAAA4oUfxAAABYElEQVR4XrWWwWqEMBCGQwulpdCDF1sqpVd9UJ/DF7D7Dj5BF49LH8C9qRdBJN0/zKTJNIWtxg8Gk8nM/HFWklVqHTpg+5EkyRMNddM02gVz+EVcHIqieKOhbtvWCM7zbA3Aj3URHw3zhiyIORv73A7Exr4xxtK4AzSPjik+TdMvYRj8u4rzh3Y+nz1hzMGebQf663QyQuM46r7vzRPAj3WZEIUsy15paMQk8Iu4qHitDgi7Fh1P8C8QJxNXkabpo/opJnWCuPGUvxpdlqVs6TVtd/P+R57nL4oKgI/DQRYKids1xIO1GzCJn8ejKTIMg67r2i3kant+xCEeIJ83cDnvnynmKrzbCydYVVW2rS7swzqfdGDroWMKjPQmoOu6oDj8DOK3CjNeB5ZlsZcIgzn8TCzhG3qagvJPhIRjEO8W2cqtot81tAkhGlUY3L0rdU9jbxN7ilouF8aDcG0W/QbPz6F0GFvKKwAAAABJRU5ErkJggg==";
         // DefineSprite_1813_cursor frame 21, labelled "seagull".
         private const string SeagullCursorPng =
             "iVBORw0KGgoAAAANSUhEUgAAAB8AAAAWCAYAAAA4oUfxAAAAnElEQVR4Xu2RTQqEMAxGC3OAqQtBXEmZ+x+id3HjbNt1NWC7+FItcRzc5EGw5OdFiDGKojyNc+69fVIlEKzXesSkEAILygt7xBRRjDFlQM6W3vEDyXvPZNIgB7lQ3oKJrga5UN6iDH+XJQvmsetmlMMSdoo9J+Js+GhxtadSa1JuTm8smnP5K9ev3pxoDf5a/x+TtfYzDD3mFeUxVkloenvnshtAAAAAAElFTkSuQmCC";
         // DefineSprite_1813_cursor frame 32, labelled "tidalWave".
         private const string TidalWaveCursorPng =
             "iVBORw0KGgoAAAANSUhEUgAAAB8AAAAWCAYAAAA4oUfxAAABLUlEQVR4Xu2Uv2qEQBCHbdKkyBXprEQsfFVbH8FH8T1EBEELwT+NiOiG3+Z2b27OHMk6hBT5YLhjb2a+GeXW82RQB/ErqDzPHwLnPFEaLRqGQR2B3695L7RIAivetu1Ouu+76rqODyCGFnMhjXEcVV3XcgPEcfx+/arldGMIkyTRATHCgHzax4koit68AzGAtCgKva0ZAOATNbyXKw+PHECI82VZVN/39hz5vIErWrCuK9F+kmXZ3QBN01hxGIYX1seJw60BzoMgsIFcXnwGLZimiXv1pgA5vEgCu7ERUfAacC59s5mbycrneWbqG7hY6AC+77/eWrnx5Xvm4L9elqXYE/i2mNK27ekBnMQGXC6uA6g0TVVVVbznj0Ef9OOCZ5zamuKyvSmQjH/+Bh+cYikQ7j95nQAAAABJRU5ErkJggg==";
+        // DefineSprite_1813_cursor frame 40, labelled "voodooDoll".
+        private const string VoodooDollCursorPng =
+            "iVBORw0KGgoAAAANSUhEUgAAAB8AAAAWCAYAAAA4oUfxAAABVUlEQVR4XtWVwWqDQBCGPRXaHtoeiiAexHqp6APk0Af0PcTH8Ck8SlKDUUgv9mRaqVNn0TBODFGzFvrBz+5mZ//f3ayJoiyAbds3TQNEfwoEQQAItjjmBUsigjtwzAsmY1nWc9ulR8rNxRh3/LHfS925MArDsLczHHdzqPdNDJ7nwdtqJdS3mMdJKKUoCjGPoVjb6jocx3lRLgRTyClIA6Io4jmDfB0OvXBN0+6Iz2RG77qD7t4wjEfmNwnuPQpch4tN03xgfuNxnddvbjwGRUa40h77T11D3WgM9Nhd131ifpPh/mepqqp34VRVvSc+swDf96EsS551wiKvGv54XLr1iwQn260wxQdADdHNYR03mMsxGMWDqJA4juWGtxJ9BL/3JEkgTdOe8DOE1EsFsiyDz+YP5Byb9Vp+uK7rt21XPECe56LNdruecJ6uW4LjHRjQ/+EX+lHhO4kJs6cAAAAASUVORK5CYII=";
         // DefineSprite_1813_cursor labels: gunpowderBarrel frame 11,
         // woodenCrate frame 50, and invalid-placement cross frame 70.
         private const string GunpowderBarrelCursorPng =
@@ -51,8 +59,10 @@ namespace Mutiny.Presentation
         private const string DottedLinePng =
             "iVBORw0KGgoAAAANSUhEUgAAAnwAAAACCAYAAADCWgHOAAAAPklEQVR4Xu3MMQ4AIAgEQZ7uz7E/bGyMxZBsAxOqu9episk7x3Fcxk3DcRz3hcvF9QNuGI7jOI7LuGm4d24Db2F3lxo/n7EAAAAASUVORK5CYII=";
 
+        private Texture2D m_AnchorCursor;
         private Texture2D m_SeagullCursor;
         private Texture2D m_TidalWaveCursor;
+        private Texture2D m_VoodooDollCursor;
         private Texture2D m_WoodenCrateCursor;
         private Texture2D m_GunpowderBarrelCursor;
         private Texture2D m_CrossCursor;
@@ -70,6 +80,14 @@ namespace Mutiny.Presentation
         internal float RotationDegrees => m_RotationDegrees;
         internal int CurrentFanFrame => m_FanFrame + 1;
         internal bool IsFanAnimating => m_Mode == Mode.ParachuteFan && m_AnimateFan;
+        internal Texture2D CurrentTextureForVerification
+        {
+            get
+            {
+                EnsureTextures();
+                return ResolveCursorTexture();
+            }
+        }
 
         internal void SetMode(Mode mode, Vector2 mousePosition, float rotationDegrees = 0f, bool animateFan = false)
         {
@@ -131,17 +149,40 @@ namespace Mutiny.Presentation
             Matrix4x4 previousMatrix = GUI.matrix;
             if (m_Mode == Mode.ParachuteFan)
                 GUIUtility.RotateAroundPivot(m_RotationDegrees, new Vector2(m_MousePosition.x, guiY));
-            float pivotY = m_Mode == Mode.ParachuteFan ? 10f : 11f;
-            GUI.DrawTexture(new Rect(m_MousePosition.x - 15f, guiY - pivotY, cursor.width, cursor.height), cursor, ScaleMode.StretchToFill, true);
+            GUI.DrawTexture(GetCursorRect(cursor, Screen.width, Screen.height),
+                cursor, ScaleMode.StretchToFill, true);
             GUI.matrix = previousMatrix;
+        }
+
+        private Rect GetCursorRect(Texture2D cursor, int screenWidth, int screenHeight)
+        {
+            // The original cursor is a MovieClip on the 550x400 Flash stage.
+            // Keep its artwork and hotspot in that same coordinate system when
+            // the game canvas is enlarged to fit the Unity window.
+            float scale = Mathf.Min(screenWidth / 550f, screenHeight / 400f);
+            float guiY = screenHeight - m_MousePosition.y;
+            float pivotY = m_Mode == Mode.ParachuteFan ? 10f : 11f;
+            return new Rect(m_MousePosition.x - 15f * scale,
+                guiY - pivotY * scale, cursor.width * scale, cursor.height * scale);
+        }
+
+        internal Rect CursorRectForScreenForVerification(int screenWidth, int screenHeight)
+        {
+            EnsureTextures();
+            Texture2D cursor = ResolveCursorTexture();
+            return cursor != null ? GetCursorRect(cursor, screenWidth, screenHeight) : Rect.zero;
         }
 
         private void EnsureTextures()
         {
+            if (m_AnchorCursor == null)
+                m_AnchorCursor = DecodeOriginalTexture(AnchorCursorPng, "OriginalCursor_Anchor", TextureWrapMode.Clamp);
             if (m_SeagullCursor == null)
                 m_SeagullCursor = DecodeOriginalTexture(SeagullCursorPng, "OriginalCursor_Seagull", TextureWrapMode.Clamp);
             if (m_TidalWaveCursor == null)
                 m_TidalWaveCursor = DecodeOriginalTexture(TidalWaveCursorPng, "OriginalCursor_TidalWave", TextureWrapMode.Clamp);
+            if (m_VoodooDollCursor == null)
+                m_VoodooDollCursor = DecodeOriginalTexture(VoodooDollCursorPng, "OriginalCursor_VoodooDoll", TextureWrapMode.Clamp);
             if (m_WoodenCrateCursor == null)
                 m_WoodenCrateCursor = DecodeOriginalTexture(WoodenCrateCursorPng, "OriginalCursor_WoodenCrate", TextureWrapMode.Clamp);
             if (m_GunpowderBarrelCursor == null)
@@ -162,10 +203,14 @@ namespace Mutiny.Presentation
         {
             switch (m_Mode)
             {
+                case Mode.Anchor:
+                    return m_AnchorCursor;
                 case Mode.Seagull:
                     return m_SeagullCursor;
                 case Mode.TidalWave:
                     return m_TidalWaveCursor;
+                case Mode.VoodooDoll:
+                    return m_VoodooDollCursor;
                 case Mode.ParachuteFan:
                     return m_FanCursors[m_FanFrame];
                 case Mode.WoodenCrate:

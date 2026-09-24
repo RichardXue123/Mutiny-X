@@ -731,7 +731,17 @@ namespace Mutiny.Presentation
             }
             else if (selectedCharacter != null && InteractionState == MutinyPlayerInteractionState.WeaponReady)
             {
-                if (string.Equals(ActiveWeapon, "seagull", System.StringComparison.OrdinalIgnoreCase) ||
+                if (m_ArmedAnchor != null && m_ArmedAnchor.Owner == selectedCharacter &&
+                    !m_ArmedAnchor.IsFired && !m_ArmedAnchor.IsFinished)
+                {
+                    mode = MutinySpecialWeaponCursor.Mode.Anchor;
+                }
+                else if (IsVoodooTargetSelection() && m_ArmedVoodooDoll.Owner == selectedCharacter &&
+                         !IsPointerOverVoodooDoll(mousePosition))
+                {
+                    mode = MutinySpecialWeaponCursor.Mode.VoodooDoll;
+                }
+                else if (string.Equals(ActiveWeapon, "seagull", System.StringComparison.OrdinalIgnoreCase) ||
                     (m_EquippedWeapon is MutinySeagull && !m_EquippedWeapon.IsFired))
                 {
                     mode = MutinySpecialWeaponCursor.Mode.Seagull;
@@ -749,6 +759,15 @@ namespace Mutiny.Presentation
             }
 
             m_SpecialWeaponCursor.SetMode(mode, mousePosition, rotationDegrees, animateFan);
+        }
+
+        private bool IsPointerOverVoodooDoll(Vector2 mousePosition)
+        {
+            SpriteRenderer dollRenderer = m_ArmedVoodooDoll != null
+                ? m_ArmedVoodooDoll.SpriteRenderer
+                : null;
+            return dollRenderer != null && dollRenderer.enabled &&
+                   dollRenderer.bounds.Contains(GetMouseWorldPosition(mousePosition));
         }
 
         private float GetMouseWorldPixelX(Vector2 mousePosition)
@@ -780,6 +799,9 @@ namespace Mutiny.Presentation
 
         internal string SpecialWeaponCursorModeForVerification =>
             m_SpecialWeaponCursor != null ? m_SpecialWeaponCursor.CurrentMode.ToString() : "None";
+
+        internal Texture2D SpecialWeaponCursorTextureForVerification =>
+            m_SpecialWeaponCursor != null ? m_SpecialWeaponCursor.CurrentTextureForVerification : null;
 
         internal float SpecialWeaponCursorRotationForVerification =>
             m_SpecialWeaponCursor != null ? m_SpecialWeaponCursor.RotationDegrees : 0f;

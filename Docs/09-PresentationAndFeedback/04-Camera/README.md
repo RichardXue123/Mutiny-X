@@ -24,6 +24,17 @@
 | AI-CAM-01 | AI 完成候选选择后，镜头显式平移到胜出角色；只有平移目标清空才执行行动 | `Team.as::advance` | `MutinyAIController.ExecuteAITurnRoutine`、`PanToCharacter` | 已实现；局部回归已写，待 Unity 运行 |
 | AI-CAM-02 | 当前 AI 尚在求值时，镜头在 speech/popup 后立即返回，不进入下降宝箱、行动目标或回合角色分支 | `TileSystem.as::advanceScrolling:438-445` | `IsEvaluatingCandidates`、`ShouldPauseForAiThinking` | 已实现；状态真值表回归已写，待 Unity 运行 |
 
+## 武器跟随速度与画面平滑度
+
+原版 SWF 为 25 FPS。`TileSystem.as::advanceScrolling:448-467` 对投掷角色、活动武器及回合平移目标调用 `panTowards(...,30)`；`panTowards:600-612` 每帧沿目标方向最多移动 30 px，距离不超过 30 px 时到位，再由 `panCamera:497-518` 钳制边界。跟随海鸥时，`Seagull.as:118` 把 `trackY` 改为 `y+100`；大炮由 `Cannon.as:45-53` 把目标设为炮弹；海啸由 `TidalWave.as:74-85` 开启跟随。原版没有按武器种类另设缓动系数。
+
+| ID | 可观察行为 | 原版来源 / 扩展依据 | Unity 入口 | 验收用例 | 当前结果 |
+| --- | --- | --- | --- | --- | --- |
+| CAM-TRACK-01 | 自动跟随以 30 px/原版 tick 限速；先朝未钳制的目标移动，再钳制镜头；炮弹为大炮跟随目标，海鸥在画面中使用原版 `trackY=y+100` 偏移 | `TileSystem.as:455-465,497-518,600-612`、`Cannon.as:45-53`、`Seagull.as:118` | `MutinyCameraController.FindActionTarget/PanTowards` | 经生产物理 tick 与镜头更新，断言炮弹目标、海鸥纵向目标和水边界下的移动方向 | 静态确认；待实现与运行验证 |
+| CAM-SMOOTH-01 | 在高于 25 FPS 的渲染帧中，自动镜头读取相邻物理 tick 的插值表现位置，避免目标每 0.04 秒跳跃；权威坐标、伤害和原版 30 px/tick 上限不变 | 用户授权的高刷新率表现扩展；原版 SWF `frameRate=25.0`，Unity 物理步长 `0.04` 秒 | `MutinyPhysicsBody` 表现位置采样、`MutinyCameraController.LateUpdate` | 驱动真实 `AdvanceSimulationTick()` 后在两个 tick 间采样 0/0.5/1，镜头连续前进且不超过按经过时间换算的 30 px/tick；新目标切换时不从旧目标位置插值 | 已登记规格；待实现与运行验证 |
+
+`CAM-SMOOTH-01` 是用户要求的 Unity 表现优化，不应写作 Flash 原版的插帧行为。静态数值核对不能替代 60/120 FPS 的 Play Mode 画面验收。
+
 ## 画面比例与视口适配规格（11:8 Letterbox / Pillarbox）
 
 原版 Flash 游戏舞台固定为 550×400 像素（宽高比 $11:8 = 1.375$）。为了在任意屏幕（16:9 PC 显示器、20:9 移动端屏幕、4:3 平板等）保持 100% 原版构图和视口，摄像机与 UI 统一采用动态 Letterbox/Pillarbox 黑边填充：

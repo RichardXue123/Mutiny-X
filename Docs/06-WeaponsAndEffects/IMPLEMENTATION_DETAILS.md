@@ -238,6 +238,7 @@
 | SEA-SHOT-01 | 飞行中每次点击都可投一枚弹，没有固定弹数；弹起点 `(bird.x-10,bird.y)`，继承 vx=10、weight=1 | `Seagull.as::advance` | `TryRequestPlayerShot`、`MutinySeagullFire.Spawn` | 已实现 |
 | SEA-SHOT-02 | 投弹输入在海鸥本 tick 完成移动后消费；新弹从 `bird.x-10` 创建，并在同一个 `Seagull.advance` 中立刻前进一次，之后每 tick 继续由海鸥统一推进 | `Seagull.as::advance` 中 `super.advance`、创建 shot、遍历 `shots[].advance` 的顺序 | `RequestShot`、`AdvanceOriginalTick`、`MutinySeagullFire.AdvanceOriginalTick` | 已实现；待运行验证 |
 | SEA-VIS-01 | 炸弹 `show()` 后海鸥立刻 `hide(); show()`，在相同 Character 层重新取得更高深度，因此重叠时海鸥遮住炸弹 | `Seagull.as::advance`、`Clip.as::show` | `MutinySeagullFire.Initialize` 的 SpriteRenderer 排序 | 原版静态确认；已修复，待 Unity 运行验证 |
+| SEA-ANI-01 | 飞行显示帧 1..8，帧 9 的 Action 立即跳回 `flying`，透明帧 9/10 不显示；`shot` 标签在帧 11，投弹显示 11..14 后回到帧 1 | DefineSprite 982 时间轴、frame 9 `DoAction.as`、原始帧图 | `MutinySeagull.SpawnShot/AdvanceAnimation` | 原版静态确认；已修复，待 Unity 运行验证 |
 | SEA-HIT-01 | 弹碰 Solid 爆炸 50/50；落水只销毁不爆 | 动态 shot 函数 | `MutinySeagullFire` | 已实现；待运行验证 |
 | SEA-END-01 | 鸟越过 `levelWidth*32+275` 且所有弹已结束，武器才结束 | `Seagull.as::advance/endShot` | `AdvanceOriginalTick` | 已实现 |
 | SEA-END-02 | 原版没有飞行时限；即使阻塞回合超过 Unity 的 150 tick 安全阈值，也不得强制回收正常飞行的海鸥 | `Seagull.as::advance` 仅有 `levelWidth*32+275 && shots.length<1` 完成条件 | `CanExpireFromTurnSafetyTimeout` | 已实现；待运行验证 |
@@ -255,6 +256,7 @@
 | ID | 可观察行为 | 来源 | Unity 入口 | 状态 |
 | --- | --- | --- | --- | --- |
 | VOO-TGT-01 | 初始不可 twang；先选择一个角色，随后启用 twang 并把镜头拉回 owner | `VoodooDoll.as::setTargetCharacter` | `BindTarget` + 玩家输入 | 已实现；敌我资格由输入层验收 |
+| VOO-CUR-01 | 人类未选定目标、未发射且鼠标不在娃娃自身 hitTest 内时显示 `voodooDoll` 光标；其它时刻恢复普通鼠标 | `TileSystem.as::advance`、DefineSprite 1813 `voodooDoll` 标签帧 40 | `UpdateSpecialWeaponCursor`、`MutinySpecialWeaponCursor` | 原版静态确认；已修复，待 Unity 运行验证 |
 | VOO-THR-01 | 提交时保存娃娃最初 `velocityX/Y` | `VoodooDoll.as::twang` | `m_ThrowVelocity` | 已实现 |
 | VOO-CAM-01 | 选定目标时设置 `panToCharacter=owner`；娃娃发射后 `track=true`，镜头跟随娃娃 | `VoodooDoll.as::setTargetCharacter`、`Weapon.as::twang` | `BindTarget`、`Fire`、`RequestTrackWeapon` | 已实现；待运行验证 |
 | VOO-CAM-02 | 飞行 10 tick 后在同一状态转换中设置 `panToCharacter=targetCharacter`、`track=false`；镜头到达并清除该平移目标后再等待 10 tick | `VoodooDoll.as::advance`、`TileSystem.as::advanceScrolling` | `ReleaseWeaponTracking`、`RequestPanToCharacter`、target-pan gate | 已实现；待运行验证 |
@@ -284,6 +286,7 @@
 | ID | 可观察行为 | 来源 | Unity 入口 | 状态 |
 | --- | --- | --- | --- | --- |
 | ANC-PLACE-01 | 点击只使用 X；Y 被强制改为 -200，下降前不可见 | `Anchor.as::place/constructor` | `DropAt` | 已实现 |
+| ANC-CUR-01 | 人类选择 Anchor 且未投放时显示 `anchor` 光标，投放或取消后恢复普通鼠标 | `TileSystem.as::advance`、DefineSprite 1813 `anchor` 标签帧 1 | `UpdateSpecialWeaponCursor`、`MutinySpecialWeaponCursor` | 原版静态确认；已修复，待 Unity 运行验证 |
 | ANC-PHY-01 | extent 为 left/right 48、top 96、bottom 0；每 tick 强制 vy=40 | `Anchor.as::advance` | `AdvanceOriginalTick` | 已实现 |
 | ANC-HIT-01 | 首次 Floor 接触，对 `abs(char.x-anchor.x)<48` 且 `anchor.y-64<char.y<anchor.y` 的角色造成 60 | `Anchor.as::contact` | `HitFloor` | 已实现 |
 | ANC-END-01 | 落地动画开始，hold 30 tick，再 whiteOut 10 tick，随后隐藏结束 | 同上 | impact timeline | 已实现；加色白化受 Unity 默认材质限制 |

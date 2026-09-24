@@ -78,6 +78,7 @@ namespace Mutiny.Verification
             VerifyPiecesOfEight(result);
             VerifyRumBottle(result);
             VerifyMineCameraAndLevelCleanup(result);
+            VerifyCameraFollowSmoothing(result);
             VerifySeagull(result);
             VerifyTidalWave(result);
             VerifyVoodooDoll(result);
@@ -95,6 +96,13 @@ namespace Mutiny.Verification
         {
             var result = new MutinyLevel1VerificationResult();
             VerifyCannonSmokeTrail(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunCameraFollow()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyCameraFollowSmoothing(result);
             return result;
         }
 
@@ -1210,7 +1218,13 @@ namespace Mutiny.Verification
                 input.TurnManager = manager;
                 bool selected = input.SelectWeapon("anchor");
                 MutinyAnchor anchor = input.ArmedAnchor;
+                input.UpdateSpecialWeaponCursorForVerification(owner, Vector2.zero, false);
+                result.Assert(input.SpecialWeaponCursorModeForVerification == "Anchor",
+                    "ANC-CUR-01 production selected Anchor shows its special cursor before placement");
                 bool committed = input.TryActivateClickWeaponForVerification(owner, new Vector2(96f, 300f));
+                input.UpdateSpecialWeaponCursorForVerification(owner, Vector2.zero, false);
+                result.Assert(input.SpecialWeaponCursorModeForVerification == "None",
+                    "ANC-CUR-01 production Anchor placement restores the ordinary cursor");
                 result.Assert(selected && committed && anchor != null && anchor.IsFired &&
                               Mathf.Approximately(anchor.PhysicsBody.State.X, 96f) &&
                               Mathf.Approximately(anchor.PhysicsBody.State.Y, MutinyAnchor.DropStartYPixels) &&
@@ -3585,6 +3599,17 @@ namespace Mutiny.Verification
                               bomb.PhysicsBody.State.HitsBoxes && !owner.HasWeapon("parachuteBomb") &&
                               !owner.CanThrow && !owner.CanShoot && manager.CurrentPhase == TurnPhase.ActionExecuting,
                     "WPN-08-INT-01/EFF-01 production twang preserves the original 30px/tick ParachuteBomb launch cap and Solid parameters");
+                Vector2 fanMouse = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+                input.UpdateSpecialWeaponCursorForVerification(owner, fanMouse, true);
+                MutinySpecialWeaponCursor fanCursor =
+                    input.GetComponentInChildren<MutinySpecialWeaponCursor>();
+                Rect fanRect = fanCursor.CursorRectForScreenForVerification(1100, 800);
+                result.Assert(input.SpecialWeaponCursorModeForVerification == "ParachuteFan" &&
+                              Mathf.Approximately(fanRect.width, 62f) &&
+                              Mathf.Approximately(fanRect.height, 42f) &&
+                              Mathf.Approximately(fanRect.x, fanMouse.x - 30f) &&
+                              Mathf.Approximately(fanRect.y, 800f - fanMouse.y - 20f),
+                    "CUR-SCALE-01 production Parachute Bomb fan artwork and rotation hotspot use the 550x400 canvas scale");
                 bomb.SetMobileFanStateForVerification(false, true);
                 bool shortTapFirstTick = bomb.ConsumeMobileFanActiveForVerification();
                 bool shortTapSecondTick = bomb.ConsumeMobileFanActiveForVerification();
@@ -3882,6 +3907,102 @@ namespace Mutiny.Verification
             }
         }
 
+        private static void VerifyCameraFollowSmoothing(MutinyLevel1VerificationResult result)
+        {
+            GameObject levelObject = null;
+            GameObject managerObject = null;
+            GameObject cameraObject = null;
+            GameObject seagullObject = null;
+            GameObject panTargetObject = null;
+            try
+            {
+                levelObject = new GameObject("CameraFollowVerification_Level");
+                MutinyLevelRoot level = levelObject.AddComponent<MutinyLevelRoot>();
+                level.Width = 100;
+                level.Height = 100;
+                level.WaterLevelY = -80f;
+
+                managerObject = new GameObject("CameraFollowVerification_TurnManager");
+                MutinyTurnManager manager = managerObject.AddComponent<MutinyTurnManager>();
+                manager.CurrentPhase = TurnPhase.ActionExecuting;
+
+                cameraObject = new GameObject("CameraFollowVerification_Camera");
+                cameraObject.AddComponent<Camera>();
+                MutinyCameraController camera = cameraObject.AddComponent<MutinyCameraController>();
+                camera.TurnManager = manager;
+                camera.SetLevelRootForVerification(level);
+
+                seagullObject = new GameObject("CameraFollowVerification_Seagull");
+                MutinySeagull seagull = seagullObject.AddComponent<MutinySeagull>();
+                seagull.Initialize(null);
+                seagull.PlaceAtFlightHeight(1000f);
+                seagull.PhysicsBody.SetTerrain(new string[100, 100], 100, 100);
+                for (int tick = 0; tick < 60; tick++)
+                    seagull.PhysicsBody.AdvanceSimulationTick();
+
+                camera.TrackWeapon(seagull);
+                // The next production physics frame moves x=300 -> 310. Its
+                // presentation starts at the preceding completed tick, x=300.
+                seagull.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                float trackX = 300f / MutinyPhysics.PixelsPerUnit;
+                float birdY = -1000f / MutinyPhysics.PixelsPerUnit;
+                cameraObject.transform.position = new Vector3(trackX, birdY, -10f);
+                camera.AdvanceCameraForVerification(MutinyPhysics.TimeStep);
+                bool seagullOffset = camera.FindActionTargetForVerification() == seagull.transform &&
+                    Mathf.Abs(cameraObject.transform.position.x - trackX) < 0.001f &&
+                    cameraObject.transform.position.y < birdY - 28f / MutinyPhysics.PixelsPerUnit;
+                result.Assert(seagullOffset,
+                    "CAM-TRACK-01 production camera tracks Seagull with original trackY=y+100 rather than the generic vertical offset");
+
+                cameraObject.transform.position = new Vector3(trackX,
+                    birdY - 50f / MutinyPhysics.PixelsPerUnit, -10f);
+                camera.AdvanceCameraForVerification(0.02f);
+                float beforeHalfTick = cameraObject.transform.position.x;
+                seagull.PhysicsBody.AdvanceSimulationFrameForVerification(0.02f);
+                camera.AdvanceCameraForVerification(0.02f);
+                float halfTick = cameraObject.transform.position.x;
+                float authoritativeAtHalfTick = seagull.PhysicsBody.State.X;
+                seagull.PhysicsBody.AdvanceSimulationFrameForVerification(0.02f);
+                camera.AdvanceCameraForVerification(0.02f);
+                float nextTick = cameraObject.transform.position.x;
+                result.Assert(Mathf.Abs(beforeHalfTick - trackX) < 0.001f &&
+                              Mathf.Abs(halfTick - (305f / MutinyPhysics.PixelsPerUnit)) < 0.001f &&
+                              Mathf.Abs(nextTick - (310f / MutinyPhysics.PixelsPerUnit)) < 0.001f &&
+                              Mathf.Abs(authoritativeAtHalfTick - 310f) < 0.001f &&
+                              Mathf.Abs(seagull.PhysicsBody.State.X - 320f) < 0.001f,
+                    "CAM-SMOOTH-01 production 25 Hz physics and render-frame camera follow advance 300 -> 305 -> 310 px without changing authoritative 310 -> 320 px ticks");
+
+                camera.TrackWeapon(null);
+                manager.CurrentPhase = TurnPhase.TurnActive;
+                panTargetObject = new GameObject("CameraFollowVerification_WaterTarget");
+                panTargetObject.transform.position = new Vector3(13.125f, -80f, 0f);
+                camera.PanToTarget(panTargetObject.transform);
+                cameraObject.transform.position = new Vector3(10f, -76.25f, -10f);
+                camera.AdvanceCameraForVerification(MutinyPhysics.TimeStep);
+                float horizontalStep = (cameraObject.transform.position.x - 10f) * MutinyPhysics.PixelsPerUnit;
+                result.Assert(horizontalStep > 23f && horizontalStep < 26f &&
+                              Mathf.Abs(cameraObject.transform.position.y + 76.25f) < 0.001f,
+                    "CAM-TRACK-01 production pan moves toward the unclamped water target before clamping the camera, within the original 30 px/tick cap");
+            }
+            finally
+            {
+                DestroyNow(panTargetObject);
+                DestroyNow(seagullObject);
+                DestroyNow(cameraObject);
+                DestroyNow(managerObject);
+                DestroyNow(levelObject);
+            }
+        }
+
+        private static bool MatchesSeagullFrame(MutinySeagull seagull, int frame)
+        {
+            Sprite expected = Resources.Load<Sprite>($"Art/Weapons/Seagull/{frame}");
+            Sprite actual = seagull != null && seagull.SpriteRenderer != null
+                ? seagull.SpriteRenderer.sprite
+                : null;
+            return expected != null && actual != null && actual.texture == expected.texture;
+        }
+
         private static void VerifySeagull(MutinyLevel1VerificationResult result)
         {
             GameObject teamObject = null;
@@ -3972,6 +4093,24 @@ namespace Mutiny.Verification
                 {
                     result.Assert(false, "SEA-VIS-01 production shot exists for rendering-order verification");
                 }
+
+                bool seagullFramesMatch = MatchesSeagullFrame(seagull, 11);
+                for (int frame = 12; frame <= 14; frame++)
+                {
+                    seagull.PhysicsBody.AdvanceSimulationTick();
+                    seagullFramesMatch &= MatchesSeagullFrame(seagull, frame);
+                }
+                seagull.PhysicsBody.AdvanceSimulationTick();
+                seagullFramesMatch &= MatchesSeagullFrame(seagull, 1);
+                for (int frame = 2; frame <= 8; frame++)
+                {
+                    seagull.PhysicsBody.AdvanceSimulationTick();
+                    seagullFramesMatch &= MatchesSeagullFrame(seagull, frame);
+                }
+                seagull.PhysicsBody.AdvanceSimulationTick();
+                seagullFramesMatch &= MatchesSeagullFrame(seagull, 1);
+                result.Assert(seagullFramesMatch && seagull.SpriteRenderer.enabled,
+                    "SEA-ANI-01 production shot renders 11-14 then flight 1-8 without displaying transparent frames 9/10");
 
                 firstShotObject = shots.Length > 0 ? shots[0].gameObject : null;
                 if (shots.Length > 0)
@@ -4170,6 +4309,7 @@ namespace Mutiny.Verification
                 ownerState.Weight = 0f;
                 owner.PhysicsBody.State = ownerState;
                 owner.WeaponInventory["voodooDoll"] = 3;
+                owner.WeaponInventory["anchor"] = 1;
                 playerTeam.RegisterCharacter(owner);
                 playerTeam.SelectCharacter(owner);
 
@@ -4186,6 +4326,43 @@ namespace Mutiny.Verification
                 inputObject = new GameObject("VoodooVerification_Input");
                 MutinyPlayerInput input = inputObject.AddComponent<MutinyPlayerInput>();
                 input.TurnManager = turnManager;
+                input.GameCamera = unityCamera;
+                Vector2 cursorScreen = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+                bool anchorSelected = input.SelectWeapon("anchor");
+                input.UpdateSpecialWeaponCursorForVerification(owner, cursorScreen, false);
+                Texture2D anchorCursor = input.SpecialWeaponCursorTextureForVerification;
+                result.Assert(anchorSelected && input.SpecialWeaponCursorModeForVerification == "Anchor" &&
+                              anchorCursor != null && anchorCursor.name == "OriginalCursor_Anchor" &&
+                              anchorCursor.width == 31 && anchorCursor.height == 22,
+                    "ANC-CUR-01 production Anchor selection shows the original 31x22 cursor asset");
+                MutinySpecialWeaponCursor specialCursor =
+                    input.GetComponentInChildren<MutinySpecialWeaponCursor>();
+                Rect anchorRect = specialCursor.CursorRectForScreenForVerification(1100, 800);
+                result.Assert(Mathf.Approximately(anchorRect.width, 62f) &&
+                              Mathf.Approximately(anchorRect.height, 44f) &&
+                              Mathf.Approximately(anchorRect.x, cursorScreen.x - 30f) &&
+                              Mathf.Approximately(anchorRect.y, 800f - cursorScreen.y - 22f),
+                    "CUR-SCALE-01 production Anchor cursor artwork and hotspot double with a 1100x800 canvas");
+                input.CancelWeaponSelection();
+                input.UpdateSpecialWeaponCursorForVerification(owner, cursorScreen, false);
+                result.Assert(input.SpecialWeaponCursorModeForVerification == "None",
+                    "ANC-CUR-01 cancelling Anchor selection restores the ordinary cursor");
+
+                bool voodooArmed = input.SelectWeapon("voodooDoll");
+                Vector3 dollCenter = input.ArmedVoodooDoll != null
+                    ? input.ArmedVoodooDoll.SpriteRenderer.bounds.center
+                    : Vector3.zero;
+                Vector2 overDollScreen = unityCamera.WorldToScreenPoint(dollCenter);
+                Vector2 awayFromDollScreen = unityCamera.WorldToScreenPoint(dollCenter + Vector3.right * 2f);
+                input.UpdateSpecialWeaponCursorForVerification(owner, awayFromDollScreen, false);
+                Texture2D voodooCursor = input.SpecialWeaponCursorTextureForVerification;
+                result.Assert(voodooArmed && input.SpecialWeaponCursorModeForVerification == "VoodooDoll" &&
+                              voodooCursor != null && voodooCursor.name == "OriginalCursor_VoodooDoll" &&
+                              voodooCursor.width == 31 && voodooCursor.height == 22,
+                    "VOO-CUR-01 production untargeted Voodoo Doll shows the original 31x22 cursor away from the doll");
+                input.UpdateSpecialWeaponCursorForVerification(owner, overDollScreen, false);
+                result.Assert(input.SpecialWeaponCursorModeForVerification == "None",
+                    "VOO-CUR-01 hovering the Voodoo Doll body restores the ordinary cursor");
                 bool selectedAt30 = input.SelectWeapon("voodooDoll") &&
                                       input.TrySelectVoodooTargetForVerification(
                                           playerTeam, owner, MutinyPhysics.PixelToUnity(0f, 0f));
@@ -4200,6 +4377,9 @@ namespace Mutiny.Verification
                 result.Assert(selectedAt29 && input.ArmedVoodooDoll != null &&
                               input.ArmedVoodooDoll.TargetCharacter == target,
                     "WPN-13-INT-02 production target selection accepts an enemy at 29px and exposes its target marker state");
+                input.UpdateSpecialWeaponCursorForVerification(owner, awayFromDollScreen, false);
+                result.Assert(input.SpecialWeaponCursorModeForVerification == "None",
+                    "VOO-CUR-01 binding a target restores the ordinary cursor before twang aiming");
                 input.CancelWeaponSelection();
                 result.Assert(owner.GetAmmunition("voodooDoll") == 3,
                     "WPN-13-INT-04 production cancellation destroys an unfired doll without consuming inventory");
