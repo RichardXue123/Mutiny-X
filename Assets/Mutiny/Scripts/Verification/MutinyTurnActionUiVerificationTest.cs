@@ -52,6 +52,7 @@ namespace Mutiny.Verification
             VerifyCharacterCollisionAudio(result);
             VerifyCharacterThrowAudio(result);
             VerifyAirDrops(result);
+            VerifyTurnNotice(result);
             VerifyLandDeath(result);
             VerifyCharacterTimeline(result);
             VerifyFrontendFlow(result);
@@ -1958,6 +1959,8 @@ namespace Mutiny.Verification
 
                 turnManagerObject = new GameObject("AirDropVerification_TurnManager");
                 MutinyTurnManager turnManager = turnManagerObject.AddComponent<MutinyTurnManager>();
+                MutinyIngameTextArea ingameText = managerObject.AddComponent<MutinyIngameTextArea>();
+                ingameText.Initialize(turnManager, null);
                 cameraObject = new GameObject("AirDropVerification_Camera");
                 cameraObject.AddComponent<Camera>();
                 MutinyCameraController camCtrl = cameraObject.AddComponent<MutinyCameraController>();
@@ -2015,6 +2018,12 @@ namespace Mutiny.Verification
                 result.Assert(character.HasWeapon("banana") && chest.RemainingContents == 0 &&
                               chest.CurrentVisualFrame == 44,
                     "AIR-05 first weapon is granted after 10 ticks and starts weapon_out frame 44");
+                result.Assert(ingameText.PendingLineCount == 1 &&
+                              ingameText.VisibleText == null,
+                    "TXT-CHEST-01 production chest collection queues one text line on the exact weapon grant tick");
+                ingameText.AdvanceOriginalTick();
+                result.Assert(ingameText.VisibleText == "collected banana",
+                    "TXT-CHEST-02 queued notice uses the original weapon-select display name");
 
                 for (int tick = 0; tick < 3; tick++)
                     chest.AdvanceOriginalTick();
@@ -2046,6 +2055,66 @@ namespace Mutiny.Verification
                 DestroyNow(managerObject);
                 DestroyNow(objectsObject);
                 DestroyNow(rootObject);
+            }
+        }
+
+        private static void VerifyTurnNotice(MutinyLevel1VerificationResult result)
+        {
+            GameObject managerObject = null;
+            GameObject team1Object = null;
+            GameObject team2Object = null;
+            GameObject character1Object = null;
+            GameObject character2Object = null;
+            try
+            {
+                team1Object = new GameObject("TextVerification_PlayerTeam");
+                MutinyTeam team1 = team1Object.AddComponent<MutinyTeam>();
+                team1.TeamNumber = 1;
+                team2Object = new GameObject("TextVerification_ComputerTeam");
+                MutinyTeam team2 = team2Object.AddComponent<MutinyTeam>();
+                team2.TeamNumber = 2;
+                team2.IsAiControlled = true;
+                character1Object = new GameObject("TextVerification_Player");
+                team1.RegisterCharacter(character1Object.AddComponent<MutinyCharacter>());
+                character2Object = new GameObject("TextVerification_Computer");
+                team2.RegisterCharacter(character2Object.AddComponent<MutinyCharacter>());
+
+                managerObject = new GameObject("TextVerification_Manager");
+                MutinyTurnManager manager = managerObject.AddComponent<MutinyTurnManager>();
+                manager.Team1 = team1;
+                manager.Team2 = team2;
+                MutinySpeechController speech = managerObject.AddComponent<MutinySpeechController>();
+                speech.Initialize(manager);
+                MutinyIngameTextArea textArea = managerObject.AddComponent<MutinyIngameTextArea>();
+                textArea.Initialize(manager, speech);
+                manager.Initialize(team1, team2);
+
+                textArea.AdvanceOriginalTick();
+                result.Assert(textArea.PendingLineCount == 1 && textArea.VisibleText == null,
+                    "TXT-TURN-01 starting the player turn queues the original line while the captain introduction is pending");
+
+                speech.Initialize(null);
+                textArea.AdvanceOriginalTick();
+                result.Assert(textArea.VisibleText == "Player 1, take your turn" &&
+                              textArea.ClipY < 400f &&
+                              Resources.Load<Texture2D>("UI/Fonts/dangle_font") != null,
+                    "TXT-TURN-02 after speech the stage-centered DangleFont notice rises into view");
+
+                textArea.SayCollected("tidalWave");
+                for (int tick = 0; tick < 94; tick++)
+                    textArea.AdvanceOriginalTick();
+                textArea.AdvanceOriginalTick();
+                result.Assert(textArea.VisibleText == "collected tidal wave" &&
+                              textArea.PendingLineCount == 0,
+                    "TXT-QUEUE-01 later collection notices wait their turn and retain the original display name");
+            }
+            finally
+            {
+                DestroyNow(managerObject);
+                DestroyNow(character1Object);
+                DestroyNow(character2Object);
+                DestroyNow(team1Object);
+                DestroyNow(team2Object);
             }
         }
 

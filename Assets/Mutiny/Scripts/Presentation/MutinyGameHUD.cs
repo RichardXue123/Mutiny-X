@@ -79,6 +79,7 @@ namespace Mutiny.Presentation
         public MutinyPlayerInput PlayerInput;
         public MutinyLevelController LevelController;
         public MutinySpeechController Speech;
+        public MutinyIngameTextArea IngameText;
 
         private bool m_ShowLevelSelect = false;
         private GUIStyle m_TitleStyle;
@@ -634,6 +635,7 @@ namespace Mutiny.Presentation
             DrawOriginalBattleHud();
             DrawOriginalCornerControls();
             DrawBottomBar();
+            DrawIngameText();
 
             if (TurnManager != null && TurnManager.CurrentPhase == TurnPhase.GameOver)
             {
@@ -644,6 +646,30 @@ namespace Mutiny.Presentation
             {
                 DrawLevelSelectModal();
             }
+        }
+
+        private void DrawIngameText()
+        {
+            if (IngameText == null || !IngameText.IsVisible ||
+                string.IsNullOrEmpty(IngameText.VisibleText))
+                return;
+
+            float scale = Mathf.Min(Screen.width / OriginalCanvasWidth,
+                Screen.height / OriginalCanvasHeight);
+            float left = (Screen.width - OriginalCanvasWidth * scale) * 0.5f;
+            float top = (Screen.height - OriginalCanvasHeight * scale) * 0.5f;
+            Matrix4x4 oldMatrix = GUI.matrix;
+            GUI.matrix = Matrix4x4.TRS(new Vector3(left, top, 0f),
+                Quaternion.identity, new Vector3(scale, scale, 1f));
+
+            // Stage instance "text" is at (275,400); its textField's DangleFont
+            // child is placed 10 px below the clip origin and centered on x=275.
+            GUI.BeginGroup(new Rect(0f, 0f, OriginalCanvasWidth, OriginalCanvasHeight));
+            MutinyBitmapFont.DrawDangleText(
+                new Rect(25f, IngameText.ClipY + 10f, 500f, 13f),
+                IngameText.VisibleText, Color.white, TextAnchor.MiddleCenter, 0, 13);
+            GUI.EndGroup();
+            GUI.matrix = oldMatrix;
         }
 
         private void DrawSpeechBubble()

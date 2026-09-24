@@ -47,6 +47,7 @@ namespace Mutiny.Presentation
         private Vector3 m_BubbleWorldPosition;
 
         public bool HasActiveBubble => m_Active;
+        public bool HasPendingOrActiveSpeech => m_IntroPending || m_Active;
         public bool IsBubbleVisible => m_Active && m_StartTicks == 0;
         public bool IsPlayingEndingLine => m_Active && m_EndingLine;
         public Vector3 BubbleWorldPosition => m_BubbleWorldPosition;
