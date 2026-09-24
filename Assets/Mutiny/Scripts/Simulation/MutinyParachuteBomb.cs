@@ -144,13 +144,9 @@ namespace Mutiny.Simulation
 
             // ParachuteBomb.advanceMotion performs these operations before
             // Solid.advanceMotion adds weight and moves/collides.
-            if (PhysicsBody.State.VelocityY > 1f)
-            {
-                PhysicsBody.State.VelocityY -= 2f;
-                if (PhysicsBody.State.VelocityY < 1f)
-                    PhysicsBody.State.VelocityY = 1f;
-            }
-            PhysicsBody.State.VelocityX *= HorizontalDragPerTick;
+            PhysicsBodyState state = PhysicsBody.State;
+            ApplyOriginalAirMotion(ref state);
+            PhysicsBody.State = state;
 
             if (!ChuteOpen && PhysicsBody.State.VelocityY > ChuteOpenVelocityThreshold)
             {
@@ -180,14 +176,30 @@ namespace Mutiny.Simulation
             else
                 AdvanceChuteAnimation();
 
-            if (PhysicsBody.State.Y < CeilingClampPixels)
+            PhysicsBodyState state = PhysicsBody.State;
+            if (ApplyOriginalCeilingClamp(ref state))
             {
-                PhysicsBody.State.Y = CeilingClampPixels;
-                if (PhysicsBody.State.VelocityY < 0f)
-                    PhysicsBody.State.VelocityY = 0f;
+                PhysicsBody.State = state;
                 SyncTransformFromState();
                 MutinyDebugLog.Info("ParachuteBomb", "clamped at original y=-300 ceiling", this);
             }
+        }
+
+        internal static void ApplyOriginalAirMotion(ref PhysicsBodyState state)
+        {
+            if (state.VelocityY > 1f)
+                state.VelocityY = Mathf.Max(1f, state.VelocityY - 2f);
+            state.VelocityX *= HorizontalDragPerTick;
+        }
+
+        internal static bool ApplyOriginalCeilingClamp(ref PhysicsBodyState state)
+        {
+            if (state.Y >= CeilingClampPixels)
+                return false;
+            state.Y = CeilingClampPixels;
+            if (state.VelocityY < 0f)
+                state.VelocityY = 0f;
+            return true;
         }
 
         private void EmitOriginalSmokeTrail()

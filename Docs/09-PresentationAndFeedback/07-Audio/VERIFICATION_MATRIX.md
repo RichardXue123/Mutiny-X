@@ -10,14 +10,14 @@
 
 ## 核心与音乐
 
-| 规则 | 原版来源 | Unity 入口 | 验收用例 | 实际结果（2026-09-19） |
+| 规则 | 原版来源 | Unity 入口 | 验收用例 | 实际结果（2026-09-24） |
 | --- | --- | --- | --- | --- |
 | AUD-CORE-001 未知/关闭 SFX 静默 | `SfxManager.as:9-15` | `MutinyAudioManager.PlaySFX` | 从生产事件请求有效/无效 ID；关闭 SFX 后重试；核对 source 与诊断 | 已实现开关与静默；未知 ID 无诊断；待运行验证 |
 | AUD-CORE-002 同/异 ID 可重触发 | SWF XML SFX wrappers, `syncNoMultiple=false` | `AudioSource.PlayOneShot` | 同 tick 连播相同与不同 ID，录制输出/voice 数 | 静态实现可能支持；待运行验证 |
 | AUD-CORE-003 原版增益包络 | SWF XML `SOUNDENVELOPE` | 当前只有 `volumeScale` | 对 12 个带包络 SFX 测左右 RMS/峰值 | 已知差异，未实现映射 |
 | AUD-MUS-001 默认与持久化 | `MusicController.as:11-19`; `NitromeGame.as:482-534` | `Awake`; `MutinySaveSystem` | 清空设置启动；分别切换并重启 | 已实现；现有测试修改字段验证持久化，未做完整重启听音 |
 | AUD-MUS-002 菜单/战斗切换与循环 | `MusicController.as:21-56`; root frames 40/41/91/101/111/121 | Frontend、`PlayMusic` | 标题→关卡→菜单；回合管理器后台初始化不得覆盖主界面曲目；每首播至结尾 | 已修复主界面覆盖问题并新增 `AUDIO-MUSIC-T01`；完整循环仍待运行验证 |
-| AUD-MUS-003 关闭后从头恢复当前逻辑曲目 | `MusicController.as:63-92` | `ToggleMusic` | 战斗中关闭→回菜单→开启，应从菜单曲首播放 | 已知差异：会恢复旧 clip |
+| AUD-MUS-003 关闭后从头恢复当前逻辑曲目 | `MusicController.as:63-92` | `PlayMusic`; `MutinyGameHUD.ToggleCornerMusic`; `ToggleMusic` | 战斗中关闭→静音状态请求菜单曲→按音乐按钮，应立即从菜单曲首播放 | 已修复并新增 `AUDIO-MUSIC-T02`；代码编译通过，Unity Play Mode 听音待运行 |
 | AUD-MUS-004 SFX/音乐开关互不影响 | `MusicController.as:94-119` | `ToggleSFX`; `ToggleMusic` | 分别切换并触发另一 bus | 已实现；待运行听音 |
 
 ## 玩法 SFX
@@ -74,6 +74,7 @@
 现有缺陷回归：
 
 - **AUDIO-MUSIC-T01**：先通过音频生产入口选择 `menu_music`，再执行真实 `MutinyTurnManager.Initialize/StartGame`；断言当前 clip 仍为 `menu_music`。该用例能直接检测本次主界面被战斗音乐覆盖的缺陷。
+- **AUDIO-MUSIC-T02**：通过生产入口播放战斗曲并关闭音乐，静音期间请求菜单曲，再调用 HUD 音乐按钮的 `ToggleCornerMusic`；断言目标 clip 已在静音时更新，且运行态按键打开后立即进入播放。
 
 ## 本轮执行记录
 

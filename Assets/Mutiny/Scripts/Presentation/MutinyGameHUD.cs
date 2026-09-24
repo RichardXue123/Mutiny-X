@@ -701,9 +701,9 @@ namespace Mutiny.Presentation
             // DefineSprite 465: textHolder at (-75,-21), DangleFont at (-25,-10)
             // relative to the clip registration point. Keep the same visible field
             // for typing and click-to-complete (the Flash mouseDown used a wrong path).
-            MutinyBitmapFont.DrawDangleText(
+            MutinyBitmapFont.DrawSpeechText(
                 new Rect(x - 100f, y - 31f, 220f, 92f), Speech.VisibleText,
-                new Color(0.36f, 0.36f, 0.36f), TextAnchor.UpperLeft, 0, 13);
+                TextAnchor.UpperLeft, 0, 13);
 
             Event evt = Event.current;
             if (evt != null && evt.type == EventType.MouseDown && evt.button == 0 &&

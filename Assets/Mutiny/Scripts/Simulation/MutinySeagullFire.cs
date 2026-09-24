@@ -33,7 +33,7 @@ namespace Mutiny.Simulation
         private void Awake()
         {
             SpriteRenderer renderer = GetComponent<SpriteRenderer>();
-            renderer.sortingOrder = MutinyWeapon.WeaponSortingOrder + 1;
+            renderer.sortingOrder = MutinyWeapon.WeaponSortingOrder - 1;
             Texture2D texture = Resources.Load<Texture2D>("Art/Weapons/SeagullFire/1");
             if (texture != null)
             {
@@ -55,6 +55,14 @@ namespace Mutiny.Simulation
         {
             m_Parent = parent;
             m_Owner = parent != null ? parent.Owner : null;
+            if (parent != null && parent.SpriteRenderer != null)
+            {
+                // Seagull.as shows the shot, then hides and re-shows the bird in
+                // the same Character layer, placing the bird above its shot.
+                SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+                renderer.sortingLayerID = parent.SpriteRenderer.sortingLayerID;
+                renderer.sortingOrder = parent.SpriteRenderer.sortingOrder - 1;
+            }
             m_PhysicsBody.State = PhysicsBodyState.CreateDefault(position.x, position.y);
             m_PhysicsBody.State.LeftExtent = OriginalExtent;
             m_PhysicsBody.State.RightExtent = OriginalExtent;
@@ -65,12 +73,30 @@ namespace Mutiny.Simulation
             // Seagull.as assigns hitsBoxes=true to every spawned fire projectile.
             m_PhysicsBody.State.HitsBoxes = true;
             m_PhysicsBody.SetVelocity(velocityX, 0f);
+            // In Flash these children are advanced by Seagull.advance, not by a
+            // separate global update. Parent ownership guarantees one step per
+            // bird tick and prevents Unity component order from adding a delay or
+            // a second step in the spawn frame.
+            m_PhysicsBody.IsActive = false;
 
             if (parent != null && parent.PhysicsBody != null)
             {
                 parent.PhysicsBody.TryGetTerrain(out string[,] terrain, out int width, out int height);
                 m_PhysicsBody.SetTerrain(terrain, width, height);
                 m_PhysicsBody.WaterPixelY = parent.PhysicsBody.WaterPixelY;
+            }
+        }
+
+        public void AdvanceOriginalTick()
+        {
+            if (m_Ended || m_PhysicsBody == null)
+                return;
+
+            m_PhysicsBody.AdvanceSimulationTick();
+            if (!m_Ended && m_PhysicsBody.SyncTransform)
+            {
+                transform.position = MutinyPhysics.PixelToUnity(
+                    m_PhysicsBody.State.X, m_PhysicsBody.State.Y);
             }
         }
 

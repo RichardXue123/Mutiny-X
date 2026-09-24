@@ -24,13 +24,26 @@ Unity 主要用 PNG 序列 + `SpriteRenderer` 复现这些时间轴，以 `Mutin
 | VIS-SMOKE-01 | Cannonball、CherryBomb、Dynamite、ParachuteBomb（未开伞）、RumBottle 的 `advance` 路径每 tick 创建 `cannonSmokeTrail`；烟迹 frame 19 销毁 | 五个武器 AS2；symbol 866 frame 19 | `MutinyRumBottleSmokeTrail`；五种武器已调用 | 核对 19 帧原版资源、五种武器逐 tick 出烟、装备阶段出烟及开伞后停烟 | 已接入；待 Unity Play Mode 验证 |
 | VIS-FLAME-01 | sweepingFlame 创建即命中附近角色，frame 4 沿地表传播 8 px，frame 11 销毁 | `SweepingFlame.as`；symbol 905 frame 4/11 | `MutinySweepingFlame` | RumBottle 地面碰撞生成左右两条，逐 tick 核对命中/传播/销毁 | 已实现；待 Unity 运行验证 |
 | VIS-SPLASH-02 | 已发射且未完成的普通武器在注册点跨水线时生成 splash；水线穿越不调用 `contact`，CherryBomb 不因入水而爆炸；Boulder/Parachute Bomb/金币按各自原版 `advance` 保留专用调用，Cannonball 不走继承的 `Weapon.advance` | `Weapon.as::advance`、`Solid.as::splashCheck`、`CherryBomb.as::advance`、`Cannonball.as::advance` | `MutinyWeapon.AdvanceInheritedSplashCheck`、各武器 `AdvanceSplashCheck` | 对投射物分别测试相等水线、入水、出水、地形碰撞 | 已接入；待 Unity Play Mode 验证 |
+| VIS-WPN-IDLE-01 | 可见武器在 ready/idle 阶段仍按原版时间轴播放：Cherry Bomb 1..4、Dynamite `lit` 1..4、Rum Bottle 1..12、Parachute Bomb 闭伞引信 1..4；动作帧不作为额外可见帧 | symbols 844/881/918/939；`Dynamite.as` 构造函数；symbol 881 frame 5/6 actions；symbol 939/930 | `MutinyCherryBomb`、`MutinyDynamite.AdvanceOriginalPresentationTick`、`MutinyRumBottle`、`MutinyParachuteBomb` | 武器保持 `IsFired=false`，推进生产 tick，核对帧循环；Dynamite 入水后固定 frame 6 | 已实现；Dynamite 定向 Unity 回归 2/2 通过 |
+
+## Ready / idle 动画审计
+
+| 武器 | 原版 ready 状态 | Unity 审计结果 |
+| --- | --- | --- |
+| Cherry Bomb | 4 帧主时间轴自动循环 | 已在未发射状态播放 |
+| Dynamite | 构造函数 `gotoAndPlay("lit")`；可见帧 1..4，frame 5 跳回 `lit`；入水 `gotoAndStop("unlit")` 到 frame 6 | 已移除 `IsFired` 门控并排除动作帧 5；定向 Unity 回归通过 |
+| Rum Bottle | 12 帧主时间轴自动循环 | 已由 25 Hz 表现 tick 在 ready 状态播放 |
+| Parachute Bomb | 外层 frame 1 停止，但嵌套 fuse 仍以 4 帧循环 | 已在闭伞 ready 状态播放 |
+| Banana、Boulder、Cannon、Pieces of Eight、Voodoo Doll | 单帧主体；变化来自交互、位移或发射后状态 | 不需要 idle 帧播放器 |
+| Mine、Anchor、Wooden Crate、Gunpowder Barrel | 原版显式停在初始帧，事件发生后才播放 | 不需要 idle 帧播放器 |
+| Seagull、Tidal Wave | ready 阶段主体隐藏/只显示选择辅助；提交后才显示动画主体 | 不需要可见武器 idle 帧播放器 |
 
 ## 武器时间轴盘点
 
 | 武器/效果 | 原版可观察动画 | Unity 实现 | 状态 |
 | --- | --- | --- | --- |
 | Cherry Bomb | 4 帧弹体循环 + 每 tick 烟迹 + 80/40 explosion | `MutinyCherryBomb` 循环 4 帧，未结束时留烟，碰撞生成 explosion | 烟迹已接入；待运行验证 |
-| Dynamite | `lit` 循环；入水切 `unlit`；每 tick 烟迹 | `MutinyDynamite` 加载 lit 1..5 与 unlit 6，未结束时留烟 | 烟迹已接入；入水 dud 是逻辑差异 |
+| Dynamite | `lit` 可见帧 1..4 循环，frame 5 跳回；入水停在 `unlit` frame 6；每 tick 烟迹 | `MutinyDynamite` 以生产物理 tick 推进 lit 帧，未结束时留烟 | ready 动画定向回归通过；烟迹待运行验证；入水 dud 仍是逻辑差异 |
 | Banana / Pieces of Eight / Voodoo Doll | 主体是单帧，动态来自位移/旋转/透明度与爆炸 | 对应 `Mutiny*` 类使用单 Sprite；Voodoo 调 alpha | 已实现，待运行对照 |
 | Boulder | 外层 overlay + 内层 rotating 复合旋转 | `MutinyBoulder` 用两个 SpriteRenderer 分层 | 已实现，待层级/角度对照 |
 | Cannon / Cannonball | 炮身、pin、range circle 分离；炮弹在炮身上层并留烟 | `MutinyCannon` 分层组件；`MutinyCannonball` sortingOrder+1、逐 tick 留烟 | 烟迹已接入；待运行验证 |
@@ -56,5 +69,5 @@ Unity 主要用 PNG 序列 + `SpriteRenderer` 复现这些时间轴，以 `Mutin
 
 - 静态确认：爆炸、扫火、烟迹、Mine、Parachute Bomb、Seagull、Tidal Wave、箱体与 Anchor 的关键帧脚本。
 - 已实现：主要帧播放器与生产事件连接；本轮修正水花帧长和跨线调用。
-- 实际测试通过：本轮未运行 Unity，不新增通过记录。
+- 实际测试通过：`VIS-WPN-IDLE-01/DYN-ANI-01/02` 定向 Unity batchmode 回归 2/2 通过。
 - 待运行验证：通用效果与上表所有时间轴的生产入口逐帧对照。

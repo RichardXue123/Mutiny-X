@@ -70,8 +70,10 @@
 | --- | --- | --- | --- |
 | WPN-AIM-01 | 30 px 命中半径内才进入拉拽；松开立即提交 | `TileSystem.as::mouseDown/mouseUp` | 已实现；待运行验证 |
 | WPN-AIM-02 | 拉力系数 0.25，预测 15 tick，默认上限 20 | `Solid.as::twang/drawTwangLine` | 已实现 |
-| WPN-AIM-03 | Banana、ParachuteBomb、RumBottle 的实际提交上限是 30 | 三个武器构造器 + `Solid.twang` | ParachuteBomb 已实现；Banana 本轮修复；RumBottle 当前仍错误截到 20 |
+| WPN-AIM-03 | Banana、ParachuteBomb、RumBottle 的实际提交上限是 30 | 三个武器构造器 + `Solid.twang` | 三者均已实现；待 Unity 运行验证 |
 | WPN-AIM-04 | 放置型武器不进入通用 twang；各自消费点击/拖动 | `TileSystem.as` 与专用类 | 已实现 |
+| WPN-VEL-01 | 仅普通拉拽受默认 20 上限；Banana、ParachuteBomb、RumBottle 各为 30，预览与提交一致 | `Solid.as::twang/drawTwangLine`、三种武器构造器 | `MutinyWeapon.Twang`、`MutinyWeaponFactory.GetTwangMaxForce` 已实现；待运行验证 |
+| WPN-VEL-02 | 直接 `Weapon.fire(vx,vy)` 不限速；`Weapon.release` 的 20 限速属于另一种拖拽提交路径 | `Weapon.as::fire/release`、`TileSystem.as::mouseUp` | `MutinyWeapon.Fire` 已修复；待运行验证 |
 
 ### 4.2 Weapon 公共状态
 
@@ -136,6 +138,8 @@
 | --- | --- | --- | --- | --- |
 | DYN-PHY-01 | extent 11、friction 1.7；飞行时旋转 `vx*2` | `Dynamite.as` | `MutinyDynamite` + rotation rules | 已实现 |
 | DYN-END-01 | `vx==0 && abs(vy)<.2` 时生成 250/70 爆炸 | `Dynamite.as::advanceMotion` | `Update → Explode` | 已实现 |
+| DYN-ANI-01 | 构造后无论是否已发射都播放 `lit`；可见 frame 1..4，frame 5 动作跳回 frame 1 | `Dynamite.as::Dynamite`；symbol 881 frame 5 | `MutinyDynamite.AdvanceOriginalPresentationTick` | ready 状态推进生产物理 tick，验证 1→2→3→4→1 | 已实现；Unity 定向回归通过 |
+| DYN-ANI-02 | 入水停在 `unlit` frame 6 | `Dynamite.as::advanceMotion`；symbol 881 frame 6 | `MutinyDynamite.OnWaterSubmerged` | 真实水线进入后继续推进，画面保持 frame 6 | 已实现；Unity 定向回归通过 |
 | DYN-WATER-01 | `y>water.y` 只执行 `gotoAndStop("unlit")`；源码没有“熄灭后禁止爆炸”分支 | `Dynamite.as::advanceMotion` | 当前入水后作为 dud 自动结束 | 已知差异 |
 | DYN-FX-01 | 未结束期间每 tick 生成烟迹，源码没有 `fired` 条件 | `Dynamite.as::advance` | `MutinyDynamite.EmitOriginalSmokeTrail`，装备阶段也生成 | 已接入；待 Unity 运行验证 |
 
@@ -218,8 +222,10 @@
 
 | ID | 可观察行为 | 来源 | Unity 入口 | 状态 |
 | --- | --- | --- | --- | --- |
-| RUM-PHY-01 | extent 14、twangMaxForce 30；飞行旋转 `vx*2` | `RumBottle.as` | `MutinyRumBottle` | 旋转已实现；提交错误截为 20 |
+| RUM-PHY-01 | extent 14、twangMaxForce 30；正常松手走 `TileSystem.mouseUp → Weapon.twang → Solid.twang`，实际初速上限 30；飞行旋转 `vx*2` | `RumBottle.as`、`TileSystem.as::mouseUp`、`Solid.as::twang` | `MutinyRumBottle.Twang` | 已实现；待运行验证 |
+| RUM-TRAJ-01 | 预览和正常松手共用 30 上限及逐 tick 先加 weight=1 再移动的轨迹 | `Solid.as::drawTwangLine/twangPrediction/advanceMotion` | `MutinyTrajectoryRenderer`、`MutinyRumBottle.Twang`、`MutinyPhysicsBody.AdvanceSimulationTick` | 已实现；待运行验证 |
 | RUM-HIT-01 | 任一 Solid 接触产生 80/25 爆炸；只有 `side==FLOOR` 才生成火焰 | `RumBottle.as::contact` | `Explode(side)` | 已实现 |
+| RUM-HIT-02 | `Solid.advanceMotion` 先处理纵向碰撞并立即调用 `contact`，再处理横向位移；地面/天花板爆炸中心和地面火焰格取横移前 X，墙面碰撞取横移后 X | `Solid.as::advanceMotion`、`RumBottle.as::contact` | `MutinyRumBottle.OnContact`、`Explode` | 已实现；待运行验证 |
 | RUM-FIRE-01 | 地面格向上找到表面后，在同一点创建左右各一个 SweepingFlame | 同上 | `FindOriginalFlameOrigin` + 双 Spawn | 已实现 |
 | RUM-FIRE-02 | 每段火焰创建时，脚点距离平方 `<64` 的角色受 30 伤害，速度改为随机 `vx∈[-4,4)`、`vy∈[-8,-6)` | `SweepingFlame.as::constructor` | `MutinySweepingFlame` | 已实现；随机边界待验证 |
 | RUM-FIRE-03 | 时间轴第 4 帧沿方向前进 8 px；下一格必须有实体且其上方为空，否则停止 | `SweepingFlame.as::createNext` + 时间轴 | propagation tick | 已实现；待运行验证 |
@@ -230,8 +236,11 @@
 | --- | --- | --- | --- | --- |
 | SEA-PLACE-01 | 未发射时水平虚线跟随鼠标 Y；首次点击在 `x=-300`、所选 Y 开始，vx=10 | `Seagull.as::constructor/place/advance` | `PlaceAtFlightHeight` | 飞行逻辑已实现；虚线表现另验 |
 | SEA-SHOT-01 | 飞行中每次点击都可投一枚弹，没有固定弹数；弹起点 `(bird.x-10,bird.y)`，继承 vx=10、weight=1 | `Seagull.as::advance` | `TryRequestPlayerShot`、`MutinySeagullFire.Spawn` | 已实现 |
+| SEA-SHOT-02 | 投弹输入在海鸥本 tick 完成移动后消费；新弹从 `bird.x-10` 创建，并在同一个 `Seagull.advance` 中立刻前进一次，之后每 tick 继续由海鸥统一推进 | `Seagull.as::advance` 中 `super.advance`、创建 shot、遍历 `shots[].advance` 的顺序 | `RequestShot`、`AdvanceOriginalTick`、`MutinySeagullFire.AdvanceOriginalTick` | 已实现；待运行验证 |
+| SEA-VIS-01 | 炸弹 `show()` 后海鸥立刻 `hide(); show()`，在相同 Character 层重新取得更高深度，因此重叠时海鸥遮住炸弹 | `Seagull.as::advance`、`Clip.as::show` | `MutinySeagullFire.Initialize` 的 SpriteRenderer 排序 | 原版静态确认；已修复，待 Unity 运行验证 |
 | SEA-HIT-01 | 弹碰 Solid 爆炸 50/50；落水只销毁不爆 | 动态 shot 函数 | `MutinySeagullFire` | 已实现；待运行验证 |
 | SEA-END-01 | 鸟越过 `levelWidth*32+275` 且所有弹已结束，武器才结束 | `Seagull.as::advance/endShot` | `AdvanceOriginalTick` | 已实现 |
+| SEA-END-02 | 原版没有飞行时限；即使阻塞回合超过 Unity 的 150 tick 安全阈值，也不得强制回收正常飞行的海鸥 | `Seagull.as::advance` 仅有 `levelWidth*32+275 && shots.length<1` 完成条件 | `CanExpireFromTurnSafetyTimeout` | 已实现；待运行验证 |
 
 ### 6.12 Tidal Wave
 
@@ -247,7 +256,10 @@
 | --- | --- | --- | --- | --- |
 | VOO-TGT-01 | 初始不可 twang；先选择一个角色，随后启用 twang 并把镜头拉回 owner | `VoodooDoll.as::setTargetCharacter` | `BindTarget` + 玩家输入 | 已实现；敌我资格由输入层验收 |
 | VOO-THR-01 | 提交时保存娃娃最初 `velocityX/Y` | `VoodooDoll.as::twang` | `m_ThrowVelocity` | 已实现 |
-| VOO-CAM-01 | 飞行 10 tick 后请求镜头转向目标；镜头到达后再等 10 tick | `VoodooDoll.as::advance` | camera focus gate | 已实现；待运行验证 |
+| VOO-CAM-01 | 选定目标时设置 `panToCharacter=owner`；娃娃发射后 `track=true`，镜头跟随娃娃 | `VoodooDoll.as::setTargetCharacter`、`Weapon.as::twang` | `BindTarget`、`Fire`、`RequestTrackWeapon` | 已实现；待运行验证 |
+| VOO-CAM-02 | 飞行 10 tick 后在同一状态转换中设置 `panToCharacter=targetCharacter`、`track=false`；镜头到达并清除该平移目标后再等待 10 tick | `VoodooDoll.as::advance`、`TileSystem.as::advanceScrolling` | `ReleaseWeaponTracking`、`RequestPanToCharacter`、target-pan gate | 已实现；待运行验证 |
+| VOO-CAM-03 | 目标获得速度后不持续跟随目标，也不得由通用未完成武器兜底重新跟随娃娃；镜头恢复普通手动滚屏 | `VoodooDoll.as::advance` 保持 `track=false`，且 `panToCharacter` 到达后已清空 | `FindActionTarget` 的 Voodoo handoff guard | 已实现；待运行验证 |
+| VOO-END-02 | 等待远距离目标运镜期间没有时间上限，不受 Unity 150 tick 卡死武器看门狗强制回收 | `VoodooDoll.as::advance` 以 `panToCharacter` 清除为门，未定义超时 | `CanExpireFromTurnSafetyTimeout=false` | 已实现；待运行验证 |
 | VOO-XFER-01 | 只把保存速度一次性赋给目标；不复制娃娃后续碰撞、伤害或位置 | 同上 | `TransferVelocityToTarget` | 已实现；纠正旧“100%伤害同调”描述 |
 | VOO-END-01 | 速度传递后每 tick alpha 减 10，归零结束 | 同上 | `FadeAndFinish` | 已实现 |
 
@@ -302,6 +314,7 @@
 | WPN-T06 | Mine 跨回合 | 静止登记、运动目标激活、蜂鸣序列、60 tick 爆炸 | 缺独立生产入口回归 |
 | WPN-T07 | PiecesOfEight 完整 8 发 | 前 7 发锁武器，第 8 发才结束且只消耗 1 库存 | 已有 `VerifyPiecesOfEight`；未运行 |
 | WPN-T08 | Seagull 连续多次点击 | 每次生成独立弹；鸟离场后等待所有弹结束 | 已有 `VerifySeagull`；未运行 |
+| WPN-T08A | Seagull 长地图飞行与同 tick 投弹 | 超过 150 回合管理 tick 仍存活；点击后的下一生产物理 tick 中，鸟先移动、弹以 `x-10` 创建并立刻推进一次，且不会由子组件重复推进 | 已有 `VerifySeagull`；未运行 |
 | WPN-T09 | RumBottle 地面/墙面各一次 | 只有地面产生双向 8 px 扫火 | 已有 `VerifyRumBottle`；未运行 |
 | WPN-T10 | 两桶/三箱连续放置 | 合法性、数量、跨回合、连锁爆炸正确 | 已有回归；未运行 |
 | WPN-T10A | 角色与木箱被同一爆炸命中 | 先写角色冲量，再移除箱碰撞；木箱立即为 frame 11，角色首个物理 tick 与破损 11..18 并行 | 已有 `CRT-EXP-01/02` 回归；未运行 |

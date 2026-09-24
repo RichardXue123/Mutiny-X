@@ -6,16 +6,18 @@ namespace Mutiny.Simulation
     [DisallowMultipleComponent]
     public sealed class MutinyDynamite : MutinyWeapon
     {
+        public const int OriginalLitVisibleFrameCount = 4;
+        public const int OriginalUnlitFrame = 6;
+
         [Header("Animation")]
         public Sprite[] LitFrames;
         public Sprite UnlitFrame;
-        public float FrameRate = 25f;
 
         [Header("Dynamite State")]
         public bool IsLit = true;
+        public int CurrentAnimationFrame => IsLit ? m_CurrentLitFrame + 1 : OriginalUnlitFrame;
 
         private int m_CurrentLitFrame = 0;
-        private float m_FrameTimer = 0f;
 
         protected override void Awake()
         {
@@ -30,7 +32,9 @@ namespace Mutiny.Simulation
         private void LoadSprites()
         {
             var lit = new List<Sprite>();
-            for (int i = 1; i <= 5; i++)
+            // Frame 5 only runs gotoAndPlay("lit"). Flash executes that action
+            // before presenting another image, so the visible loop is 1..4.
+            for (int i = 1; i <= OriginalLitVisibleFrameCount; i++)
             {
                 Texture2D texture = Resources.Load<Texture2D>($"Art/Weapons/Dynamite/{i}");
                 if (texture != null)
@@ -49,7 +53,7 @@ namespace Mutiny.Simulation
             }
             LitFrames = lit.ToArray();
 
-            Texture2D unlitTexture = Resources.Load<Texture2D>("Art/Weapons/Dynamite/6");
+            Texture2D unlitTexture = Resources.Load<Texture2D>($"Art/Weapons/Dynamite/{OriginalUnlitFrame}");
             if (unlitTexture != null)
             {
                 unlitTexture.filterMode = FilterMode.Point;
@@ -58,7 +62,7 @@ namespace Mutiny.Simulation
             }
             else
             {
-                UnlitFrame = Resources.Load<Sprite>("Art/Weapons/Dynamite/6");
+                UnlitFrame = Resources.Load<Sprite>($"Art/Weapons/Dynamite/{OriginalUnlitFrame}");
             }
 
             if (LitFrames.Length > 0 && SpriteRenderer != null)
@@ -72,6 +76,9 @@ namespace Mutiny.Simulation
             base.Initialize(owner);
 
             IsLit = true;
+            m_CurrentLitFrame = 0;
+            if (LitFrames != null && LitFrames.Length > 0 && SpriteRenderer != null)
+                SpriteRenderer.sprite = LitFrames[0];
             // Flash Dynamite: friction = 1.7, extents = 11
             PhysicsBody.State.Friction = 1.7f;
             PhysicsBody.State.LeftExtent = 11f;
@@ -83,6 +90,8 @@ namespace Mutiny.Simulation
             PhysicsBody.State.HitsBoxes = true;
             PhysicsBody.OnSimulationStep -= EmitOriginalSmokeTrail;
             PhysicsBody.OnSimulationStep += EmitOriginalSmokeTrail;
+            PhysicsBody.OnSimulationStep -= AdvanceOriginalPresentationTick;
+            PhysicsBody.OnSimulationStep += AdvanceOriginalPresentationTick;
         }
 
         protected override void OnWaterSubmerged()
@@ -123,19 +132,6 @@ namespace Mutiny.Simulation
                         Finish();
                         Destroy(gameObject, 0.4f);
                         return;
-                    }
-                }
-
-                // Fuse burning animation
-                if (IsLit && LitFrames != null && LitFrames.Length > 0)
-                {
-                    m_FrameTimer += Time.deltaTime;
-                    float frameDuration = 1f / FrameRate;
-                    while (m_FrameTimer >= frameDuration)
-                    {
-                        m_FrameTimer -= frameDuration;
-                        m_CurrentLitFrame = (m_CurrentLitFrame + 1) % LitFrames.Length;
-                        SpriteRenderer.sprite = LitFrames[m_CurrentLitFrame];
                     }
                 }
 
@@ -184,10 +180,25 @@ namespace Mutiny.Simulation
                 MutinyRumBottleSmokeTrail.Spawn(new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y));
         }
 
+        private void AdvanceOriginalPresentationTick()
+        {
+            // The symbol starts playing at construction time, before Weapon.fire.
+            // Drive it from the same 25 Hz production tick used by the original
+            // game so equipped/ready dynamite keeps its burning-fuse animation.
+            if (IsFinished || !IsLit || LitFrames == null || LitFrames.Length == 0 || SpriteRenderer == null)
+                return;
+
+            m_CurrentLitFrame = (m_CurrentLitFrame + 1) % LitFrames.Length;
+            SpriteRenderer.sprite = LitFrames[m_CurrentLitFrame];
+        }
+
         private void OnDestroy()
         {
             if (PhysicsBody != null)
+            {
                 PhysicsBody.OnSimulationStep -= EmitOriginalSmokeTrail;
+                PhysicsBody.OnSimulationStep -= AdvanceOriginalPresentationTick;
+            }
         }
     }
 }

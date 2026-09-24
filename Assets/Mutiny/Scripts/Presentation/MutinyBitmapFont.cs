@@ -25,6 +25,7 @@ namespace Mutiny.Presentation
 
         private static Texture2D s_PirateFontTexture;
         private static Texture2D s_DangleFontTexture;
+        private static Texture2D s_SpeechFontTexture;
 
         private static readonly Dictionary<char, Glyph> s_PirateNormal = new Dictionary<char, Glyph>
         {
@@ -294,6 +295,50 @@ namespace Mutiny.Presentation
             if (s_DangleFontTexture == null)
                 return;
 
+            DrawDangleTextWithTexture(container, text, color, anchor, tracking, lineSpacing,
+                s_DangleFontTexture);
+        }
+
+        // The speech bubble uses the DangleFont letter shapes without the atlas's
+        // black outline. Its original pixels are a single flat #666666 color.
+        public static void DrawSpeechText(Rect container, string text,
+            TextAnchor anchor = TextAnchor.UpperLeft, int tracking = 0, int lineSpacing = 13)
+        {
+            if (string.IsNullOrEmpty(text))
+                return;
+
+            EnsureTextures();
+            if (s_DangleFontTexture == null)
+                return;
+
+            if (s_SpeechFontTexture == null)
+            {
+                Color32[] pixels = s_DangleFontTexture.GetPixels32();
+                for (int i = 0; i < pixels.Length; i++)
+                {
+                    Color32 pixel = pixels[i];
+                    pixels[i] = new Color32(255, 255, 255,
+                        pixel.r > 127 ? pixel.a : (byte)0);
+                }
+
+                s_SpeechFontTexture = new Texture2D(s_DangleFontTexture.width,
+                    s_DangleFontTexture.height, TextureFormat.RGBA32, false)
+                {
+                    filterMode = FilterMode.Point,
+                    wrapMode = TextureWrapMode.Clamp,
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                s_SpeechFontTexture.SetPixels32(pixels);
+                s_SpeechFontTexture.Apply(false, true);
+            }
+
+            DrawDangleTextWithTexture(container, text, new Color32(102, 102, 102, 255),
+                anchor, tracking, lineSpacing, s_SpeechFontTexture);
+        }
+
+        private static void DrawDangleTextWithTexture(Rect container, string text, Color color,
+            TextAnchor anchor, int tracking, int lineSpacing, Texture2D texture)
+        {
             Color oldColor = GUI.color;
             GUI.color = color;
 
@@ -327,13 +372,13 @@ namespace Mutiny.Presentation
                     {
                         Rect screenRect = new Rect(curX, Mathf.Round(lineY), g.Width, g.Height);
                         Rect texCoords = new Rect(
-                            (float)g.X / s_DangleFontTexture.width,
-                            1f - (float)(g.Y + g.Height) / s_DangleFontTexture.height,
-                            (float)g.Width / s_DangleFontTexture.width,
-                            (float)g.Height / s_DangleFontTexture.height
+                            (float)g.X / texture.width,
+                            1f - (float)(g.Y + g.Height) / texture.height,
+                            (float)g.Width / texture.width,
+                            (float)g.Height / texture.height
                         );
 
-                        GUI.DrawTextureWithTexCoords(screenRect, s_DangleFontTexture, texCoords, true);
+                        GUI.DrawTextureWithTexCoords(screenRect, texture, texCoords, true);
                         float adv = (c == 'm') ? 8f : g.Width;
                         curX += adv + tracking;
                     }

@@ -74,6 +74,18 @@ namespace Mutiny.Verification.Editor
                                string.Join("\n", result.Failures));
         }
 
+        [MenuItem("Mutiny/Parity/Validate Weapon Idle Animations")]
+        public static void ValidateWeaponIdleAnimations()
+        {
+            MutinyLevel1VerificationResult result =
+                MutinyTurnActionUiVerificationTest.RunWeaponIdleAnimations();
+            if (result.Passed)
+                Debug.Log($"[Mutiny Parity] Weapon idle animation verification passed: {result.PassedAssertions}/{result.TotalAssertions} assertions.");
+            else
+                Debug.LogError("[Mutiny Parity] Weapon idle animation verification failed:\n" +
+                               string.Join("\n", result.Failures));
+        }
+
         [MenuItem("Mutiny/Parity/Validate Battle HUD")]
         public static void ValidateBattleHud()
         {
