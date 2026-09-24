@@ -198,6 +198,7 @@ namespace Mutiny.Levels
         [ContextMenu("Clear Level")]
         public void ClearLevel()
         {
+            MutinyMine.ClearForLevelEnd();
             // BoxWeapon instances are spawned outside the level-root hierarchy.
             // Clear both their visuals and collision state immediately; do not
             // wait for delayed OnDestroy callbacks from the old scene graph.

@@ -201,7 +201,8 @@ namespace Mutiny.Presentation
             // every launch and clears it on every intermediate resolution.
             if (m_TrackedWeapon != null)
             {
-                if (m_TrackedWeapon.IsFired && !m_TrackedWeapon.IsFinished)
+                if (m_TrackedWeapon.IsFired && !m_TrackedWeapon.IsFinished &&
+                    !(m_TrackedWeapon is MutinyMine trackedMine && trackedMine.IsStored))
                     return m_TrackedWeapon.transform;
                 m_TrackedWeapon = null;
             }
@@ -222,6 +223,10 @@ namespace Mutiny.Presentation
                 // separate projectile directly in Unity.
                 if (weapons[i] is MutinyCannon cannon && cannon.CameraFocusTarget != null)
                     return cannon.CameraFocusTarget;
+                // Mine.advanceMotion marks a settled mine finished in Flash.
+                // It stays armed on the map, but it no longer owns the camera.
+                if (weapons[i] is MutinyMine mine && mine.IsStored)
+                    continue;
                 if (weapons[i] != null && weapons[i].IsFired && !weapons[i].IsFinished)
                     return weapons[i].transform;
             }

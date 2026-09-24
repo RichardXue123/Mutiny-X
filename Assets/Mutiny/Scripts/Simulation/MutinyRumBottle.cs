@@ -138,16 +138,6 @@ namespace Mutiny.Simulation
                 MutinyRumBottleSmokeTrail.Spawn(new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y));
         }
 
-        public override void Twang(Vector2 startPx, Vector2 dragPx)
-        {
-            // RumBottle raises its drag gauge to 30, but Weapon.release clamps the
-            // committed velocity to the common 20 px/tick limit.
-            Vector2 launchVelocity = MutinyPhysics.CalculateTwangVelocity(startPx, dragPx, TwangMaxForce);
-            if (launchVelocity.sqrMagnitude > MutinyPhysics.DefaultTwangMaxForce * MutinyPhysics.DefaultTwangMaxForce)
-                launchVelocity = launchVelocity.normalized * MutinyPhysics.DefaultTwangMaxForce;
-            Fire(launchVelocity);
-        }
-
         private static Vector2 FindOriginalFlameOrigin(
             Vector2 impact, string[,] terrain, int width, int height)
         {

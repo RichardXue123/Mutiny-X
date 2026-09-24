@@ -19,6 +19,7 @@
 | CAM-POE-01 | Pieces of Eight 每枚发射显式接管钱币跟随；前 7 枚结算立即释放跟随并自动回使用者；抵达后连续武器仍处于执行阶段也允许鼠标边缘、方向键和 WASD 滚屏；下一枚发射再次接管 | `Weapon.as::fire/twang`；`PiecesOfEight.as::next`；`TileSystem.as::advanceScrolling:455-493` | `RequestTrackWeapon`、`ReleaseWeaponTracking`、`RequestPanToCharacter`、`AdvanceEdgeScrolling` | 已实现；C# 编译通过，待 Unity 运行验证 |
 | BOX-CAM-01 | 木箱/火药桶每次放置在同一调用中把通用 `track=true` 覆盖为 `false`，且不设置 `panToCharacter`；连续摆放间隙直接进入普通手动滚屏 | `Weapon.as::place:140-148`；`BoxWeapon.as::place:93-100`；`TileSystem.as::advanceScrolling:455-493` | `MutinyPlayerInput.IsAwaitingBoxPlacement`、`FindActionTarget`、`CanUseManualScrolling` | 第一箱/桶后保持执行阶段，断言镜头不跟随已放物且边缘/方向键/WASD 门开放 | 已实现；待 Unity 运行验证 |
 | CAM-SPEECH-01 | 单人开场与胜方结算时，镜头优先平滑跟随气泡记录的世界位置，每原版 tick 最多移动 50 px；气泡结束后恢复原有运镜优先级 | `TileSystem.as::advanceScrolling`；`SpeechBubble.as::setTarget` | `MutinySpeechController`、`MutinyCameraController.LateUpdate` | 开场两方轮流发话、结算胜方发话时检查镜头目标和边界 | 已接入；待 Unity Play Mode 验证 |
+| MINE-CAM-01 | 投掷中的地雷可被跟随；落地安置后即使继续监测靠近目标，也不再抢占镜头 | `Mine.as::advanceMotion` 设置 `finished=true`；`TileSystem.as::advanceScrolling` 只跟随未完成的武器 | `MutinyCameraController.FindActionTarget` | 校验飞行中跟随、安置后释放普通与显式跟随 | 已实现；待 Unity 运行验证 |
 
 ## 画面比例与视口适配规格（11:8 Letterbox / Pillarbox）
 
