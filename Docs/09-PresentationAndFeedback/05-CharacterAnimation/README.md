@@ -14,6 +14,7 @@
 
 - 27 种角色符号均为 35 帧复合时间轴。`static` 从第 1 帧开始，可见帧为 1..12；第 13 帧执行 `gotoAndPlay("static")`，第 14 帧是标签间的透明分隔帧。
 - `hit` 从第 15 帧开始，可见恢复帧为 15..34；第 35 帧跳回 `static`。`Character.advance` 在 `hit=true` 且角色仍运动时每 tick 重新 `gotoAndPlay("hit")`，因此保持第一个受击姿势；停稳后才允许恢复段播放。
+- 原版 SWF 中 27 种角色的 35 帧时间轴均无颜色变换标签；蓝色海盗的受击帧仍保留蓝色像素。爆炸设置 `hit=true`，由角色时间轴负责受击表现，没有额外的红色覆盖。使用原版 SWF 的 [可运行页面](https://flashstorage.games/mutiny.html)观察第一关爆炸后，受伤的蓝色海盗仍保持原色；单帧效果的判断以 SWF 时间轴和源码为准。
 - 角色非拖拽时每 tick 执行 `rotation += velocityX * 3`；落水后在特定速度分支再叠加 `(velocityX + velocityY) * 4`。
 - 地面死亡并非在 `health=0` 立即换尸体。角色停稳时 `shownHealth` 每 tick 向 `health` 滑动 1，降到 1 以下才隐藏角色并在 `bottomExtent` 处创建 24 帧 `deadCharacter`；第 24 帧 `stop()` 并保持。
 - 沉入水下时设置死亡并持续水下物理/旋转，不走地面 `deadCharacter` 分支。
@@ -25,7 +26,7 @@
 - `Assets/Mutiny/Scripts/Simulation/MutinyCharacterAnimator.cs`：以 25 Hz 直接推进 1..12 待机循环和 15..34 受击段，显式跳过动作帧 13/35 与透明帧 14。
 - `Assets/Mutiny/Resources/Art/Characters/Animations/<characterType>/`：27 个角色目录，每个 35 张导出 PNG。
 - `MutinyCharacterAnimator.CharacterPivots`：为 27 种角色按原图注册点建立 pivot，并以 32 PPU 生成像素 Sprite。
-- `MutinyCharacter.TakeDamage`：请求受击时间轴，同时有 0.2 秒红色 tint；该 tint 是当前 Unity 表现，仍需原版像素对照确认。
+- `MutinyCharacter.TakeDamage`：请求受击时间轴；移除了原版不存在的 0.2 秒红色覆盖，保留角色原本的 Sprite 颜色。
 - `MutinyCharacter` + `MutinyRotationState`：在物理 tick 记录逻辑角度，按原版速度公式旋转并在接触后归零。
 - `MutinyDeadCharacterEffect`：加载 24 帧、播放一次并保持第 24 帧；只由地面死亡表现生成。
 
@@ -41,13 +42,12 @@
 
 ## 已知差异与待确认
 
-- `TakeDamage` 的 0.2 秒红色 tint 是 Unity 当前额外表现；静态 AS2 只能确认 `hit` 时间轴，尚未找到原版同等 tint 证据。
 - 角色翻转当前由 `velocityX` 符号设置 `SpriteRenderer.flipX`；需用原版运行录像确认不同角色符号的默认朝向与翻转时机。
 - 当前没有独立走路、跳跃或游泳帧序；除非新证据证明原版存在，不应自行发明这些状态。
 
 ## 完成状态
 
-- 静态确认：35 帧角色时间轴的两个循环点、24 帧死亡时间轴停止点、`Character.advance` 的受击/旋转/死亡分支。
+- 静态确认：35 帧角色时间轴的两个循环点、24 帧死亡时间轴停止点、`Character.advance` 的受击/旋转/死亡分支，以及原版受击不叠加红色 tint。
 - 已实现：27×35 帧资源、待机/受击帧状态机、角度状态、地面死亡效果。
 - 实际测试通过：本轮未运行 Unity，不新增通过记录。
 - 待运行验证：所有 `CHAR-ANI-*` 的生产入口逐帧记录。

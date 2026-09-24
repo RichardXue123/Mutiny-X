@@ -61,8 +61,6 @@ namespace Mutiny.Simulation
         }
 
         private SpriteRenderer m_SpriteRenderer;
-        private Color m_OriginalColor = Color.white;
-        private float m_HurtFlashTimer = 0f;
         private int m_ContactTimeTicks;
         private int m_ContactSoundCount;
         private bool m_LandDeathPresented;
@@ -114,11 +112,6 @@ namespace Mutiny.Simulation
                 PhysicsBody.State.HitsBoxes = true;
             }
 
-            if (m_SpriteRenderer != null)
-            {
-                m_OriginalColor = m_SpriteRenderer.color;
-            }
-
             // New serialized fields are zero in some legacy baked scenes.
             if (Health > 0f && ShownHealth <= 0f)
                 ShownHealth = Health;
@@ -152,15 +145,6 @@ namespace Mutiny.Simulation
 
         private void Update()
         {
-            if (m_HurtFlashTimer > 0f)
-            {
-                m_HurtFlashTimer -= Time.deltaTime;
-                if (m_HurtFlashTimer <= 0f && m_SpriteRenderer != null)
-                {
-                    m_SpriteRenderer.color = m_OriginalColor;
-                }
-            }
-
             if (PhysicsBody != null && m_SpriteRenderer != null && Mathf.Abs(PhysicsBody.State.VelocityX) > 0.2f)
             {
                 m_SpriteRenderer.flipX = PhysicsBody.State.VelocityX < 0f;
@@ -380,12 +364,6 @@ namespace Mutiny.Simulation
             OnHealthChanged?.Invoke();
             GetComponent<MutinyCharacterAnimator>()?.PlayHit();
 
-            if (m_SpriteRenderer != null)
-            {
-                m_SpriteRenderer.color = new Color(1f, 0.35f, 0.35f, 1f);
-                m_HurtFlashTimer = 0.2f;
-            }
-
             if (Health <= 0f)
             {
                 MarkDead();
@@ -443,10 +421,7 @@ namespace Mutiny.Simulation
 
             m_LandDeathPresented = true;
             if (m_SpriteRenderer != null)
-            {
-                m_SpriteRenderer.color = m_OriginalColor;
                 m_SpriteRenderer.enabled = false;
-            }
 
             m_DeadCharacterEffect = MutinyDeadCharacterEffect.Spawn(this);
             Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("die");
