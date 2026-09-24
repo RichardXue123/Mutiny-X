@@ -154,8 +154,21 @@ namespace Mutiny.Presentation
             // visible (including the four-tick fade) its buttons consume mouse
             // input; character selection and aiming must not see the same click.
             MutinyGameHUD hud = FindAnyObjectByType<MutinyGameHUD>();
-            if (hud != null && hud.IsQuitPromptVisible)
+            if (hud != null && (hud.IsQuitPromptVisible ||
+                                (hud.Speech != null && hud.Speech.HasActiveBubble)))
             {
+                // Android touch input does not have to produce an IMGUI mouse
+                // event. Forward its first press through the same speech state
+                // machine before blocking gameplay input.
+                if (hud.Speech != null && hud.Speech.HasActiveBubble && Application.isMobilePlatform &&
+                    TryReadPointer(out PointerFrameState speechPointer) && speechPointer.PressedThisFrame)
+                {
+                    Vector2 canvasPoint = MutinyGameHUD.ScreenToCanvasPoint(
+                        new Vector2(speechPointer.Position.x, Screen.height - speechPointer.Position.y),
+                        Screen.width, Screen.height);
+                    if (new Rect(0f, 0f, 550f, 400f).Contains(canvasPoint))
+                        hud.Speech.Click();
+                }
                 ResetMobileGestureOwnership();
                 ClearSpecialWeaponCursor();
                 ClearHoveredCharacter();

@@ -21,6 +21,8 @@ namespace Mutiny.Presentation
         public MutinyTurnManager TurnManager;
         public MutinyPlayerInput PlayerInput;
 
+        private MutinySpeechController m_Speech;
+
         private Camera m_Camera;
         private MutinyLevelRoot m_LevelRoot;
         private MutinyTeam m_PreviousTeam;
@@ -117,6 +119,17 @@ namespace Mutiny.Presentation
             // branch while Controller.dragging is set (human player dragging).
             if (PlayerInput != null && PlayerInput.IsAiming)
                 return;
+
+            if (m_Speech == null)
+                m_Speech = TurnManager.GetComponent<MutinySpeechController>();
+            // Original TileSystem checks the speech target ahead of chest, weapon,
+            // turn and manual scrolling. The bubble position is captured once.
+            if (m_Speech != null && m_Speech.HasActiveBubble)
+            {
+                m_EdgeVelocityPixelsPerSecond = Vector2.zero;
+                PanTowards(m_Speech.BubbleWorldPosition, 50f, 0f);
+                return;
+            }
 
             MutinyTreasureChest fallingChest = FindFallingChest();
             if (fallingChest != null)

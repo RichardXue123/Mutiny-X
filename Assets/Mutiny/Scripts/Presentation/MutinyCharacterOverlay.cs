@@ -18,6 +18,7 @@ namespace Mutiny.Presentation
 
         private MutinyCharacter m_Character;
         private MutinyTeam m_Team;
+        private MutinySpeechController m_Speech;
         private GameObject m_OverlayRoot;
         private GameObject m_Indicator;
         private SpriteRenderer m_IndicatorRenderer;
@@ -96,12 +97,13 @@ namespace Mutiny.Presentation
             bool isSelfThrown = m_Character.IsSelfThrown;
 
             // Character.updateOverlay: triangle = current team && !dragging/self-throw
-            // && alive && speechBubble.target != character. The Unity dialogue
-            // target layer is not implemented yet. Physical velocity is deliberately
-            // absent here: a blast or collision does not set Character.thrown in
-            // Flash, so it must keep this overlay visible.
+            // && alive && speechBubble.target != character. Physical velocity
+            // alone does not set Character.thrown in Flash.
+            if (m_Speech == null)
+                m_Speech = GetComponentInParent<MutinySpeechController>();
             bool hideForCharacterAction = isDragged || isSelfThrown;
-            bool showIndicator = isCurrentTeam && !hideForCharacterAction;
+            bool showIndicator = isCurrentTeam && !hideForCharacterAction &&
+                                 (m_Speech == null || !m_Speech.HasActiveBubble || m_Speech.Speaker != m_Character);
             bool showHealth = !hideForCharacterAction;
             MutinyVoodooDoll armedDoll = FindAnyObjectByType<MutinyPlayerInput>()?.ArmedVoodooDoll;
             bool isVoodooTargeting = armedDoll != null;

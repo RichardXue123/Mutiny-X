@@ -25,7 +25,7 @@
 | 规则 | Unity 入口 | 验收重点 | 状态 |
 | --- | --- | --- | --- |
 | AUD-SFX-001 角色选择队伍语音 | `MutinyTeam.SelectCharacter` → `PlayCharacterVoice` | 每次新选择一次；继续同角色的阶段切换不重播；ID 应取队伍类型 | 已实现但取所选角色类型；同质队伍静态等价，混合队伍已知风险 |
-| AUD-SFX-002 胜负台词队伍语音 | 当前无等价 SpeechBubble；`MutinyTurnManager` 用 `ching/fan/die` | 1P 胜/负各一次正确队伍语音；平局无替代音 | 已知差异 |
+| AUD-SFX-002 胜负台词队伍语音 | `MutinySpeechController.StartLine` 使用队伍首名角色类型播放语音；`MutinyTurnManager` 不再以 `ching/fan/die` 代替 | 1P 胜/负各一次正确队伍语音；平局无替代音 | 已接入；待 Unity 运行听音 |
 | AUD-SFX-003 死亡 | `MutinyCharacter` | 生命表现降到 0 的状态转换只播一次 | 已实现；资源测试存在，不等于完整生产次数通过 |
 | AUD-SFX-004 强碰撞 | `MutinyCharacter` | `contactTime > 5` 播；伤害 API 本身不播 | 现有生产入口回归已记录通过；本轮未重跑 |
 | AUD-SFX-005 过水面 | Character、Weapon、Boulder、PiecesOfEight、ParachuteBomb、TidalWave 等 | 每次跨越只播一次；不因停留水中连播 | 分散实现；部分现有回归覆盖，仍需全实体运行矩阵 |

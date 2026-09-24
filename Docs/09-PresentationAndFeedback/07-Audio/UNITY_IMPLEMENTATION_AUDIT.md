@@ -74,6 +74,8 @@
 
 ### U-AUD-004 · 结算声音不是原版流程
 
+后续处理：`MutinySpeechController` 已接入原版单人对话音效，`MutinyTurnManager` 已移除结算的 `ching/fan/die` 替代调用；以下保留为修复前审计记录。待 Unity Play Mode 验证实际听音。
+
 `MutinyTurnManager.EvaluateTurnOrGameOver` 当前对平局、玩家胜、玩家负分别调用 `die`、`ching`、`fan`。原版 `Controller.nextTurn` 的 1P 胜/负会创建 `SpeechBubble`，而 `SpeechBubble.setTarget` 播放对应队伍语音；平局直接显示失败/平局弹窗，没有上述三项 SFX 调用。
 
 建议：结算表现接入语义事件 `VictorySpeech(team)` / `DefeatSpeech(team)`；在语音气泡或其 Unity 等价表现建立时播放队伍类型声音。删除无证据的三分支替代音效，除非作为用户授权扩展单独登记。
