@@ -21,6 +21,6 @@
 | VIS-SMOKE-01 | 原版五种投射物使用 `cannonSmokeTrail`；Unity 已接入资源及五种调用，尚待运行对照 | 原版五个 AS2 `advance`、symbol 866 frame 19；Unity `CannonSmokeTrail/1..19`、`MutinyRumBottleSmokeTrail` 与五个生产入口 | 已接入；待 Unity Play Mode 验证 |
 | VIS-FRONT-01 | 前端水面、云、山体循环已接入，仍需运行确认 | `MenuBackgroundAnim.as` 的五层位移由 `MutinyFrontendController` 以 25 Hz 驱动 | 已实现；待 Unity 运行验证 |
 | VIS-MAT-01 | Anchor whiteOut 受默认 Sprite 材质限制 | `MutinyAnchor` 当前实现注记 | 已知差异 |
-| CHAR-ANI-TINT-01 | Unity 受伤额外叠 0.2 秒红色 tint，静态原版证据只确认 hit 时间轴 | `MutinyCharacter.TakeDamage`与 `Character.as::advance` | 待原版运行取证 |
+| CHAR-ANI-TINT-01 | Unity 的 0.2 秒受伤泛红已移除 | 原版 `Explosion.as::hit` 只设 `hit=true`；`Character.as::advance` 切换 `hit` 时间轴；27 个角色 SWF 时间轴均无颜色变换，蓝色海盗受击帧保持蓝色 | 已修复；待 Unity Play Mode 对照 |
 
 完整上下文、实现入口和优先级见 [动画与视觉效果总览](../../09-PresentationAndFeedback/ANIMATION_AND_VISUAL_EFFECTS.md)。本表不包含用户授权的 Android 适配；授权扩展应继续在各自规格中单独标注。
