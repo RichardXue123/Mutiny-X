@@ -19,7 +19,7 @@
 - `Team.as::startTurn` 提交 `Computer, take your turn` 或 `Player N, take your turn`；Unity 使用 `MutinyTurnManager.OnTurnStarted`，仅在实际开始新回合时加入一次，不在角色的剩余行动间重复提示。
 - `TreasureChest.as::advance` 在首次接触 10 tick 后发放第一件武器，此后每隔 40 tick 发放下一件。每次武器实际入库的同一 tick 提交 `collected ` 加 `WeaponSelectButton.hoverText` 标题，并播放现有 `icon_collect`。Unity 复用 `GetOriginalActionCopy` 的武器标题映射，例如 `collected tidal wave`。
 - SWF 中 `Controller.root.text` 位于 550×400 舞台 `(275,400)`，剪辑内只有居中的 DangleFont `textField`，位于剪辑原点下方 10 px。文字在 HUD 的 stage space 绘制，随 letterbox 等比缩放，随关卡根节点清除。
-- 提示按 FIFO 排队，每个 25 Hz tick 调整显示剪辑的 Y 位置；船长对话开始前或进行中暂存并暂停底部提示。原版 `IngameTextArea` 的受保护 AS2 动作只保留了 `lines`、`thisLineFrame`、`onEnterFrame`、`_y`、`speechBubble` 等结构，精确的运动速度与保持帧数尚无可读源码。当前升起 10 tick、停留 75 tick、退场 10 tick，待原版逐帧录像核定这些数值。
+- 提示按 FIFO 排队，每个 25 Hz tick 调整显示剪辑的 Y 位置；船长对话开始前或进行中暂存并暂停底部提示。原版 `IngameTextArea` 的受保护 AS2 动作只保留了 `lines`、`thisLineFrame`、`onEnterFrame`、`_y`、`speechBubble` 等结构，精确的运动速度与保持帧数尚无可读源码。当前升起 10 tick、停留 40 tick、退场 10 tick，待原版逐帧录像核定这些数值。
 - 原版 `Controller.changeLevel()` 与 `TileSystem.readXML()` 均可能调用 `startTurn()`；Unity 提示挂接关卡当前 `OnTurnStarted`，避免该重复入口造成同一句排队两次。
 
 ## 架构与类关系

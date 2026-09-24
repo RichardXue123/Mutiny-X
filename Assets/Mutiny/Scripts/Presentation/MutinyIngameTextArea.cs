@@ -12,7 +12,7 @@ namespace Mutiny.Presentation
     {
         private const float TickSeconds = 1f / 25f;
         private const int RiseTicks = 10;
-        private const int HoldTicks = 75;
+        private const int HoldTicks = 40;
         private const int FallTicks = 10;
         private const float HiddenY = 400f;
         private const float ShownY = 370f;
