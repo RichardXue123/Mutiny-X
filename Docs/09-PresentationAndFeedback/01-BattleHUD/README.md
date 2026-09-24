@@ -201,6 +201,7 @@ mine        cannon       anchor       voodooDoll      tidalWave
 
 - **用途**：描述文字、弹药数、关卡编号（小型等宽体）
 - **图集**：`Resources/UI/Fonts/dangle_font`
+- **船长对话**：`speechBubble` 的 `textHolder.textField` 使用 DangleFont 字形。对话专用渲染只取图集中的白色笔画，去掉黑色外轮廓，再以原版截图中的 `#666666` 绘制；其他 DangleFont 用途仍保留原有图集外观。
 - **字符集**：a-z、0-9、空格、`.` `,` `?` `!` `-` `'`
 - **字形高度**：11px（逗号 12px）
 - **默认 tracking**：0px，行距 13px
