@@ -97,6 +97,10 @@ namespace Mutiny.Levels
             hud.TurnManager = turnManager;
             hud.PlayerInput = playerInput;
 
+            var speech = levelRootObj.AddComponent<MutinySpeechController>();
+            speech.Initialize(turnManager);
+            hud.Speech = speech;
+
             // Ensure AudioManager instance exists
             _ = MutinyAudioManager.Instance;
 

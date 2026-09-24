@@ -382,12 +382,10 @@ namespace Mutiny.Simulation
                 if (team1Defeated && team2Defeated)
                 {
                     GameResult = GameOverResult.Draw;
-                    Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("die");
                 }
                 else if (team2Defeated)
                 {
                     GameResult = GameOverResult.Team1Wins;
-                    Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("ching");
 
                     var controller = FindAnyObjectByType<MutinyLevelController>();
                     if (controller != null)
@@ -400,7 +398,6 @@ namespace Mutiny.Simulation
                 else
                 {
                     GameResult = GameOverResult.Team2Wins;
-                    Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("fan");
                 }
 
                 int clearedBoxes = MutinyBoxRegistry.ClearForLevelEnd();

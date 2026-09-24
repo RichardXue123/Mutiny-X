@@ -78,6 +78,7 @@ namespace Mutiny.Presentation
         public MutinyTurnManager TurnManager;
         public MutinyPlayerInput PlayerInput;
         public MutinyLevelController LevelController;
+        public MutinySpeechController Speech;
 
         private bool m_ShowLevelSelect = false;
         private GUIStyle m_TitleStyle;
@@ -110,6 +111,7 @@ namespace Mutiny.Presentation
         private Texture2D m_BlueCancelButton;
         private Texture2D m_Team1Panel;
         private Texture2D m_Team2Panel;
+        private Texture2D m_SpeechBubbleTexture;
         private Texture2D m_Team1Portrait;
         private Texture2D[] m_OpponentPortraits = Array.Empty<Texture2D>();
         private readonly Dictionary<string, Texture2D> m_WeaponIcons = new Dictionary<string, Texture2D>();
@@ -354,6 +356,9 @@ namespace Mutiny.Presentation
             if (TurnManager == null || TurnManager.CurrentPhase != TurnPhase.GameOver || m_GameEndPopupShow)
                 return false;
 
+            if (Speech != null && Speech.IsPlayingEndingLine)
+                return false;
+
             OpenGameEndPopupForCurrentResult();
             return m_GameEndPopupShow;
         }
@@ -575,6 +580,7 @@ namespace Mutiny.Presentation
 
             m_Team1Panel = LoadPointTexture("UI/BattleHUD/team1_panel");
             m_Team2Panel = LoadPointTexture("UI/BattleHUD/team2_panel");
+            m_SpeechBubbleTexture = LoadPointTexture("UI/BattleHUD/speech_bubble");
             m_Team1Portrait = LoadPointTexture("UI/BattleHUD/team1_portrait");
             // These are exported original button backgrounds also used by the
             // front-end. Text remains an independent bitmap-font child just as in
@@ -624,6 +630,7 @@ namespace Mutiny.Presentation
             EnsureReferences();
             InitStyles();
 
+            DrawSpeechBubble();
             DrawOriginalBattleHud();
             DrawOriginalCornerControls();
             DrawBottomBar();
@@ -637,6 +644,49 @@ namespace Mutiny.Presentation
             {
                 DrawLevelSelectModal();
             }
+        }
+
+        private void DrawSpeechBubble()
+        {
+            if (Speech == null || !Speech.IsBubbleVisible)
+                return;
+
+            Camera gameCamera = Camera.main;
+            if (gameCamera == null)
+                return;
+
+            Vector3 projected = gameCamera.WorldToScreenPoint(Speech.BubbleWorldPosition);
+            if (projected.z <= 0f)
+                return;
+
+            float scale = Mathf.Min(Screen.width / OriginalCanvasWidth, Screen.height / OriginalCanvasHeight);
+            float left = (Screen.width - OriginalCanvasWidth * scale) * 0.5f;
+            float top = (Screen.height - OriginalCanvasHeight * scale) * 0.5f;
+            float x = (projected.x - left) / scale;
+            float y = (Screen.height - projected.y - top) / scale;
+            // SWF DefineShape 463 is 244x132 and centred on the bubble clip.
+            Rect bubbleRect = new Rect(x - 122f, y - 66f, 244f, 132f);
+            Matrix4x4 oldMatrix = GUI.matrix;
+            GUI.matrix = Matrix4x4.TRS(new Vector3(left, top, 0f), Quaternion.identity,
+                new Vector3(scale, scale, 1f));
+            if (m_SpeechBubbleTexture != null)
+                GUI.DrawTexture(bubbleRect, m_SpeechBubbleTexture, ScaleMode.StretchToFill, true);
+
+            // DefineSprite 465: textHolder at (-75,-21), DangleFont at (-25,-10)
+            // relative to the clip registration point. Keep the same visible field
+            // for typing and click-to-complete (the Flash mouseDown used a wrong path).
+            MutinyBitmapFont.DrawDangleText(
+                new Rect(x - 100f, y - 31f, 220f, 92f), Speech.VisibleText,
+                new Color(0.36f, 0.36f, 0.36f), TextAnchor.UpperLeft, 0, 13);
+
+            Event evt = Event.current;
+            if (evt != null && evt.type == EventType.MouseDown && evt.button == 0 &&
+                new Rect(0f, 0f, OriginalCanvasWidth, OriginalCanvasHeight).Contains(GetOriginalCanvasMousePosition()))
+            {
+                Speech.Click();
+                evt.Use();
+            }
+            GUI.matrix = oldMatrix;
         }
 
         private void DrawOriginalCornerControls()
@@ -1683,4 +1733,3 @@ namespace Mutiny.Presentation
         }
     }
 }
-
