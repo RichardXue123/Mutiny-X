@@ -230,8 +230,11 @@ namespace Mutiny.Presentation
             DrawTexture(new Rect(54f, 36f, 452f, 154f), m_TitleLogo);
             if (DrawOriginalButton(new Rect(193f, 187f, 163f, 24f), "play", m_ButtonSmall, m_ButtonSmallOver))
             {
-                m_Flow.PressPlay();
-                LogPage("FRONT-01 play", m_Flow.CurrentPage);
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    m_Flow.PressPlay();
+                    LogPage("FRONT-01 play", m_Flow.CurrentPage);
+                }, showLoading: false);
             }
 
             DrawOriginalButton(new Rect(193f, 216f, 163f, 24f), "scores", m_ButtonSmall, m_ButtonSmallOver);
@@ -248,15 +251,21 @@ namespace Mutiny.Presentation
 
             if (DrawOriginalButton(new Rect(63f, 263f, 200f, 24f), "1 player", m_ButtonWide, m_ButtonWideOver))
             {
-                m_Flow.PressOnePlayer();
-                LogPage("FRONT-02 one player", m_Flow.CurrentPage);
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    m_Flow.PressOnePlayer();
+                    LogPage("FRONT-02 one player", m_Flow.CurrentPage);
+                }, showLoading: false);
             }
 
             DrawOriginalButton(new Rect(287f, 263f, 200f, 24f), "2 player", m_ButtonWide, m_ButtonWideOver);
             if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
             {
-                m_Flow.PressGameSelectBack();
-                LogPage("FRONT-02 back", m_Flow.CurrentPage);
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    m_Flow.PressGameSelectBack();
+                    LogPage("FRONT-02 back", m_Flow.CurrentPage);
+                }, showLoading: false);
             }
         }
 
@@ -274,16 +283,20 @@ namespace Mutiny.Presentation
 
             if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
             {
-                m_Flow.PressLevelSelectBack();
-                LogPage("FRONT-03 back", m_Flow.CurrentPage);
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    m_Flow.PressLevelSelectBack();
+                    LogPage("FRONT-03 back", m_Flow.CurrentPage);
+                }, showLoading: false);
             }
         }
 
         private void DrawLevelButton(int level, Rect rect)
         {
+            bool isTransitioning = MutinyTransitionManager.IsTransitionActive;
             bool unlocked = MutinySaveSystem.IsLevelUnlocked(level);
-            bool hovered = unlocked && rect.Contains(GetCanvasMousePosition());
-            bool pressed = unlocked && IsPointerDown(rect);
+            bool hovered = !isTransitioning && unlocked && rect.Contains(GetCanvasMousePosition());
+            bool pressed = !isTransitioning && unlocked && IsPointerDown(rect);
 
             GUI.color = Color.white;
             DrawTexture(rect, m_LevelSlot);
@@ -304,11 +317,17 @@ namespace Mutiny.Presentation
                     GUI.color = prev;
                 }
 
-                bool clicked = GUI.Button(rect, GUIContent.none, GUIStyle.none);
-                if ((clicked || pressed) &&
-                    m_Flow.TrySelectLevel(level, MutinySaveSystem.IsLevelUnlocked))
+                bool clicked = !isTransitioning && GUI.Button(rect, GUIContent.none, GUIStyle.none);
+                if ((clicked || pressed) && !isTransitioning)
                 {
-                    StartLevel(level);
+                    int targetLevel = level;
+                    MutinyTransitionManager.RequestTransition(() =>
+                    {
+                        if (m_Flow.TrySelectLevel(targetLevel, MutinySaveSystem.IsLevelUnlocked))
+                        {
+                            StartLevel(targetLevel);
+                        }
+                    }, showLoading: true);
                 }
             }
             else
@@ -319,14 +338,15 @@ namespace Mutiny.Presentation
 
         private bool DrawOriginalButton(Rect rect, string text, Texture2D texture, Texture2D hoverTexture = null, bool activateOnPress = false)
         {
-            bool hovered = rect.Contains(GetCanvasMousePosition());
-            bool pressed = activateOnPress && IsPointerDown(rect);
+            bool isTransitioning = MutinyTransitionManager.IsTransitionActive;
+            bool hovered = !isTransitioning && rect.Contains(GetCanvasMousePosition());
+            bool pressed = !isTransitioning && activateOnPress && IsPointerDown(rect);
 
             Texture2D texToDraw = (hovered && hoverTexture != null) ? hoverTexture : texture;
             DrawTexture(rect, texToDraw);
             MutinyBitmapFont.DrawPirateText(rect, text, hovered, true, -3);
 
-            bool clicked = GUI.Button(rect, GUIContent.none, GUIStyle.none);
+            bool clicked = !isTransitioning && GUI.Button(rect, GUIContent.none, GUIStyle.none);
             return activateOnPress ? (pressed || clicked) : clicked;
         }
 
@@ -418,12 +438,15 @@ namespace Mutiny.Presentation
             Rect sfxBubbleRect = MutinyGameHUD.ResolveOriginalCornerBubbleRect(MutinyCornerControl.Sfx);
             Rect musicBubbleRect = MutinyGameHUD.ResolveOriginalCornerBubbleRect(MutinyCornerControl.Music);
 
-            if (GUI.Button(sfxHitRect, GUIContent.none, GUIStyle.none) ||
-                (sfxHovered && GUI.Button(sfxBubbleRect, GUIContent.none, GUIStyle.none)))
-                audio?.ToggleSFX();
-            if (GUI.Button(musicHitRect, GUIContent.none, GUIStyle.none) ||
-                (musicHovered && GUI.Button(musicBubbleRect, GUIContent.none, GUIStyle.none)))
-                audio?.ToggleMusic();
+            if (!MutinyTransitionManager.IsTransitionActive)
+            {
+                if (GUI.Button(sfxHitRect, GUIContent.none, GUIStyle.none) ||
+                    (sfxHovered && GUI.Button(sfxBubbleRect, GUIContent.none, GUIStyle.none)))
+                    audio?.ToggleSFX();
+                if (GUI.Button(musicHitRect, GUIContent.none, GUIStyle.none) ||
+                    (musicHovered && GUI.Button(musicBubbleRect, GUIContent.none, GUIStyle.none)))
+                    audio?.ToggleMusic();
+            }
         }
 
         private static void DrawCornerSprite(Rect rect, Texture2D texture, bool hovered, MutinyCornerControl control)

@@ -153,6 +153,16 @@ namespace Mutiny.Presentation
             // popup is above the game root in the Flash timeline. While it is
             // visible (including the four-tick fade) its buttons consume mouse
             // input; character selection and aiming must not see the same click.
+            if (MutinyTransitionManager.IsTransitionActive)
+            {
+                ResetMobileGestureOwnership();
+                ClearSpecialWeaponCursor();
+                ClearHoveredCharacter();
+                if (InteractionState == MutinyPlayerInteractionState.Aiming)
+                    HideTrajectory();
+                return;
+            }
+
             MutinyGameHUD hud = FindAnyObjectByType<MutinyGameHUD>();
             if (hud != null && (hud.IsQuitPromptVisible ||
                                 (hud.Speech != null && hud.Speech.HasActiveBubble)))

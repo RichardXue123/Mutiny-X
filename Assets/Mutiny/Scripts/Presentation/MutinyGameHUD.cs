@@ -768,15 +768,18 @@ namespace Mutiny.Presentation
             Rect musicBubbleRect = ResolveOriginalCornerBubbleRect(MutinyCornerControl.Music);
             Rect quitBubbleRect = ResolveOriginalCornerBubbleRect(MutinyCornerControl.Quit);
 
-            if (GUI.Button(sfxHitRect, GUIContent.none, GUIStyle.none) ||
-                (sfxHovered && GUI.Button(sfxBubbleRect, GUIContent.none, GUIStyle.none)))
-                ToggleCornerSfx();
-            if (GUI.Button(musicHitRect, GUIContent.none, GUIStyle.none) ||
-                (musicHovered && GUI.Button(musicBubbleRect, GUIContent.none, GUIStyle.none)))
-                ToggleCornerMusic();
-            if (GUI.Button(quitHitRect, GUIContent.none, GUIStyle.none) ||
-                (quitHovered && GUI.Button(quitBubbleRect, GUIContent.none, GUIStyle.none)))
-                OpenQuitPrompt();
+            if (!MutinyTransitionManager.IsTransitionActive)
+            {
+                if (GUI.Button(sfxHitRect, GUIContent.none, GUIStyle.none) ||
+                    (sfxHovered && GUI.Button(sfxBubbleRect, GUIContent.none, GUIStyle.none)))
+                    ToggleCornerSfx();
+                if (GUI.Button(musicHitRect, GUIContent.none, GUIStyle.none) ||
+                    (musicHovered && GUI.Button(musicBubbleRect, GUIContent.none, GUIStyle.none)))
+                    ToggleCornerMusic();
+                if (GUI.Button(quitHitRect, GUIContent.none, GUIStyle.none) ||
+                    (quitHovered && GUI.Button(quitBubbleRect, GUIContent.none, GUIStyle.none)))
+                    OpenQuitPrompt();
+            }
 
             if (m_QuitPromptAlpha > 0f)
                 DrawQuitPrompt();
@@ -863,10 +866,12 @@ namespace Mutiny.Presentation
             DrawPopupButton(continueRect, "continue", continueHovered);
             DrawPopupButton(backRect, "back to menu", backHovered);
 
-            if (GUI.Button(continueRect, GUIContent.none, GUIStyle.none))
+            if (!MutinyTransitionManager.IsTransitionActive && GUI.Button(continueRect, GUIContent.none, GUIStyle.none))
                 ContinueQuitPrompt();
-            if (GUI.Button(backRect, GUIContent.none, GUIStyle.none))
-                BackToSinglePlayerMenu();
+            if (!MutinyTransitionManager.IsTransitionActive && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+            {
+                MutinyTransitionManager.RequestTransition(() => BackToSinglePlayerMenu(), showLoading: false);
+            }
 
             GUI.color = prior;
         }
@@ -1580,18 +1585,24 @@ namespace Mutiny.Presentation
                 Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
                 DrawGameEndButton(nextRect, "next level", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
                 DrawGameEndButton(backRect, "back to title", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
-                if (alpha > 0f && GUI.Button(nextRect, GUIContent.none, GUIStyle.none))
-                    AdvanceToNextLevel();
-                if (alpha > 0f && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
-                    BackToSinglePlayerMenu();
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(nextRect, GUIContent.none, GUIStyle.none))
+                {
+                    MutinyTransitionManager.RequestTransition(() => AdvanceToNextLevel(), showLoading: true);
+                }
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+                {
+                    MutinyTransitionManager.RequestTransition(() => BackToSinglePlayerMenu(), showLoading: false);
+                }
             }
             else if (finalComplete)
             {
                 DrawGameEndScoreRow(175f, 155f, "final score", m_GameEndDisplayedTotalScore, alpha);
                 Rect congratsRect = ResolveOriginalPopupPrimaryButtonRect();
                 DrawGameEndButton(congratsRect, "congratulations", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
-                if (alpha > 0f && GUI.Button(congratsRect, GUIContent.none, GUIStyle.none))
-                    CompleteCampaignAndReturnToLevelSelect();
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(congratsRect, GUIContent.none, GUIStyle.none))
+                {
+                    MutinyTransitionManager.RequestTransition(() => CompleteCampaignAndReturnToLevelSelect(), showLoading: false);
+                }
             }
             else
             {
@@ -1600,10 +1611,14 @@ namespace Mutiny.Presentation
                 Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
                 DrawGameEndButton(restartRect, "restart level", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
                 DrawGameEndButton(backRect, "back to title", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
-                if (alpha > 0f && GUI.Button(restartRect, GUIContent.none, GUIStyle.none))
-                    RestartFromGameEndPopup();
-                if (alpha > 0f && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
-                    BackToSinglePlayerMenu();
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(restartRect, GUIContent.none, GUIStyle.none))
+                {
+                    MutinyTransitionManager.RequestTransition(() => RestartFromGameEndPopup(), showLoading: true);
+                }
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+                {
+                    MutinyTransitionManager.RequestTransition(() => BackToSinglePlayerMenu(), showLoading: false);
+                }
             }
 
             GUI.color = previousColor;
@@ -1720,7 +1735,8 @@ namespace Mutiny.Presentation
                     if (GUILayout.Button(label, m_ButtonStyle, GUILayout.Height(40)))
                     {
                         m_ShowLevelSelect = false;
-                        LevelController?.LoadLevel(lvl);
+                        int targetLvl = lvl;
+                        MutinyTransitionManager.RequestTransition(() => LevelController?.LoadLevel(targetLvl), showLoading: true);
                     }
                     GUI.enabled = true;
                 }

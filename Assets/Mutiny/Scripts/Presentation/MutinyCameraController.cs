@@ -120,6 +120,12 @@ namespace Mutiny.Presentation
                 m_TurnPanTarget = panCharacter != null ? panCharacter.transform : null;
             }
 
+            if (MutinyTransitionManager.IsTransitionActive)
+            {
+                m_EdgeVelocityPixelsPerSecond = Vector2.zero;
+                return;
+            }
+
             // TileSystem.advanceScrolling returns before every automatic camera
             // branch while Controller.dragging is set (human player dragging).
             if (PlayerInput != null && PlayerInput.IsAiming)

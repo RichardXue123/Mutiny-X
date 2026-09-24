@@ -89,6 +89,7 @@ namespace Mutiny.Verification
             VerifyCharacterOverlay(result);
             VerifyGMManager(result);
             VerifySpritePivots(result);
+            VerifyScreenTransitions(result);
             return result;
         }
 
@@ -4613,6 +4614,61 @@ namespace Mutiny.Verification
                 case "tidalWave": return MutinyTidalWave.OriginalTidalWavePivot;
                 case "woodenCrate": return MutinyWoodenCrate.OriginalPivot;
                 default: return new Vector2(0.5f, 0.5f);
+            }
+        }
+
+        private static void VerifyScreenTransitions(MutinyLevel1VerificationResult result)
+        {
+            result.Assert(Mathf.Approximately(MutinyTransitionManager.DefaultFadeDuration, 8f / 25f),
+                "TRANS-01 default fade duration matches Flash 8 frames at 25 fps (0.32s)");
+
+            GameObject transitionObject = new GameObject("TransitionVerification");
+            try
+            {
+                MutinyTransitionManager manager = transitionObject.AddComponent<MutinyTransitionManager>();
+                result.Assert(manager.Phase == TransitionPhase.Idle && !manager.IsTransitioning,
+                    "TRANS-02 transition starts in Idle phase");
+
+                bool peakCalled = false;
+                manager.TransitionTo(() => { peakCalled = true; }, showLoading: false);
+
+                result.Assert(manager.Phase == TransitionPhase.FadeIn && manager.IsTransitioning,
+                    "TRANS-03 TransitionTo enters FadeIn phase");
+
+                manager.StepForVerification(0.16f);
+                result.Assert(manager.Phase == TransitionPhase.FadeIn && Mathf.Approximately(manager.CurrentAlpha, 0.5f) && !peakCalled,
+                    "TRANS-04 FadeIn advances alpha proportionally at midpoint (0.16s = alpha 0.5)");
+
+                manager.StepForVerification(0.16f);
+                result.Assert(manager.Phase == TransitionPhase.Peak && Mathf.Approximately(manager.CurrentAlpha, 1f) && peakCalled,
+                    "TRANS-05 FadeIn completes at 0.32s, reaching Peak and invoking onPeak action");
+
+                manager.StepForVerification(0.04f);
+                result.Assert(manager.Phase == TransitionPhase.FadeOut,
+                    "TRANS-06 Peak transitions to FadeOut after hold duration");
+
+                manager.StepForVerification(0.32f);
+                result.Assert(manager.Phase == TransitionPhase.Idle && Mathf.Approximately(manager.CurrentAlpha, 0f) && !manager.IsTransitioning,
+                    "TRANS-07 FadeOut completes at 0.32s, returning to Idle with alpha 0");
+
+                // Test with showLoading = true
+                peakCalled = false;
+                manager.TransitionTo(() => { peakCalled = true; }, showLoading: true);
+                manager.StepForVerification(0.32f);
+                result.Assert(manager.Phase == TransitionPhase.Peak && manager.IsLoadingVisible,
+                    "TRANS-08 showLoading=true displays authentic loading text during Peak phase");
+
+                manager.StepForVerification(MutinyTransitionManager.DefaultLoadingHoldDuration);
+                result.Assert(manager.Phase == TransitionPhase.FadeOut && !manager.IsLoadingVisible,
+                    "TRANS-09 loading text hides when exiting Peak into FadeOut");
+
+                manager.StepForVerification(0.32f);
+                result.Assert(manager.Phase == TransitionPhase.Idle && !manager.IsTransitioning,
+                    "TRANS-10 transition cleanly finishes back to Idle");
+            }
+            finally
+            {
+                Object.DestroyImmediate(transitionObject);
             }
         }
 
