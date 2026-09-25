@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using Process = System.Diagnostics.Process;
+using ProcessStartInfo = System.Diagnostics.ProcessStartInfo;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
@@ -11,6 +13,8 @@ public static class MutinyBuild
     private const string MenuRoot = "Mutiny X/Build/";
     private const string QueueKey = "MutinyX.Build.Queue";
     private const string QueueActiveKey = "MutinyX.Build.QueueActive";
+    private const string InstallerScriptPath = "BuildTools/WindowsInstaller/MutinyX.iss";
+    private const string InnoCompilerPrefKey = "MutinyX.InnoSetup.CompilerPath";
 
     [Serializable]
     private class BuildQueueState
@@ -19,6 +23,7 @@ public static class MutinyBuild
         public int index;
         public int buildNumber;
         public string version;
+        public bool buildWindowsInstaller;
     }
 
     static MutinyBuild()
@@ -35,13 +40,19 @@ public static class MutinyBuild
         StartQueue(BuildTarget.StandaloneWindows64);
     }
 
-    [MenuItem(MenuRoot + "Build Android", priority = 11)]
+    [MenuItem(MenuRoot + "Build Windows Installer", priority = 11)]
+    public static void BuildWindowsInstaller()
+    {
+        StartQueue(true, BuildTarget.StandaloneWindows64);
+    }
+
+    [MenuItem(MenuRoot + "Build Android", priority = 12)]
     public static void BuildAndroid()
     {
         StartQueue(BuildTarget.Android);
     }
 
-    [MenuItem(MenuRoot + "Build iOS", priority = 12)]
+    [MenuItem(MenuRoot + "Build iOS", priority = 13)]
     public static void BuildIOS()
     {
         StartQueue(BuildTarget.iOS);
@@ -51,10 +62,39 @@ public static class MutinyBuild
     public static void BuildAll()
     {
         StartQueue(
+            true,
             BuildTarget.StandaloneWindows64,
             BuildTarget.Android,
             BuildTarget.iOS
         );
+    }
+
+    [MenuItem(MenuRoot + "Configure Inno Setup Compiler...", priority = 30)]
+    public static void ConfigureInnoSetupCompiler()
+    {
+        string current = EditorPrefs.GetString(InnoCompilerPrefKey, string.Empty);
+        string directory = string.IsNullOrEmpty(current) ? string.Empty : Path.GetDirectoryName(current);
+        string selected = EditorUtility.OpenFilePanel(
+            "Select Inno Setup command-line compiler",
+            directory ?? string.Empty,
+            "exe"
+        );
+
+        if (string.IsNullOrEmpty(selected))
+            return;
+
+        if (!string.Equals(Path.GetFileName(selected), "ISCC.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            EditorUtility.DisplayDialog(
+                "Invalid Inno Setup compiler",
+                "Please select ISCC.exe from an Inno Setup installation.",
+                "OK"
+            );
+            return;
+        }
+
+        EditorPrefs.SetString(InnoCompilerPrefKey, selected);
+        Debug.Log($"[Mutiny Build] Inno Setup compiler configured: {selected}");
     }
 
     [MenuItem(MenuRoot + "Open Build Folder", priority = 40)]
@@ -66,6 +106,11 @@ public static class MutinyBuild
     }
 
     private static void StartQueue(params BuildTarget[] targets)
+    {
+        StartQueue(false, targets);
+    }
+
+    private static void StartQueue(bool buildWindowsInstaller, params BuildTarget[] targets)
     {
         if (BuildPipeline.isBuildingPlayer || EditorApplication.isCompiling)
         {
@@ -92,7 +137,8 @@ public static class MutinyBuild
             targets = targets.Select(t => (int)t).ToArray(),
             index = 0,
             buildNumber = buildNumber,
-            version = version
+            version = version,
+            buildWindowsInstaller = buildWindowsInstaller
         };
 
         SessionState.SetString(QueueKey, JsonUtility.ToJson(state));
@@ -174,7 +220,14 @@ public static class MutinyBuild
 
         bool success = BuildTargetNow(target, state.version, state.buildNumber);
         if (!success)
+        {
             Debug.LogError($"[Mutiny Build] {target} build failed. Continuing with the remaining queued platforms.");
+        }
+        else if (target == BuildTarget.StandaloneWindows64 && state.buildWindowsInstaller)
+        {
+            if (!CreateWindowsInstaller(state.version, state.buildNumber))
+                Debug.LogError("[Mutiny Build] Windows player succeeded, but installer creation failed.");
+        }
 
         AdvanceQueue(state);
     }
@@ -248,9 +301,171 @@ public static class MutinyBuild
         return false;
     }
 
+    private static bool CreateWindowsInstaller(string version, int buildNumber)
+    {
+        string compiler = FindInnoSetupCompiler();
+        if (string.IsNullOrEmpty(compiler))
+        {
+            Debug.LogError(
+                "[Mutiny Build] Inno Setup compiler (ISCC.exe) was not found. " +
+                "Install Inno Setup 7, or use 'Mutiny X > Build > Configure Inno Setup Compiler...'. " +
+                "Winget: winget install --id JRSoftware.InnoSetup.7 -e -s winget -i"
+            );
+            return false;
+        }
+
+        string script = Path.GetFullPath(InstallerScriptPath);
+        if (!File.Exists(script))
+        {
+            Debug.LogError($"[Mutiny Build] Installer script not found: {script}");
+            return false;
+        }
+
+        string playerExe = Path.GetFullPath(GetOutputPath(BuildTarget.StandaloneWindows64, version, buildNumber));
+        string sourceDirectory = Path.GetDirectoryName(playerExe);
+        if (string.IsNullOrEmpty(sourceDirectory) || !Directory.Exists(sourceDirectory))
+        {
+            Debug.LogError($"[Mutiny Build] Windows build directory not found: {sourceDirectory}");
+            return false;
+        }
+
+        string outputDirectory = Path.GetFullPath(Path.Combine("Builds", "Installer"));
+        Directory.CreateDirectory(outputDirectory);
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = compiler,
+            Arguments = QuoteProcessArgument(script),
+            WorkingDirectory = Path.GetDirectoryName(script) ?? Directory.GetCurrentDirectory(),
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+
+        startInfo.EnvironmentVariables["MUTINY_APP_VERSION"] = version;
+        startInfo.EnvironmentVariables["MUTINY_BUILD_NUMBER"] = buildNumber.ToString();
+        startInfo.EnvironmentVariables["MUTINY_SOURCE_DIR"] = sourceDirectory;
+        startInfo.EnvironmentVariables["MUTINY_OUTPUT_DIR"] = outputDirectory;
+
+        Debug.Log($"[Mutiny Build] Creating Windows installer with {compiler}");
+
+        try
+        {
+            using (Process process = Process.Start(startInfo))
+            {
+                if (process == null)
+                {
+                    Debug.LogError("[Mutiny Build] Failed to start Inno Setup compiler.");
+                    return false;
+                }
+
+                string stdout = process.StandardOutput.ReadToEnd();
+                string stderr = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+
+                if (!string.IsNullOrWhiteSpace(stdout))
+                    Debug.Log("[Mutiny Build][Inno Setup]\n" + stdout.Trim());
+
+                if (process.ExitCode != 0)
+                {
+                    Debug.LogError(
+                        $"[Mutiny Build] Inno Setup failed with exit code {process.ExitCode}.\n{stderr.Trim()}"
+                    );
+                    return false;
+                }
+
+                if (!string.IsNullOrWhiteSpace(stderr))
+                    Debug.LogWarning("[Mutiny Build][Inno Setup]\n" + stderr.Trim());
+            }
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError($"[Mutiny Build] Failed to create Windows installer: {exception}");
+            return false;
+        }
+
+        string expectedInstaller = Path.Combine(
+            outputDirectory,
+            $"MutinyX-Setup-{SanitizeVersionForFileName(version)}+{buildNumber}.exe"
+        );
+
+        if (!File.Exists(expectedInstaller))
+        {
+            Debug.LogError($"[Mutiny Build] Inno Setup completed but installer was not found: {expectedInstaller}");
+            return false;
+        }
+
+        Debug.Log($"[Mutiny Build] Windows installer created: {expectedInstaller}");
+        return true;
+    }
+
+    private static string FindInnoSetupCompiler()
+    {
+        string configured = EditorPrefs.GetString(InnoCompilerPrefKey, string.Empty);
+        if (File.Exists(configured))
+            return configured;
+
+        string environmentPath = Environment.GetEnvironmentVariable("INNO_SETUP_COMPILER");
+        if (File.Exists(environmentPath))
+            return environmentPath;
+
+        string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        string programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+
+        string[] candidates =
+        {
+            Path.Combine(programFiles, "Inno Setup 7", "ISCC.exe"),
+            Path.Combine(programFilesX86, "Inno Setup 7", "ISCC.exe"),
+            Path.Combine(programFiles, "Inno Setup 6", "ISCC.exe"),
+            Path.Combine(programFilesX86, "Inno Setup 6", "ISCC.exe"),
+            Path.Combine(localAppData, "Programs", "Inno Setup 7", "ISCC.exe"),
+            Path.Combine(localAppData, "Programs", "Inno Setup 6", "ISCC.exe")
+        };
+
+        foreach (string candidate in candidates)
+        {
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        string path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        foreach (string entry in path.Split(Path.PathSeparator))
+        {
+            if (string.IsNullOrWhiteSpace(entry))
+                continue;
+
+            string candidate;
+            try
+            {
+                candidate = Path.Combine(entry.Trim().Trim('"'), "ISCC.exe");
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        return null;
+    }
+
+    private static string QuoteProcessArgument(string value)
+    {
+        return "\"" + value.Replace("\"", "\\\"") + "\"";
+    }
+
+    private static string SanitizeVersionForFileName(string version)
+    {
+        return version.Replace('/', '-').Replace('\\', '-');
+    }
+
     private static string GetOutputPath(BuildTarget target, string version, int buildNumber)
     {
-        string safeVersion = version.Replace('/', '-').Replace('\\', '-');
+        string safeVersion = SanitizeVersionForFileName(version);
         string label = $"MutinyX-{safeVersion}+{buildNumber}";
 
         switch (target)
