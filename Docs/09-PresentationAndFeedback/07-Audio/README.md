@@ -47,7 +47,7 @@
 ### 已知差异
 
 - `PlaySFX("cannon explosion")` 无法命中 Unity 资源 `cannon_explosion.wav`，开炮声当前静默。
-- `MutinyExplosion` 默认在动画第 3 帧播放 `pop`，造成若干重复、误触发或晚两帧的问题。
+- `MutinyExplosion` 默认在动画第 3 帧播放 `pop`，仍可能造成其他武器的重复、误触发或晚两帧；大炮炮弹已在创建爆炸时关闭这一额外声音，按原版分别保持地形接触一次、直接撞人零次 `pop`。
 - Unity 武器发射流程额外播放 `click`；原版 `click` 的唯一 AS2 调用点是宝箱打开。
 - 原版 12 个 SFX 使用时间轴左右声道音量包络，Unity 当前以统一 `SfxVolume` 播放，未复刻单音效增益/声道差异。
 - 原版启动时间轴（MTV Arcade/Nitrome 前导动画）的 `ching`、`pop`、`nitrome_sound` 尚未接入 Unity 前端流程。

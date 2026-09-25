@@ -26,6 +26,9 @@
 
 ## Cannon 范围锚点回归
 
+- `CAN-SMOKE-02`：发射正式炮弹、推进 25 Hz 物理 tick 与半 tick 表现采样；确认首团烟与炮弹显示起点重合，随后炮弹向前移动且烟保持在身后，权威位置仍独立推进。
+- `CAN-AUD-02`：以正式物理地形接触和角色包围盒重叠分别触发炮弹爆炸，监听 `SfxPlayed`，再执行正式爆炸命中入口；地形接触 `pop` 总计一次，直接命中角色零次。
+- 实际结果：2026-09-25，Unity 6000.6.0f1 隔离临时工程 Play Mode 执行 `Validate Cannon Effects Play Mode`，连同原有烟迹检查共 15/15 断言通过；主工程实机画面与听感仍待验收。
 - `CAN-AI-TURN-01`：经 `MutinyAIController.ExecuteMove` 同源执行入口提交大炮，并交替推进正式 `MutinyTurnManager.AdvanceSimulationTick` 与大炮 25 Hz tick；前 24 tick 不得换回合或积累静止计数，第 25 tick 生成炮弹且镜头目标为该炮弹；炮弹未结束时再等待 151 tick 不得被通用安全超时强制结束，然后驱动正式炮弹物理跨出原版边界、炮身结束，最后才通过通常 11 tick 静止门。用例已添加，待 Unity 运行验证。
 - `CAN-PLACE-01`：角色位于 `(100,200)` 时，通过生产 `MutinyCannon.PlacementCenterPixels` 与独立 `RangeCircle` Transform 断言范围中心均为 `(100,100)`，即原始 100 px 圆的底部落在角色坐标。
 - `CAN-PLACE-03`：从炮身初始 `(100,190)` 按住并把指针快速移到 `(100,400)`，驱动生产 25 Hz tick；以 `(100,100)` 为中心的 120 px 约束应先把目标裁到 `(100,220)`，再按原版半距离移动至 `(100,205)`，并保持拖动资格。

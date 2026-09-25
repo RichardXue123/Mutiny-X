@@ -11,6 +11,7 @@ namespace Mutiny.Simulation
         public override bool CanExpireFromTurnSafetyTimeout => false;
         public const float ExplosionSize = 100f;
         public const float ExplosionDamage = 50f;
+        private Vector2 m_VisibleTickStartPixels;
 
         protected override void Awake()
         {
@@ -35,8 +36,16 @@ namespace Mutiny.Simulation
             // Cannonball.advanceMotion exits at y > water before Weapon.advance's
             // generic splashCheck can run.
             PhysicsBody.ApplyWaterPhysics = false;
+            PhysicsBody.OnBeforeSimulationStep -= CaptureVisibleTickStart;
+            PhysicsBody.OnBeforeSimulationStep += CaptureVisibleTickStart;
             PhysicsBody.OnSimulationStep -= AdvanceOriginalTick;
             PhysicsBody.OnSimulationStep += AdvanceOriginalTick;
+        }
+
+        private void CaptureVisibleTickStart()
+        {
+            PhysicsBodyState state = PhysicsBody.State;
+            m_VisibleTickStartPixels = new Vector2(state.X, state.Y);
         }
 
         public void SetLaunchPosition(Vector2 pixelPosition)
@@ -88,7 +97,12 @@ namespace Mutiny.Simulation
                 return;
             }
 
-            MutinyRumBottleSmokeTrail.Spawn(new Vector2(state.X, state.Y));
+            // Flash leaves smoke at the post-motion position, matching its
+            // immediately rendered ball. Unity presents the ball one completed
+            // tick behind authority, so the corresponding visible pose is the
+            // start of this step. Spawning at the new authoritative position
+            // puts a fresh puff up to 30 px ahead of the visible cannonball.
+            MutinyRumBottleSmokeTrail.Spawn(m_VisibleTickStartPixels);
             ApplyCharacterContact(state);
         }
 
@@ -138,7 +152,10 @@ namespace Mutiny.Simulation
             if (SpriteRenderer != null)
                 SpriteRenderer.enabled = false;
             Finish();
-            MutinyExplosion.Spawn(position, ExplosionSize, ExplosionDamage, Owner);
+            // Explosion.hit only applies damage in the original. The contact
+            // branch itself owns the sole pop; direct character overlap is mute.
+            MutinyExplosion.Spawn(position, ExplosionSize, ExplosionDamage, Owner,
+                playPopOnHit: false);
             if (playPop)
                 Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("pop");
             MutinyDebugLog.Info("Cannonball", $"exploded x={position.x:F1} y={position.y:F1} pop={playPop}", this);
@@ -158,7 +175,10 @@ namespace Mutiny.Simulation
         private void OnDestroy()
         {
             if (PhysicsBody != null)
+            {
+                PhysicsBody.OnBeforeSimulationStep -= CaptureVisibleTickStart;
                 PhysicsBody.OnSimulationStep -= AdvanceOriginalTick;
+            }
         }
     }
 }

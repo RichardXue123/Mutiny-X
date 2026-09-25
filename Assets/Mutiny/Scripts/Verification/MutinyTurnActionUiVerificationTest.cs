@@ -71,6 +71,7 @@ namespace Mutiny.Verification
             VerifyAiOriginalPredictionParity(result);
             VerifyWeaponIdleAnimations(result);
             VerifyCannonSmokeTrail(result);
+            VerifyCannonImpactEffects(result);
             VerifyCannon(result);
             VerifyAiCannonTurnSettlement(result);
             VerifyBoulder(result);
@@ -97,6 +98,7 @@ namespace Mutiny.Verification
         {
             var result = new MutinyLevel1VerificationResult();
             VerifyCannonSmokeTrail(result);
+            VerifyCannonImpactEffects(result);
             return result;
         }
 
@@ -278,6 +280,113 @@ namespace Mutiny.Verification
             {
                 if (preview != null)
                     DestroyNow(preview.gameObject);
+                DestroySmokeTrails();
+            }
+        }
+
+        private static void VerifyCannonImpactEffects(MutinyLevel1VerificationResult result)
+        {
+            GameObject ballObject = null;
+            GameObject targetObject = null;
+            GameObject teamObject = null;
+            MutinyAudioManager audio = MutinyAudioManager.Instance;
+            bool previousSfxEnabled = audio.SfxEnabled;
+            var playedSounds = new List<string>();
+            System.Action<string> recordSfx = sound => playedSounds.Add(sound);
+            try
+            {
+                DestroySmokeTrails();
+                audio.SfxEnabled = true;
+                audio.SfxPlayed += recordSfx;
+
+                ballObject = new GameObject("CannonImpactVerification_Flight");
+                MutinyCannonball ball = ballObject.AddComponent<MutinyCannonball>();
+                ball.Initialize(null);
+                ball.PhysicsBody.SetTerrain(new string[32, 32], 32, 32);
+                ball.SetLaunchPosition(new Vector2(320f, 192f));
+                ball.Fire(new Vector2(30f, 0f));
+                ball.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                ball.PhysicsBody.ApplyPresentationPoseForVerification();
+                MutinyRumBottleSmokeTrail[] trails = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>();
+                Vector2 firstPuff = trails.Length == 1
+                    ? MutinyPhysics.UnityToPixel(trails[0].transform.position)
+                    : Vector2.zero;
+                Vector2 firstVisibleBall = MutinyPhysics.UnityToPixel(ball.transform.position);
+                bool smokeStartsAtVisibleBall = trails.Length == 1 &&
+                    Mathf.Abs(firstPuff.x - 320f) < 0.001f &&
+                    Vector2.Distance(firstPuff, firstVisibleBall) < 0.001f &&
+                    Mathf.Abs(ball.PhysicsBody.State.X - 350f) < 0.001f;
+
+                ball.PhysicsBody.AdvanceSimulationFrameForVerification(0.02f);
+                ball.PhysicsBody.ApplyPresentationPoseForVerification();
+                Vector2 halfwayBall = MutinyPhysics.UnityToPixel(ball.transform.position);
+                bool halfFrameStaysBehind = Mathf.Abs(halfwayBall.x - 335f) < 0.001f &&
+                    firstPuff.x < halfwayBall.x && trails.Length == 1;
+                result.Assert(smokeStartsAtVisibleBall && halfFrameStaysBehind,
+                    "CAN-SMOKE-02 production cannonball tick places its new puff at the visible ball, not 30 px ahead of it");
+
+                DestroyNow(ballObject);
+                ballObject = null;
+                DestroySmokeTrails();
+
+                ballObject = new GameObject("CannonImpactVerification_Wall");
+                ball = ballObject.AddComponent<MutinyCannonball>();
+                ball.Initialize(null);
+                string[,] wall = new string[4, 4];
+                wall[2, 2] = "solid";
+                ball.PhysicsBody.SetTerrain(wall, 4, 4);
+                ball.SetLaunchPosition(new Vector2(64f, 48f));
+                ball.Fire(new Vector2(0f, 20f));
+                playedSounds.Clear();
+                ball.PhysicsBody.AdvanceSimulationTick();
+                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>();
+                bool wallContact = ball.IsFinished && explosions.Length == 1 &&
+                    playedSounds.Count == 1 && playedSounds[0] == "pop" &&
+                    !explosions[0].PlayPopOnHit;
+                if (explosions.Length == 1)
+                    explosions[0].ApplyHit();
+                result.Assert(wallContact && playedSounds.Count == 1,
+                    "CAN-AUD-02 production wall contact plays exactly one pop and explosion hit adds none");
+                for (int i = 0; i < explosions.Length; i++)
+                    DestroyNow(explosions[i].gameObject);
+                DestroyNow(ballObject);
+                ballObject = null;
+                DestroySmokeTrails();
+
+                teamObject = new GameObject("CannonImpactVerification_TargetTeam");
+                MutinyTeam team = teamObject.AddComponent<MutinyTeam>();
+                targetObject = new GameObject("CannonImpactVerification_Target");
+                MutinyCharacter target = targetObject.AddComponent<MutinyCharacter>();
+                target.PhysicsBody.State = PhysicsBodyState.CreateDefault(350f, 192f);
+                target.PhysicsBody.State.Weight = 0f;
+                target.transform.position = MutinyPhysics.PixelToUnity(350f, 192f);
+                team.RegisterCharacter(target);
+
+                ballObject = new GameObject("CannonImpactVerification_Character");
+                ball = ballObject.AddComponent<MutinyCannonball>();
+                ball.Initialize(null);
+                ball.PhysicsBody.SetTerrain(new string[32, 32], 32, 32);
+                ball.SetLaunchPosition(new Vector2(320f, 192f));
+                ball.Fire(new Vector2(30f, 0f));
+                playedSounds.Clear();
+                ball.PhysicsBody.AdvanceSimulationTick();
+                explosions = Object.FindObjectsByType<MutinyExplosion>();
+                bool characterContact = ball.IsFinished && explosions.Length == 1 &&
+                    playedSounds.Count == 0 && !explosions[0].PlayPopOnHit;
+                if (explosions.Length == 1)
+                    explosions[0].ApplyHit();
+                result.Assert(characterContact && playedSounds.Count == 0,
+                    "CAN-AUD-02 production direct character impact and explosion hit do not play pop");
+                for (int i = 0; i < explosions.Length; i++)
+                    DestroyNow(explosions[i].gameObject);
+            }
+            finally
+            {
+                audio.SfxPlayed -= recordSfx;
+                audio.SfxEnabled = previousSfxEnabled;
+                DestroyNow(ballObject);
+                DestroyNow(targetObject);
+                DestroyNow(teamObject);
                 DestroySmokeTrails();
             }
         }

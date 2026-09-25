@@ -9,6 +9,7 @@ namespace Mutiny.Verification.Editor
     public static class MutinyParityValidationMenu
     {
         private const string CameraMovementVerificationKey = "Mutiny.CameraMovementPlayModeVerification";
+        private const string CannonEffectsVerificationKey = "Mutiny.CannonEffectsPlayModeVerification";
 
         static MutinyParityValidationMenu()
         {
@@ -17,21 +18,28 @@ namespace Mutiny.Verification.Editor
 
         private static void OnPlayModeStateChanged(PlayModeStateChange state)
         {
-            if (state != PlayModeStateChange.EnteredPlayMode ||
-                !SessionState.GetBool(CameraMovementVerificationKey, false))
+            if (state != PlayModeStateChange.EnteredPlayMode)
+                return;
+
+            bool verifyCamera = SessionState.GetBool(CameraMovementVerificationKey, false);
+            bool verifyCannon = SessionState.GetBool(CannonEffectsVerificationKey, false);
+            if (!verifyCamera && !verifyCannon)
                 return;
 
             SessionState.EraseBool(CameraMovementVerificationKey);
+            SessionState.EraseBool(CannonEffectsVerificationKey);
             bool passed = false;
             try
             {
                 MutinyLevel1VerificationResult result =
-                    MutinyTurnActionUiVerificationTest.RunCameraMovement();
+                    verifyCannon ? MutinyTurnActionUiVerificationTest.RunCannonSmokeTrail() :
+                        MutinyTurnActionUiVerificationTest.RunCameraMovement();
                 passed = result.Passed;
+                string label = verifyCannon ? "Cannon effects" : "Camera movement";
                 if (passed)
-                    Debug.Log($"[Mutiny Parity] Camera movement Play Mode verification passed: {result.PassedAssertions}/{result.TotalAssertions} assertions.");
+                    Debug.Log($"[Mutiny Parity] {label} Play Mode verification passed: {result.PassedAssertions}/{result.TotalAssertions} assertions.");
                 else
-                    Debug.LogError("[Mutiny Parity] Camera movement Play Mode verification failed:\n" +
+                    Debug.LogError($"[Mutiny Parity] {label} Play Mode verification failed:\n" +
                                    string.Join("\n", result.Failures));
             }
             catch (Exception exception)
@@ -111,6 +119,16 @@ namespace Mutiny.Verification.Editor
             else
                 Debug.LogError("[Mutiny Parity] Cannon smoke trail verification failed:\n" +
                                string.Join("\n", result.Failures));
+        }
+
+        [MenuItem("Mutiny/Parity/Validate Cannon Effects Play Mode")]
+        public static void ValidateCannonEffectsPlayMode()
+        {
+            SessionState.SetBool(CannonEffectsVerificationKey, true);
+            if (EditorApplication.isPlaying)
+                OnPlayModeStateChanged(PlayModeStateChange.EnteredPlayMode);
+            else
+                EditorApplication.EnterPlaymode();
         }
 
         [MenuItem("Mutiny/Parity/Validate GM Commands")]
