@@ -41,6 +41,7 @@ flowchart TD
 | E07 | [QuitGameButton.as](../../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/buttons/QuitGameButton.as) 9–24、[RestartLevelButton.as](../../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/buttons/RestartLevelButton.as) 9–18、[BackButton.as](../../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/buttons/BackButton.as) 10–20：返回、重开和选关返回路径 |
 | E08 | [IngamePopup.as](../../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/game/IngamePopup.as) 8–29；[popup 帧标签](../../10-OriginalEvidence/Artifacts/ReverseEngineering/Art/frame-labels.csv) 18–20；[SWF XML](../../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/mutiny.swf.xml) 中 sprite 342 的 41/51/61 帧：标题、淡入淡出和独立按钮；[双人选关 sprite 629](../../10-OriginalEvidence/Artifacts/ReverseEngineering/Art/raster/sprites/DefineSprite_629_level_select_2p/1.png) 仅供核对静态画面 |
 | E09 | [sprite 628 的 18 个逐帧文字脚本](../../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/DefineSprite_628)、[原站 XML 清单](../../10-OriginalEvidence/Artifacts/TwoPlayerLevels/catalog.csv)、[NitromeGame.as](../../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/NitromeGame.as) 78–84：双人关卡名称、编号哈希映射、原件 SHA-256 与 `players` 原值 |
+| E10 | [用户原版与 Unity 截图](../../10-OriginalEvidence/Artifacts/TwoPlayerSelectVisual/README.md)、[SWF XML](../../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/mutiny.swf.xml) 根帧 111 及 sprite 629；shape 1959/1960/578、sprite 628 与 `back_ls_button` 的独立图层和坐标 |
 
 ## 行为规则与验收口径
 
@@ -57,6 +58,7 @@ flowchart TD
 | 2P-END-02 | 对战弹窗沿用 sprite 342 面板，但 41/51/61 帧各有独立标题，`restart level` 与 `back to title` 是独立子按钮，弹窗每帧 Alpha ±25；不可把整张导出 PNG 当全部状态 | E07、E08 | `MutinyGameHUD`、`MutinyTransitionManager` | 分别检查三种标题、两按钮的显示/资格/点击/hover/命中区域与 25 FPS 动画时序 | 已接入独立结果状态和按钮绘制；三种路由自动断言通过，画面、命中和动画时序待 Play Mode |
 | 2P-EXIT-01 | 对战弹窗 Restart 重载同一关并重新抽先手，胜局计数保留；弹窗或右上角 Quit 的 `back to title` 实际回双人选关并保留计数与关卡编号 | E02、E05、E07、E08 | `MutinyLevelController`、`MutinyFrontendController`、`MutinyGameHUD` | 先制造 1:0，再重开、退出、重新进关；核对 1:0、编号和先手；重进模式页才清零 | 已实现；生产 Restart 保留 1:0/编号自动断言通过；Quit/弹窗实际按钮和重抽先手待运行 |
 | 2P-ASSET-01 | 16–33 共 18 个双人选关帧；原版按 `MD5("yoho"+编号)+.xml` 加载对应编号，天色分段 16–21/22–27/28–33 | E02、E03、E06、E09 | `MutinyLevelController`、`MutinyOriginalBackground`、资源目录 | 为每个编号建立来源哈希、XML、缩略/名称和天色映射，再逐关加载核对 | 原站 18 XML、SHA 和编号映射静态核验；Unity 生产入口逐关加载 16–33、双队存活/人类与天色 18 项自动断言通过；画面对照待测 |
+| 2P-VIS-01 | 进入双人选关后显示带比分红框与底部分隔线的双人专用面板；框内有红蓝海盗图标和居中的 `比分 VS 比分`；关卡地图位于独立红框内，白色关卡名居中显示在红色栏上；Play/Back 的原版锚点分别为 (275,296)/(275,334)，Prev/Next 保持独立悬停和命中 | E08、E10 | `MutinyFrontendController`、`MutinyBitmapFont`、`Resources/UI/Frontend` | 在 16/17/33 关对照原版截图，逐项检查比分框/图标、预览红框、名称颜色与清晰度、底部分隔、Play/Back 坐标、箭头可见/悬停/点击 | 2026-09-25 静态确认；用户截图显示 Unity 缺少比分框/图标与预览红框，名称白底黑字，Back 低于原版；待修复与实测 |
 
 ## 关卡帧与资源边界
 

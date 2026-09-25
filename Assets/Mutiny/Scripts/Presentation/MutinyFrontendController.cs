@@ -43,6 +43,9 @@ namespace Mutiny.Presentation
         private Texture2D m_GameSelectPanel;
         private Texture2D m_HelpPanel;
         private Texture2D m_LevelSelectPanel;
+        private Texture2D m_TwoPlayerPanel;
+        private Texture2D m_TwoPlayerScorePirates;
+        private Texture2D m_TwoPlayerPreviewFrame;
         private Texture2D m_GameTypePirates;
         private Texture2D m_ButtonSmall;
         private Texture2D m_ButtonSmallOver;
@@ -122,6 +125,9 @@ namespace Mutiny.Presentation
             m_GameSelectPanel = Resources.Load<Texture2D>("UI/Frontend/game_select_panel");
             m_HelpPanel = LoadPointTexture("UI/Frontend/help_panel");
             m_LevelSelectPanel = Resources.Load<Texture2D>("UI/Frontend/level_select_panel");
+            m_TwoPlayerPanel = LoadPointTexture("UI/Frontend/two_player_panel");
+            m_TwoPlayerScorePirates = LoadPointTexture("UI/Frontend/two_player_score_pirates");
+            m_TwoPlayerPreviewFrame = LoadPointTexture("UI/Frontend/two_player_preview_frame");
             m_GameTypePirates = Resources.Load<Texture2D>("UI/Frontend/game_type_pirates");
             m_ButtonSmall = Resources.Load<Texture2D>("UI/Frontend/button_small");
             m_ButtonSmallOver = Resources.Load<Texture2D>("UI/Frontend/button_small_over");
@@ -343,20 +349,20 @@ namespace Mutiny.Presentation
 
         private void DrawTwoPlayerLevelSelect()
         {
-            DrawTexture(new Rect(44f, 24f, 460f, 350f), m_LevelSelectPanel);
+            // Root frame 111 uses its own panel (shape 1959). It contains the
+            // score border and the divider above the two bottom buttons.
+            DrawTexture(new Rect(44f, 24f, 460f, 350f), m_TwoPlayerPanel);
             MutinyBitmapFont.DrawPirateText(new Rect(44f, 32f, 460f, 23f), "select level", false, true, -3);
             int level = m_Flow.SelectedTwoPlayerLevel;
-            // Sprite 628 is a per-level preview and name field. Its exported PNG
-            // keeps the Flash registration offset: sprite 629 starts at (97,125).
-            DrawTexture(new Rect(97f, 125f, 427f, 263f), m_TwoPlayerPreviews[level - 16]);
-            // FFDec leaves the dynamic DangleFont field as a narrow white stub.
-            // Rebuild that field so long level names remain legible.
-            Color prior = GUI.color;
-            GUI.color = Color.white;
-            GUI.DrawTexture(new Rect(175f, 256f, 200f, 20f), Texture2D.whiteTexture);
-            GUI.color = prior;
-            MutinyBitmapFont.DrawDangleText(new Rect(175f, 256f, 200f, 20f),
-                TwoPlayerLevelNames[level - 16], Color.black, TextAnchor.MiddleCenter, 0, 13);
+
+            // Sprite 629 places shape 578 at (275,201). Sprite 628's exported
+            // image also contains a white dynamic-text placeholder below its map.
+            // Draw only the map into the frame interior so neither placeholder
+            // nor white map pixels cover the red border and name strip.
+            DrawTexture(new Rect(174f, 125f, 202f, 152f), m_TwoPlayerPreviewFrame);
+            DrawTwoPlayerMapPreview(m_TwoPlayerPreviews[level - 16]);
+            MutinyBitmapFont.DrawDangleText(new Rect(175f, 260f, 200f, 16f),
+                TwoPlayerLevelNames[level - 16], Color.white, TextAnchor.MiddleCenter, 0, 13);
             if (level > 16 && DrawTwoPlayerArrow(new Rect(117.5f, 182f, 35f, 38f), m_TwoPlayerPrevUp, m_TwoPlayerPrevOver))
             {
                 m_Flow.StepTwoPlayerLevel(-1);
@@ -370,12 +376,13 @@ namespace Mutiny.Presentation
 
             int p1 = m_LevelController != null ? m_LevelController.Player1Wins : 0;
             int p2 = m_LevelController != null ? m_LevelController.Player2Wins : 0;
-            MutinyBitmapFont.DrawDangleText(new Rect(179f, 67f, 120f, 14f),
-                "player 1", Color.white, TextAnchor.MiddleCenter, 0, 13);
-            MutinyBitmapFont.DrawDangleText(new Rect(251f, 67f, 120f, 14f),
-                "player 2", Color.white, TextAnchor.MiddleCenter, 0, 13);
-            MutinyBitmapFont.DrawDangleText(new Rect(171f, 81f, 207f, 20f),
-                $"{p1}                {p2}", Color.white, TextAnchor.MiddleCenter, 0, 13);
+            DrawTexture(new Rect(186f, 81f, 177f, 23f), m_TwoPlayerScorePirates);
+            MutinyBitmapFont.DrawDangleText(new Rect(228f, 85f, 34f, 14f),
+                p1.ToString(), Color.white, TextAnchor.MiddleCenter, 0, 13);
+            MutinyBitmapFont.DrawDangleText(new Rect(262f, 85f, 26f, 14f),
+                "vs", Color.white, TextAnchor.MiddleCenter, 0, 13);
+            MutinyBitmapFont.DrawDangleText(new Rect(287f, 85f, 34f, 14f),
+                p2.ToString(), Color.white, TextAnchor.MiddleCenter, 0, 13);
             if (DrawOriginalButton(new Rect(205f, 296f, 140f, 24f), "play", m_ButtonBack, m_ButtonBackOver))
             {
                 if (!MutinyLevelController.HasNumberedLevelData(level))
@@ -392,12 +399,25 @@ namespace Mutiny.Presentation
                 }
             }
             if (!string.IsNullOrEmpty(m_TwoPlayerLoadError))
-                MutinyBitmapFont.DrawDangleText(new Rect(94f, 320f, 360f, 20f),
+                MutinyBitmapFont.DrawDangleText(new Rect(94f, 320f, 360f, 12f),
                     m_TwoPlayerLoadError, Color.white, TextAnchor.MiddleCenter, 0, 13);
-            if (DrawOriginalButton(new Rect(205f, 345f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
+            if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
             {
                 MutinyTransitionManager.RequestTransition(() => m_Flow.PressTwoPlayerLevelSelectBack(), showLoading: false);
             }
+        }
+
+        private static void DrawTwoPlayerMapPreview(Texture2D preview)
+        {
+            if (preview == null)
+                return;
+
+            // FFDec's sprite 628 raster has the 192x129 map at pixels
+            // x=82..273, y=0..128. The remaining pixels are transparent or
+            // a dynamic text placeholder, which the original Flash replaces.
+            Rect source = new Rect(82f / preview.width,
+                1f - 129f / preview.height, 192f / preview.width, 129f / preview.height);
+            GUI.DrawTextureWithTexCoords(new Rect(179f, 130f, 192f, 129f), preview, source, true);
         }
 
         private static bool DrawTwoPlayerArrow(Rect rect, Texture2D up, Texture2D over)
