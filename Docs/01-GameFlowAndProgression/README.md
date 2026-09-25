@@ -25,6 +25,7 @@
 | [02-LevelLifecycle](02-LevelLifecycle/README.md) | 关卡生命周期 |
 | [03-ResultsAndProgression](03-ResultsAndProgression/README.md) | 结算与进度 |
 | [04-Persistence](04-Persistence/README.md) | 持久化 |
+| [05-TwoPlayerMode](05-TwoPlayerMode/README.md) | 原版双人模式行为规格与[复刻计划](05-TwoPlayerMode/PLAN.md) |
 
 ## 后续文档
 

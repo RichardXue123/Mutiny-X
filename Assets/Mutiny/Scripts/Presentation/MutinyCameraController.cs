@@ -1,3 +1,4 @@
+using System;
 using Mutiny.Levels;
 using Mutiny.Simulation;
 using Mutiny.Diagnostics;
@@ -18,6 +19,12 @@ namespace Mutiny.Presentation
         private const float OriginalScrollAccelerationPixelsPerTick = 1f;
         private const float OriginalTrackingPixelsPerTick = 30f;
         private const float OriginalTrackingVerticalOffsetPixels = 50f;
+        // DefineSprite_1813_cursor: labelled scroll1 at frame 78 and scroll2
+        // at frame 87. These are exact 31x22 PNG exports, not redrawn arrows.
+        private const string ScrollCardinalPng =
+            "iVBORw0KGgoAAAANSUhEUgAAAB8AAAAWCAYAAAA4oUfxAAAAjUlEQVR4XtXO2wqAIBRE0f7/p4stJbi7vDgqLQjCM8dx235kP7/p9gv/Ho5Wy1c8oCmf/QB3F5w7OIJ7K2YOp7mzwdwLSe67IeOlFHc9IufFBPe8IuvlXu74RN4X9PD9r8h6uZc7HpHzYoJ7bsh4KcVdDeZeSHJfxczhNHcWnDs4gnunFWNZMZYVX6LFB3vmBBk/U38EAAAAAElFTkSuQmCC";
+        private const string ScrollDiagonalPng =
+            "iVBORw0KGgoAAAANSUhEUgAAAB8AAAAWCAYAAAA4oUfxAAAAgklEQVR4Xu2OSw6AIBQDuf9VOQSmGxPHD/A+6oJJTBTaOqUsFj+hOR4XzYq6HJuFm8OoyzELrdbK7S7qccjKtIA6HPEwJaA8B7wMCyjLcgRDAsqxGEVXQBmWInkU0D0L0dwK6I7hDC4FdM5gFicBnTGUyUFA3wxkswvonZdv8NmPTWyeFwBK1h/xJgAAAABJRU5ErkJggg==";
 
         public MutinyTurnManager TurnManager;
         public MutinyPlayerInput PlayerInput;
@@ -31,6 +38,12 @@ namespace Mutiny.Presentation
         private MutinyWeapon m_TrackedWeapon;
         private Vector2 m_EdgeVelocityPixelsPerSecond;
         private bool m_AirDropCameraWasLocked;
+        private Vector2 m_DesktopScrollDirection;
+        private Vector2 m_MobileScrollDirection;
+        private int m_LastMobileScrollFrame = -1;
+        private bool m_DesktopScrollCursorWasVisible;
+        private Texture2D m_ScrollCardinalTexture;
+        private Texture2D m_ScrollDiagonalTexture;
 
         private void Awake()
         {
@@ -41,6 +54,23 @@ namespace Mutiny.Presentation
         private void OnEnable()
         {
             ApplyViewportLetterbox();
+        }
+
+        private void OnDisable()
+        {
+            if (m_DesktopScrollCursorWasVisible)
+                Cursor.visible = PlayerInput == null || !PlayerInput.HasVisibleSpecialCursor;
+            m_DesktopScrollCursorWasVisible = false;
+            m_DesktopScrollDirection = Vector2.zero;
+            m_LastMobileScrollFrame = -1;
+        }
+
+        private void OnDestroy()
+        {
+            if (m_ScrollCardinalTexture != null)
+                Destroy(m_ScrollCardinalTexture);
+            if (m_ScrollDiagonalTexture != null)
+                Destroy(m_ScrollDiagonalTexture);
         }
 
         private void Update()
@@ -105,10 +135,12 @@ namespace Mutiny.Presentation
         private void LateUpdate()
         {
             AdvanceCamera(Time.deltaTime);
+            UpdateScrollCursorVisibility();
         }
 
         private void AdvanceCamera(float deltaTime)
         {
+            m_DesktopScrollDirection = Vector2.zero;
             ApplyViewportLetterbox();
             EnsureReferences();
             if (m_Camera == null || m_LevelRoot == null || TurnManager == null)
@@ -418,6 +450,8 @@ namespace Mutiny.Presentation
                     direction.y = 1f;
             }
 
+            m_DesktopScrollDirection = direction;
+
             float maximumSpeed = OriginalMaxScrollPixelsPerTick / MutinyPhysics.TimeStep;
             float acceleration = OriginalScrollAccelerationPixelsPerTick /
                                  (MutinyPhysics.TimeStep * MutinyPhysics.TimeStep);
@@ -456,6 +490,17 @@ namespace Mutiny.Presentation
         }
 
         internal bool CanUseManualScrollingForVerification() => CanUseManualScrolling();
+        internal bool IsDesktopScrollArrowVisible =>
+            !Application.isMobilePlatform && m_DesktopScrollDirection.sqrMagnitude > 0f;
+        internal Vector2 DesktopScrollDirectionForVerification => m_DesktopScrollDirection;
+        internal Vector2 MobileScrollDirectionForVerification => m_MobileScrollDirection;
+        internal bool IsMobileScrollArrowVisibleForVerification =>
+            m_LastMobileScrollFrame == Time.frameCount && m_MobileScrollDirection.sqrMagnitude > 0f;
+        internal Texture2D ScrollArrowTextureForVerification(bool diagonal)
+        {
+            EnsureScrollArrowTextures();
+            return diagonal ? m_ScrollDiagonalTexture : m_ScrollCardinalTexture;
+        }
 
         internal static bool ShouldUseMouseEdgeScrolling(bool isMobilePlatform, bool hasMouse)
         {
@@ -474,7 +519,11 @@ namespace Mutiny.Presentation
             ref bool scrollUp)
         {
             if (mousePosition.x < 0f || mousePosition.x > screenWidth ||
-                mousePosition.y < 0f || mousePosition.y > screenHeight)
+                mousePosition.y < 0f || mousePosition.y > screenHeight ||
+                mousePosition.x < viewportPixelRect.xMin ||
+                mousePosition.x > viewportPixelRect.xMax ||
+                mousePosition.y < viewportPixelRect.yMin ||
+                mousePosition.y > viewportPixelRect.yMax)
                 return;
 
             scrollLeft |= mousePosition.x < viewportPixelRect.xMin + edgePixels;
@@ -505,6 +554,18 @@ namespace Mutiny.Presentation
             if (!CanStartMobileTouchPan(allowWhileAiming))
                 return false;
 
+            ApplyMobileTouchPan(screenDelta);
+            return true;
+        }
+
+        internal void ApplyMobileTouchPanForVerification(Vector2 screenDelta)
+        {
+            EnsureReferences();
+            ApplyMobileTouchPan(screenDelta);
+        }
+
+        private void ApplyMobileTouchPan(Vector2 screenDelta)
+        {
             float viewportWidth = m_Camera != null ? m_Camera.pixelRect.width : Screen.width;
             float viewportHeight = m_Camera != null ? m_Camera.pixelRect.height : Screen.height;
 
@@ -512,11 +573,25 @@ namespace Mutiny.Presentation
                 screenDelta, viewportWidth, viewportHeight,
                 m_Camera.orthographicSize, m_Camera.aspect);
             m_EdgeVelocityPixelsPerSecond = Vector2.zero;
-            Vector3 next = transform.position;
+            Vector3 previous = transform.position;
+            Vector3 next = previous;
             next.x -= worldDelta.x;
             next.y -= worldDelta.y;
             SetClampedPosition(next);
-            return true;
+            // Use the movement that survived level clamping. A blocked pan
+            // cannot claim a direction or display an arrow.
+            Vector2 cameraScreenDirection = new Vector2(
+                transform.position.x - previous.x,
+                previous.y - transform.position.y);
+            if (cameraScreenDirection.sqrMagnitude > Mathf.Epsilon)
+            {
+                m_MobileScrollDirection = cameraScreenDirection;
+                m_LastMobileScrollFrame = Time.frameCount;
+            }
+            else
+            {
+                m_LastMobileScrollFrame = -1;
+            }
         }
 
         internal static Vector2 ScreenDeltaToWorldDelta(
@@ -663,12 +738,132 @@ namespace Mutiny.Presentation
             GUI.color = oldColor;
         }
 
+        private void UpdateScrollCursorVisibility()
+        {
+            bool visible = IsDesktopScrollArrowVisible;
+            if (visible)
+                Cursor.visible = false;
+            else if (m_DesktopScrollCursorWasVisible)
+                Cursor.visible = PlayerInput == null || !PlayerInput.HasVisibleSpecialCursor;
+            m_DesktopScrollCursorWasVisible = visible;
+        }
+
+        internal static bool ResolveScrollArrow(Vector2 screenDirection,
+            out bool diagonal, out float rotationDegrees)
+        {
+            int x = screenDirection.x > 0f ? 1 : screenDirection.x < 0f ? -1 : 0;
+            int y = screenDirection.y > 0f ? 1 : screenDirection.y < 0f ? -1 : 0;
+            diagonal = x != 0 && y != 0;
+            rotationDegrees = 0f;
+            if (x == 0 && y == 0)
+                return false;
+
+            // TileSystem.advance: scroll1 base points right; scroll2 base
+            // points up-right. Its 3x3 angle matrix plus 45 degrees for
+            // diagonals yields these clockwise screen-space rotations.
+            if (diagonal)
+                rotationDegrees = y < 0 ? (x > 0 ? 0f : 270f) : (x > 0 ? 90f : 180f);
+            else if (x < 0)
+                rotationDegrees = 180f;
+            else if (y > 0)
+                rotationDegrees = 90f;
+            else if (y < 0)
+                rotationDegrees = 270f;
+            return true;
+        }
+
+        internal static Vector2 MobileScrollArrowPosition(Vector2 screenDirection,
+            Rect viewportGuiRect, float margin)
+        {
+            Vector2 centre = viewportGuiRect.center;
+            float insetX = Mathf.Min(margin, viewportGuiRect.width * 0.5f);
+            float insetY = Mathf.Min(margin, viewportGuiRect.height * 0.5f);
+            return new Vector2(
+                screenDirection.x > 0f ? viewportGuiRect.xMax - insetX :
+                    screenDirection.x < 0f ? viewportGuiRect.xMin + insetX : centre.x,
+                screenDirection.y > 0f ? viewportGuiRect.yMax - insetY :
+                    screenDirection.y < 0f ? viewportGuiRect.yMin + insetY : centre.y);
+        }
+
+        private void EnsureScrollArrowTextures()
+        {
+            if (m_ScrollCardinalTexture == null)
+                m_ScrollCardinalTexture = DecodeScrollArrow(ScrollCardinalPng, "OriginalCursor_Scroll1");
+            if (m_ScrollDiagonalTexture == null)
+                m_ScrollDiagonalTexture = DecodeScrollArrow(ScrollDiagonalPng, "OriginalCursor_Scroll2");
+        }
+
+        private static Texture2D DecodeScrollArrow(string encodedPng, string name)
+        {
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false, true)
+            {
+                name = name,
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            if (ImageConversion.LoadImage(texture, Convert.FromBase64String(encodedPng), true))
+                return texture;
+            Destroy(texture);
+            return null;
+        }
+
+        private void DrawScrollArrow()
+        {
+            bool mobile = Application.isMobilePlatform;
+            if (!mobile && !IsDesktopScrollArrowVisible)
+                return;
+            if (mobile && !IsMobileScrollArrowVisibleForVerification)
+                return;
+
+            Vector2 screenDirection = mobile
+                ? m_MobileScrollDirection
+                : new Vector2(m_DesktopScrollDirection.x, -m_DesktopScrollDirection.y);
+            if (!ResolveScrollArrow(screenDirection, out bool diagonal, out float rotation))
+                return;
+            EnsureScrollArrowTextures();
+            Texture2D texture = diagonal ? m_ScrollDiagonalTexture : m_ScrollCardinalTexture;
+            if (texture == null)
+                return;
+
+            float scale = Mathf.Min(Screen.width / OriginalHorizontalPixels,
+                Screen.height / OriginalVerticalPixels);
+            Vector2 centre;
+            if (mobile)
+            {
+                Rect pixelRect = m_Camera != null ? m_Camera.pixelRect :
+                    new Rect(0f, 0f, Screen.width, Screen.height);
+                Rect viewportGui = new Rect(pixelRect.xMin, Screen.height - pixelRect.yMax,
+                    pixelRect.width, pixelRect.height);
+                centre = MobileScrollArrowPosition(screenDirection, viewportGui,
+                    18f * scale);
+            }
+            else
+            {
+                Mouse mouse = Mouse.current;
+                if (mouse == null)
+                    return;
+                Vector2 pointer = mouse.position.ReadValue();
+                centre = new Vector2(pointer.x, Screen.height - pointer.y);
+            }
+
+            Rect arrowRect = new Rect(centre.x - 15f * scale,
+                centre.y - 11f * scale, texture.width * scale, texture.height * scale);
+            int previousDepth = GUI.depth;
+            Matrix4x4 previousMatrix = GUI.matrix;
+            GUI.depth = -1000;
+            GUIUtility.RotateAroundPivot(rotation, centre);
+            GUI.DrawTexture(arrowRect, texture, ScaleMode.StretchToFill, true);
+            GUI.matrix = previousMatrix;
+            GUI.depth = previousDepth;
+        }
+
         private void OnGUI()
         {
             if (Event.current.type == EventType.Repaint)
             {
                 GUI.depth = 1000;
                 DrawLetterboxBars();
+                DrawScrollArrow();
             }
         }
     }

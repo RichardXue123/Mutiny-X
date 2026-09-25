@@ -48,7 +48,6 @@ namespace Mutiny.Simulation
         public bool IsFanActive { get; private set; }
         public int FramesFromFire => m_FramesFromFire;
         public int CurrentAnimationFrame => m_CurrentFrame + 1;
-        public override bool CanExpireFromTurnSafetyTimeout => false;
 
         protected override void Awake()
         {
@@ -124,8 +123,8 @@ namespace Mutiny.Simulation
             AdvanceClosedFusePresentation(Time.deltaTime);
 
             // ParachuteBomb inherits Weapon.advance, whose only lifecycle exits are
-            // map-bottom and exact rest. The common Unity water timeout/safety timer
-            // would incorrectly remove it or turn a splash into an explosion.
+            // map-bottom and exact rest. No arbitrary lifetime or water deadline
+            // may remove it or turn a splash into an explosion.
             if (!IsFired || IsFinished || PhysicsBody == null)
                 return;
 

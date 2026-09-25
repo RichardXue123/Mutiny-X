@@ -58,7 +58,16 @@
 
 - `BAN-PHY-01`：通过生产 `MutinyWeaponFactory.SpawnAndLaunch()` 提交 400 px 满拉力，断言 Banana 实际初速为原版 `twangMaxForce=30`，不再错误套用 `Weapon.release` 的 20 上限。
 - `BAN-TRAJ-01`：以同一初速分别驱动生产预览 `PredictVelocityTick()` 和实际 `MutinyPhysicsBody.AdvanceSimulationTick()`，连续比较前 5 个无碰撞 tick 的坐标完全一致。
+- `BAN-LIFE-01`：在无碰撞长地图中，经生产工厂发射香蕉，交替推进正式物理及回合 tick；205 tick 后已超过旧 150 tick 看门狗、旧 3500 px 横向阈值仍不得完成或换回合，继续下降越过 `levelHeight × 32` 后才结束。通用 8 秒和入水短计时已从 Banana 的 `Update()` 排除；实际墙钟 8 秒及入水表现仍需 Play Mode 验证。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；待 Unity Play Mode 实际执行，不能登记为通过。
+
+## 原版武器生命周期回归
+
+- `WPN-LIFE-01`：经生产工厂分别发射 CherryBomb、Dynamite、RumBottle，在无碰撞长地图各推进 205 个正式物理 tick；越过旧 3500 px/8 秒对应距离后必须仍活动，随后仅在下降越过 `levelHeight × 32` 时结束。
+- `WPN-LIFE-02`：经生产工厂创建并启动 Tidal Wave，交替推进正式物理和回合 tick；205 tick 后不得被旧 150 tick 看门狗结束；继续飞过 `levelWidth × 32 + 550`，再由通常 11 tick 静止门换回合。
+- `WPN-WATER-01`：RumBottle 正式发射跨越水线后，确认武器没有角色专属的水下水平阻力，也没有通用入水截止。
+- `DYN-WATER-02`：Dynamite 正式发射入水、显示 unlit 并在地形上停稳后，仍生成 250/70 爆炸，不因时间/水深变成 dud。
+- 实际结果：2026-09-25，Unity 6000.6.0f1 隔离临时工程 Play Mode 执行 `Validate Weapon Lifecycle Play Mode`，`BAN-LIFE-01`、`WPN-LIFE-01/02`、`WPN-WATER-01`、`DYN-WATER-02` 共 16/16 断言通过。主工程正在运行的编辑器、真实关卡画面、墙钟 8 秒持续表现及其他武器的原有长等待回归仍待验收；不能把这些未跑场景登记为通过。
 
 ## 武器共享初速限速回归
 
@@ -125,6 +134,8 @@
 
 ## Android 镜头缺陷回归
 
+- `CUR-SCROLL-01/AND-CUR-SCROLL-01`：通过正式镜头箭头资源解码、八方向映射、视口边缘定位和移动平移核心，核对 31×22 原版帧、方向角、宽屏黑边输入门、实际位移方向及边界阻挡时隐藏。2026-09-25 Unity 6000.6.0f1 隔离临时工程 Play Mode 专项 `Validate Scroll Arrows Play Mode` 通过 5/5 断言；桌面实际鼠标画面与 Android 单指/第二触点真机绘制尚未运行。
+- `CUR-SCROLL-02`：原版 `CustomCursor` 同类型早退；Unity 武器特殊光标经生产 `SetMode(None)`、`Clear()` 重复调用时，镜头已经隐藏的系统鼠标保持隐藏，切换到武器特殊光标及真正退出时才改变可见性。2026-09-25 隔离 Unity 6000.6.0f1 Play Mode `Validate Scroll Arrows Play Mode` 复跑共 6/6 断言通过；主工程 PIE 连续滚屏无闪烁待目视复验。
 - `AND-CAM-01`：调用生产镜头的移动平台指针资格判定，断言 Android/移动平台即使暴露 mouse/pointer 状态也不得进入桌面悬停边缘滚屏；同时断言桌面真实鼠标仍保留原版边缘滚屏资格。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；`Assembly-CSharp` 与 `Assembly-CSharp-Editor` 编译通过；尚未在 Android 真机实际执行，不能登记为通过。
 
@@ -150,3 +161,9 @@
 
 - `AND-PCB-FAN-01`：验证移动触点持续按住时 fan 输入为 active；短触摸只有 `Began` 锁存、在下一物理 tick 前已松开时仍 active 一次；脉冲消费后无持续触摸则恢复 inactive。方向与 `±0.2` 继续由现有 `PCB-FAN-01` 生产物理用例覆盖。
 - 当前状态：用例已加入 `VerifyParachuteBomb()`，覆盖持续触摸、短点击首 tick 生效及第二 tick 不重复消费；`Assembly-CSharp` 与 `Assembly-CSharp-Editor` 编译通过；尚未在 Android 真机实际执行，不能登记为通过。
+
+## 双人关卡资源缺失回归（2P-ASSET-01）
+
+- 缺陷：双人选关第 19 关起显示 `data unavailable`。生产 `HasNumberedLevelData` 从 `Resources/Data/Levels/level_NN.xml` 查找，而该目录此前仅有 01–18。补入按原版哈希名取得的 19–33 原始 XML 后，用 `MutinyTwoPlayerVerificationTest` 从生产选择资格和 `TryLoadLevel` 逐关核对 16–33：关卡编号不串关、红蓝双方存在且存活、菜单双人会话下双方均为人类、天色按编号匹配；另断言第 34 关被拒绝且当前关保持不变。
+- 原件与运行资源的 URL、SHA-256 和 `players` 见 [原版清单](../../10-OriginalEvidence/Artifacts/TwoPlayerLevels/catalog.csv)。
+- 实际结果：2026-09-25，Unity 6000.6.0f1 主工程编辑器菜单 `Mutiny → Parity → Validate Two Player Mode` 通过 **52/52** 断言；此数字含其他双人 Flow/结算断言。`Application.isPlaying` 专属回合/输入检查在这次编辑器态运行中跳过，实际 UI 点击和完整 Play Mode 对局待验收。

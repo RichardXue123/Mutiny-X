@@ -75,7 +75,7 @@ namespace Mutiny.Simulation
             PhysicsBody.State.BottomExtent = OriginalExtentPixels;
             PhysicsBody.State.HitsBoxes = true;
             // Weapon.advance only calls splashCheck. Coin water entry must not use
-            // Character-style underwater drag or the generic weapon timeout.
+            // Character-style underwater drag.
             PhysicsBody.ApplyWaterPhysics = false;
             PhysicsBody.OnSimulationStep -= AdvanceOriginalPostMotionTick;
             PhysicsBody.OnSimulationStep += AdvanceOriginalPostMotionTick;

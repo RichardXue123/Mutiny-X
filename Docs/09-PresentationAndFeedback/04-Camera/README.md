@@ -57,4 +57,6 @@
 | AND-CAM-02 | Android 空白处单指拖动提供桌面边缘滚屏的移动端替代操作；手指拖动地图内容，镜头作反向等比例移动，并继续使用生产镜头边界 | 用户授权的 Android 镜头适配要求 | `CanStartMobileTouchPan`、`PanByMobileTouchDelta`、`ScreenDeltaToWorldDelta` | 以不同屏幕宽高换算拖动量，断言相机正交可视范围与拖动比例一致；生产入口调用 `SetClampedPosition` | 已实现；C# 编译通过，待 Android 真机验证 |
 | AND-CAM-03 | 玩家用第一指蓄力时，第二指镜头拖动可越过原版“dragging 时不滚屏”的门；仅用户授权的第二触点可使用该分支，自动跟随目标、AI 回合和关卡边界仍保持生产约束 | 用户授权的 Android 多指扩展 | `CanStartMobileTouchPan(true)`、`PanByMobileTouchDelta(..., true)` | 普通触点在 aiming 时仍被拒绝；明确标记的第二镜头触点可平移 | 已实现；C# 编译通过，待 Android 真机验证 |
 
+手动滚屏时的原版 `scroll1/scroll2` 箭头及安卓拖动方向指示，按 [CUR-SCROLL-01 / AND-CUR-SCROLL-01](../08-CursorsAndTrajectory/README.md) 验收；Android 箭头读取钳制后的实际镜头位移，不在无法继续移动的边界显示。
+
 该条是移动端适配，不属于 Flash 原版规则变更。移动端镜头手势将另行定义，不能复用依赖“悬停”的桌面边缘滚屏。

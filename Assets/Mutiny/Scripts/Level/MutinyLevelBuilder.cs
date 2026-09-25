@@ -30,7 +30,8 @@ namespace Mutiny.Levels
             return CharacterSortingOrder + Mathf.Max(0, originalCreationIndex) * CharacterSortingStride;
         }
 
-        public static GameObject BuildLevel(MutinyLevelData levelData, Transform parent = null, int levelIndex = 1)
+        public static GameObject BuildLevel(MutinyLevelData levelData, Transform parent = null, int levelIndex = 1,
+            MutinyGameMode? menuMode = null)
         {
             if (levelData == null)
                 throw new ArgumentNullException(nameof(levelData));
@@ -81,7 +82,7 @@ namespace Mutiny.Levels
             GameObject objectsObj = new GameObject("Objects");
             objectsObj.transform.SetParent(levelRootObj.transform, false);
             levelRoot.ObjectsHolder = objectsObj.transform;
-            BuildObjects(levelData, objectsObj.transform, levelRoot);
+            BuildObjects(levelData, objectsObj.transform, levelRoot, menuMode);
 
             var chestManager = levelRootObj.AddComponent<MutinyTreasureChestManager>();
             chestManager.Initialize(levelData, levelRoot);
@@ -209,7 +210,8 @@ namespace Mutiny.Levels
             return waterY;
         }
 
-        private static void BuildObjects(MutinyLevelData levelData, Transform parent, MutinyLevelRoot levelRoot)
+        private static void BuildObjects(MutinyLevelData levelData, Transform parent, MutinyLevelRoot levelRoot,
+            MutinyGameMode? menuMode)
         {
             if (levelData.Objects == null)
                 return;
@@ -224,7 +226,9 @@ namespace Mutiny.Levels
             team2Group.transform.SetParent(parent, false);
             levelRoot.Team2 = team2Group.AddComponent<MutinyTeam>();
             levelRoot.Team2.TeamNumber = 2;
-            levelRoot.Team2.IsAiControlled = (levelData.Players == 1);
+            levelRoot.Team2.IsAiControlled = menuMode.HasValue
+                ? menuMode.Value == MutinyGameMode.SinglePlayer
+                : levelData.Players == 1;
             if (levelRoot.Team2.IsAiControlled)
             {
                 team2Group.AddComponent<MutinyAIController>();

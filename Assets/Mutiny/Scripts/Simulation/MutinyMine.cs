@@ -117,8 +117,7 @@ namespace Mutiny.Simulation
 
         protected override void Update()
         {
-            // Mine.advance owns its lifecycle. Do not apply this project's generic
-            // Weapon water timeout or eight-second fail-safe to a stored mine.
+            // Mine.advance owns its lifecycle, including a stored armed mine.
         }
 
         public void AdvanceOriginalTickForVerification() => AdvanceOriginalTick();

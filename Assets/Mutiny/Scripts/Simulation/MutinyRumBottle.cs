@@ -59,6 +59,8 @@ namespace Mutiny.Simulation
             PhysicsBody.OnBeforeSimulationStep += CaptureMotionStartX;
             PhysicsBody.OnSimulationStep -= AdvanceOriginalPresentationTick;
             PhysicsBody.OnSimulationStep += AdvanceOriginalPresentationTick;
+            PhysicsBody.OnSimulationStep -= AdvanceInheritedFinishTick;
+            PhysicsBody.OnSimulationStep += AdvanceInheritedFinishTick;
         }
 
         private void CaptureMotionStartX()
@@ -169,6 +171,7 @@ namespace Mutiny.Simulation
             {
                 PhysicsBody.OnBeforeSimulationStep -= CaptureMotionStartX;
                 PhysicsBody.OnSimulationStep -= AdvanceOriginalPresentationTick;
+                PhysicsBody.OnSimulationStep -= AdvanceInheritedFinishTick;
             }
         }
     }

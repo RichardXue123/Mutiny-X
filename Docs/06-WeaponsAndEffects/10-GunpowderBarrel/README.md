@@ -31,7 +31,7 @@
 | GPB-CUR-01 | 未完成两桶放置时显示火药桶光标；`canPlace=false` 时显示 `cross` 并拒绝点击 | `TileSystem.as::advance`；cursor symbol 1813 frames 11/70；`BoxWeapon.as::advance` | `ResolveBoxPlacementCursorMode()`、`TryPlaceAt()` | 地形重叠点断言 Cross、数量和库存不变；合法点断言 GunpowderBarrel | 已实现；待 Unity 运行验证 |
 | BOX-PLC-01 | 光标与点击统一检查当前待放置桶，而不是已经注册到 boxes 的根桶 | `TileSystem.as::advance`、`BoxWeapon.as::advance/canPlace` | `CanPlaceNext()`、`TryPlaceAt()` | 第一桶后原位置同时显示 Cross 并拒绝第二桶 | 已实现；待 Unity 运行验证 |
 | BOX-PLC-02 | 非法位置按下会忽略整次请求，不因继续按住并移动而摆放，也不清除此前已放桶；合法位置需要新的点击 | 原版运行行为；`BoxWeapon.as::canPlace` 的拒绝分支 | `ShouldHandleWeaponReadyPrimaryInput()`、`TryActivateClickWeapon()`、`TryPlaceAt()` | 第一桶后在重叠位置点击，断言桶链和注册状态不变；共享输入门要求新的按下沿 | 已实现；待 Unity 运行验证 |
-| BOX-WAIT-01 | 第一桶后可无限等待第二次点击；原版没有 150 tick/6 秒安全超时，等待或非法点击不能强制结束桶链 | `BoxWeapon.as::advance/place`；无超时分支 | `CanExpireFromTurnSafetyTimeout=false` | 第一桶后确认不会被回合安全超时判为卡死武器，随后仍可放置第二桶 | 已实现；待 Unity 运行验证 |
+| BOX-WAIT-01 | 第一桶后可无限等待第二次点击；原版没有 150 tick/6 秒安全超时，等待或非法点击不能强制结束桶链 | `BoxWeapon.as::advance/place`；无超时分支 | `MutinyTurnManager.AdvanceSimulationTick` | 第一桶后确认不会被回合安全超时判为卡死武器，随后仍可放置第二桶 | 已实现；待 Unity 运行验证 |
 | BOX-CAM-01 | 每次放桶立即清除 `track`，不跟随桶、不强制回角色；等待第二桶期间直接允许边缘、方向键和 WASD 滚屏 | `Weapon.as::place`；`BoxWeapon.as::place`；`TileSystem.as::advanceScrolling:455-493` | `IsAwaitingBoxPlacement`、`FindActionTarget()`、`CanUseManualScrolling()` | 第一桶后在 `ActionExecuting` 断言无自动目标且手动滚屏可用 | 已实现；待 Unity 运行验证 |
 | BOX-SUP-01 | 横向范围内部分下方有承托面即可，不要求全宽支撑 | `BoxWeapon.as::canPlace` | `CanPlace()` support scan | 单列承托 tile 判定合法 | 已实现；待 Unity 运行验证 |
 | GPB-SEQ-01 | 第一桶提交后保持玩家输入，第二桶完成后才结束序列；一次库存恰好放 2 桶 | `GunpowderBarrel.as`；`BoxWeapon.as::place` | `HasPendingBoxPlacement()`、`OriginalPlacementCount=2` | 第一桶后在 `ActionExecuting` 断言输入仍开放，第二桶后断言总数为 2 | 已实现；待 Unity 运行验证 |

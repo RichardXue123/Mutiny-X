@@ -115,7 +115,7 @@ namespace Mutiny.Simulation
         protected override void Update()
         {
             // Anchor.advance deliberately does not call Weapon.advance, avoiding
-            // generic splash/out-of-bounds/safety-timeout behavior.
+            // generic splash and inherited Weapon.advance finish behavior.
             if (!IsFired || IsFinished)
                 return;
 

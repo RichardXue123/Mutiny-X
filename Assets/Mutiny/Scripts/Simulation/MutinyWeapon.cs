@@ -48,13 +48,6 @@ namespace Mutiny.Simulation
         /// </summary>
         public virtual bool IsBodyVisibleWhileReady => true;
 
-        /// <summary>
-        /// Unity keeps a recovery path for genuinely stuck weapon blockers. Long-running
-        /// source-authentic weapons can opt out when their original lifecycle already
-        /// defines the only valid finish conditions.
-        /// </summary>
-        public virtual bool CanExpireFromTurnSafetyTimeout => true;
-
         /// <summary>Matches Controller.twanging == this for pre-fire overrides.</summary>
         public bool IsBeingAimed { get; private set; }
 
@@ -68,11 +61,9 @@ namespace Mutiny.Simulation
             {
                 PhysicsBody = gameObject.AddComponent<MutinyPhysicsBody>();
             }
+            PhysicsBody.ApplyWaterMotion = false;
         }
 
-        protected float m_LifetimeTimer = 0f;
-        protected float m_WaterTimer = 0f;
-        private bool m_HasHandledWaterEntry;
         private bool m_OverWater = true;
         // Cannonball and some weapon subclasses do not execute Weapon.advance's
         // inherited splashCheck; they supply their own post-motion behavior.
@@ -89,9 +80,6 @@ namespace Mutiny.Simulation
             IsFired = false;
             IsFinished = false;
             IsBeingAimed = false;
-            m_LifetimeTimer = 0f;
-            m_WaterTimer = 0f;
-            m_HasHandledWaterEntry = false;
             m_OverWater = true;
             m_RotationState.Reset(RotationTransform != null ? RotationTransform.localEulerAngles.z : 0f);
             m_HasLoggedRotationVelocity = false;
@@ -110,6 +98,7 @@ namespace Mutiny.Simulation
             PhysicsBody.State.Bounce = 0.2f;
             PhysicsBody.State.Friction = 0.3f;
             PhysicsBody.State.HitsTiles = true;
+            PhysicsBody.ApplyWaterMotion = false;
 
             if (Owner != null && Owner.PhysicsBody != null && !float.IsInfinity(Owner.PhysicsBody.WaterPixelY))
             {
@@ -183,9 +172,6 @@ namespace Mutiny.Simulation
             IsFinished = false;
             IsBeingAimed = false;
             PhysicsBody.IsActive = true;
-            m_LifetimeTimer = 0f;
-            m_WaterTimer = 0f;
-
             // Weapon.fire(vx, vy) assigns the supplied velocity without a cap.
             // Only Solid.twang (below) clamps a pointer throw to twangMaxForce;
             // Weapon.release's separate 20 px/tick rule is not this path.
@@ -225,7 +211,6 @@ namespace Mutiny.Simulation
 
         protected virtual void HandleEnterWater()
         {
-            m_HasHandledWaterEntry = true;
             OnWaterSubmerged();
         }
 
@@ -247,52 +232,28 @@ namespace Mutiny.Simulation
 
         protected virtual void Update()
         {
+            // Original Weapon.update is presentation-only. Weapon.advance applies
+            // its finish conditions on the fixed simulation tick, not on render
+            // time, world X, water depth, or an arbitrary lifetime.
+        }
+
+        protected void AdvanceInheritedFinishTick()
+        {
             if (!IsFired || IsFinished || PhysicsBody == null)
                 return;
 
-            m_LifetimeTimer += Time.deltaTime;
-
-            // 1. Water invalidation check
-            if (PhysicsBody.IsInWater)
-            {
-                m_WaterTimer += Time.deltaTime;
-                if (!m_HasHandledWaterEntry)
-                {
-                    HandleEnterWater();
-                }
-
-                // Submerged below water surface or sunk for duration -> invalidate
-                float waterY = PhysicsBody.WaterPixelY;
-                if (m_WaterTimer >= 0.4f || (!float.IsInfinity(waterY) && PhysicsBody.State.Y > waterY + 24f))
-                {
-                    Finish();
-                    Destroy(gameObject, 0.3f);
-                    return;
-                }
-            }
-
-            // 2. Out of bounds check (Flash AS2 parity: y > levelHeight * 32)
-            var levelRoot = FindAnyObjectByType<MutinyLevelRoot>();
-            float maxLevelY = levelRoot != null && levelRoot.Height > 0
-                ? levelRoot.Height * 32f + 64f
-                : (float.IsInfinity(PhysicsBody.WaterPixelY) ? 1200f : PhysicsBody.WaterPixelY + 200f);
-
-            if (PhysicsBody.State.Y > maxLevelY || PhysicsBody.State.Y > 2500f ||
-                PhysicsBody.State.X < -600f || PhysicsBody.State.X > 3500f)
-            {
-                MutinyDebugLog.Info("Weapon", $"out of bounds expiration type={WeaponType} pos=({PhysicsBody.State.X:F1},{PhysicsBody.State.Y:F1})", this);
-                Finish();
-                Destroy(gameObject);
+            PhysicsBodyState state = PhysicsBody.State;
+            MutinyLevelRoot levelRoot = FindAnyObjectByType<MutinyLevelRoot>();
+            bool belowLevel = levelRoot != null && levelRoot.Height > 0 &&
+                              state.VelocityY > 0f &&
+                              state.Y > levelRoot.Height * MutinyPhysics.PixelsPerUnit;
+            bool atRest = state.VelocityX == 0f && Mathf.Abs(state.VelocityY) < 0.2f;
+            if (!belowLevel && !atRest)
                 return;
-            }
 
-            // 3. Safety lifetime timeout (prevents hanging indefinitely)
-            if (m_LifetimeTimer > 8.0f)
-            {
-                MutinyDebugLog.Warning("Weapon", $"safety lifetime timeout expired type={WeaponType}", this);
-                Finish();
-                Destroy(gameObject);
-            }
+            MutinyDebugLog.Info("Weapon", $"original finish type={WeaponType} reason={(belowLevel ? "level-bottom" : "at-rest")}", this);
+            Finish();
+            Destroy(gameObject, 0.1f);
         }
 
         protected void AdvanceOriginalRotationTick()

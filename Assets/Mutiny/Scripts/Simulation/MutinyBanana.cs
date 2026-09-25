@@ -1,4 +1,5 @@
 using Mutiny.Diagnostics;
+using Mutiny.Levels;
 using Mutiny.Presentation;
 using UnityEngine;
 
@@ -155,6 +156,17 @@ namespace Mutiny.Simulation
             {
                 MutinyDebugLog.Info("Banana", $"detonation condition={reason}", this);
                 Explode();
+                return;
+            }
+
+            // Weapon.advance executes after Banana.advanceMotion in the original.
+            // Only a descending weapon past the bottom of the map is finished.
+            MutinyLevelRoot levelRoot = Object.FindAnyObjectByType<MutinyLevelRoot>();
+            if (levelRoot != null && levelRoot.Height > 0 && state.VelocityY > 0f &&
+                state.Y > levelRoot.Height * MutinyPhysics.PixelsPerUnit)
+            {
+                MutinyDebugLog.Info("Banana", $"finished below level y={state.Y:F1}", this);
+                Finish();
             }
         }
 

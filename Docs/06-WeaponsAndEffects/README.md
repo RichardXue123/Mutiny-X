@@ -16,7 +16,7 @@
 
 - [武器逻辑实现细节与一致性审计](IMPLEMENTATION_DETAILS.md)：本模块的规范入口，覆盖原版公共生命周期、15 种武器状态机、Unity 调用链、当前差异和验收矩阵。
 - 原版规则直接取自 `Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/throwgame/`，不得以当前 C# 或旧版 `weapon-registry.md` 反推。
-- 本轮只完成静态取证和实现解析，没有运行 Unity；所有运行结果仍标记为“待运行验证”。
+- 公共武器生命周期已按原版移除非原版截止条件；2026-09-25 在 Unity 6000.6.0f1 隔离 Play Mode 跑通专项 16/16 断言。其他子模块的待运行标记不因这次专项自动改变。
 
 ## 边界
 

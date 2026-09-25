@@ -57,6 +57,7 @@ namespace Mutiny.Verification
             VerifyCharacterTimeline(result);
             VerifyFrontendFlow(result);
             VerifyAndroidAdaptation(result);
+            VerifyScrollArrows(result);
             VerifyBattleHud(result);
             VerifyCornerLevelControls(result);
             VerifyMutedMusicToggleStartsRequestedTrack(result);
@@ -76,12 +77,15 @@ namespace Mutiny.Verification
             VerifyAiCannonTurnSettlement(result);
             VerifyBoulder(result);
             VerifyBanana(result);
+            VerifyBananaLongFlight(result);
+            VerifySharedWeaponLifecycle(result);
             VerifyParachuteBomb(result);
             VerifyPiecesOfEight(result);
             VerifyRumBottle(result);
             VerifyMineCameraAndLevelCleanup(result);
             VerifySeagull(result);
             VerifyTidalWave(result);
+            VerifyLongRunningWaveTurn(result);
             VerifyVoodooDoll(result);
             VerifyGunpowderBarrel(result);
             VerifyWoodenCrate(result);
@@ -99,6 +103,15 @@ namespace Mutiny.Verification
             var result = new MutinyLevel1VerificationResult();
             VerifyCannonSmokeTrail(result);
             VerifyCannonImpactEffects(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunWeaponLifecycle()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyBananaLongFlight(result);
+            VerifySharedWeaponLifecycle(result);
+            VerifyLongRunningWaveTurn(result);
             return result;
         }
 
@@ -120,6 +133,13 @@ namespace Mutiny.Verification
         {
             var result = new MutinyLevel1VerificationResult();
             VerifyCameraMovement(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunScrollArrows()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyScrollArrows(result);
             return result;
         }
 
@@ -442,6 +462,107 @@ namespace Mutiny.Verification
                 DestroyNow(trails[i].gameObject);
         }
 
+        private static void VerifyScrollArrows(MutinyLevel1VerificationResult result)
+        {
+            GameObject levelObject = null;
+            GameObject cameraObject = null;
+            GameObject cursorObject = null;
+            bool previousCursorVisible = Cursor.visible;
+            try
+            {
+                levelObject = new GameObject("ScrollArrowVerification_Level");
+                MutinyLevelRoot level = levelObject.AddComponent<MutinyLevelRoot>();
+                level.Width = 100;
+                level.Height = 100;
+                level.WaterLevelY = -80f;
+                cameraObject = new GameObject("ScrollArrowVerification_Camera");
+                cameraObject.AddComponent<Camera>();
+                MutinyCameraController camera = cameraObject.AddComponent<MutinyCameraController>();
+                camera.SetLevelRootForVerification(level);
+
+                Texture2D cardinal = camera.ScrollArrowTextureForVerification(false);
+                Texture2D diagonal = camera.ScrollArrowTextureForVerification(true);
+                result.Assert(cardinal != null && diagonal != null &&
+                              cardinal.width == 31 && cardinal.height == 22 &&
+                              diagonal.width == 31 && diagonal.height == 22 &&
+                              cardinal.filterMode == FilterMode.Point &&
+                              diagonal.filterMode == FilterMode.Point,
+                    "CUR-SCROLL-01 production camera decodes the original scroll1/scroll2 31x22 pixel-art frames");
+
+                Vector2[] directions =
+                {
+                    Vector2.right, new Vector2(0f, 1f), Vector2.left, new Vector2(0f, -1f),
+                    new Vector2(1f, -1f), new Vector2(1f, 1f),
+                    new Vector2(-1f, 1f), new Vector2(-1f, -1f)
+                };
+                float[] rotations = { 0f, 90f, 180f, 270f, 0f, 90f, 180f, 270f };
+                bool matchesOriginalMatrix = true;
+                for (int i = 0; i < directions.Length; i++)
+                {
+                    bool valid = MutinyCameraController.ResolveScrollArrow(
+                        directions[i], out bool isDiagonal, out float rotation);
+                    matchesOriginalMatrix &= valid && isDiagonal == (i >= 4) &&
+                        Mathf.Approximately(rotation, rotations[i]);
+                }
+                matchesOriginalMatrix &= !MutinyCameraController.ResolveScrollArrow(
+                    Vector2.zero, out _, out _);
+                result.Assert(matchesOriginalMatrix,
+                    "CUR-SCROLL-01 production scroll arrow mapping matches all eight original cursor rotations and clears at zero direction");
+
+                bool left = false, rightEdge = false, down = false, up = false;
+                MutinyCameraController.CalculateMouseEdgeScroll(
+                    new Vector2(100f, 540f), new Rect(217.5f, 0f, 1485f, 1080f),
+                    1920f, 1080f, 108f, ref left, ref rightEdge, ref down, ref up);
+                result.Assert(!left && !rightEdge && !down && !up,
+                    "CUR-SCROLL-01 pointer in a letterbox bar neither scrolls nor activates the arrow");
+
+                Rect viewport = new Rect(217.5f, 0f, 1485f, 1080f);
+                Vector2 right = MutinyCameraController.MobileScrollArrowPosition(
+                    Vector2.right, viewport, 50f);
+                Vector2 upperLeft = MutinyCameraController.MobileScrollArrowPosition(
+                    new Vector2(-2f, -1f), viewport, 50f);
+                result.Assert(Mathf.Abs(right.x - 1652.5f) < 0.001f &&
+                              Mathf.Abs(right.y - 540f) < 0.001f &&
+                              Mathf.Abs(upperLeft.x - 267.5f) < 0.001f &&
+                              Mathf.Abs(upperLeft.y - 50f) < 0.001f,
+                    "AND-CUR-SCROLL-01 mobile arrow selects the matching letterboxed viewport edge or corner");
+
+                cameraObject.transform.position = new Vector3(20f, -20f, -10f);
+                camera.ApplyMobileTouchPanForVerification(new Vector2(40f, 20f));
+                bool followsActualPan = camera.IsMobileScrollArrowVisibleForVerification &&
+                    camera.MobileScrollDirectionForVerification.x < 0f &&
+                    camera.MobileScrollDirectionForVerification.y > 0f &&
+                    cameraObject.transform.position.x < 20f &&
+                    cameraObject.transform.position.y < -20f;
+                cameraObject.transform.position = new Vector3(0f, -20f, -10f);
+                camera.ApplyMobileTouchPanForVerification(new Vector2(40f, 0f));
+                result.Assert(followsActualPan && !camera.IsMobileScrollArrowVisibleForVerification,
+                    "AND-CUR-SCROLL-01 production mobile pan reports its actual clamped movement and hides the arrow when the edge blocks motion");
+
+                cursorObject = new GameObject("ScrollArrowVerification_SpecialCursor");
+                MutinySpecialWeaponCursor specialCursor =
+                    cursorObject.AddComponent<MutinySpecialWeaponCursor>();
+                specialCursor.SetMode(MutinySpecialWeaponCursor.Mode.None, Vector2.zero);
+                Cursor.visible = false; // Camera's production scroll ownership.
+                specialCursor.SetMode(MutinySpecialWeaponCursor.Mode.None, Vector2.zero);
+                specialCursor.Clear();
+                bool repeatedNoneKeepsHidden = !Cursor.visible;
+                specialCursor.SetMode(MutinySpecialWeaponCursor.Mode.Anchor, Vector2.zero);
+                bool specialModeHidesSystemCursor = !Cursor.visible;
+                specialCursor.Clear();
+                result.Assert(repeatedNoneKeepsHidden && specialModeHidesSystemCursor &&
+                              Cursor.visible,
+                    "CUR-SCROLL-02 production cursor mode updates do not re-show the OS cursor every frame, and restore it on a real mode transition");
+            }
+            finally
+            {
+                DestroyNow(cursorObject);
+                DestroyNow(cameraObject);
+                DestroyNow(levelObject);
+                Cursor.visible = previousCursorVisible;
+            }
+        }
+
         private static void VerifyAndroidAdaptation(MutinyLevel1VerificationResult result)
         {
             result.Assert(
@@ -733,7 +854,7 @@ namespace Mutiny.Verification
                     "WPN-06-INT-02 production click rejects a terrain-overlapping barrel without consuming inventory");
 
                 bool first = input.TryActivateClickWeaponForVerification(character, new Vector2(64f, 96f));
-                bool barrelWaitHasNoSafetyTimeout = !root.CanExpireFromTurnSafetyTimeout;
+                bool barrelWaitHasNoSafetyTimeout = !root.IsFinished;
                 input.UpdateBoxPlacementCursorForVerification(new Vector2(64f, 96f));
                 bool placedRootNowShowsCross = input.SpecialWeaponCursorModeForVerification == "Cross";
                 int countBeforeOverlapClick = root.PlacedCount;
@@ -842,7 +963,6 @@ namespace Mutiny.Verification
                 for (int waitTick = 0; waitTick <= 150; waitTick++)
                     manager.AdvanceSimulationTick();
                 bool pendingPlacementSurvivedSafetyThreshold =
-                    !root.CanExpireFromTurnSafetyTimeout &&
                     !root.IsFinished && root.HasPendingPlacement &&
                     input.ArmedWoodenCrate == root;
                 cameraObject = new GameObject("WoodenCrateVerification_Camera");
@@ -1213,9 +1333,7 @@ namespace Mutiny.Verification
                     cannon.AdvanceOriginalTickForVerification();
                     waitsForBall &= manager.CurrentTeam == aiTeam && !cannon.IsFinished;
                 }
-                result.Assert(waitsForBall && ball != null && !ball.IsFinished &&
-                              !cannon.CanExpireFromTurnSafetyTimeout &&
-                              !ball.CanExpireFromTurnSafetyTimeout,
+                result.Assert(waitsForBall && ball != null && !ball.IsFinished,
                     "CAN-AI-TURN-01 a faded cannon and unresolved ball still hold the turn past the 150-tick safety threshold");
 
                 ball.PhysicsBody.SetTerrain(new string[20, 20], 20, 20);
@@ -2182,10 +2300,20 @@ namespace Mutiny.Verification
                           flow.CurrentPage == MutinyFrontendPage.LevelSelect,
                 "HUD-CORNER-04 production Quit path returns a one-player game to level select");
 
+            flow = new MutinyFrontendFlow();
+            flow.PressHelp();
+            result.Assert(flow.CurrentPage == MutinyFrontendPage.Help,
+                "FRONT-HELP-01 PressHelp opens the help page");
+
+            flow.PressHelpBack();
+            result.Assert(flow.CurrentPage == MutinyFrontendPage.Title,
+                "FRONT-HELP-02 PressHelpBack returns to the title page");
+
             bool allResourcesPresent =
                 Resources.Load<Texture2D>("UI/Frontend/background") != null &&
                 Resources.Load<Texture2D>("UI/Frontend/title_logo") != null &&
                 Resources.Load<Texture2D>("UI/Frontend/game_select_panel") != null &&
+                Resources.Load<Texture2D>("UI/Frontend/help_panel") != null &&
                 Resources.Load<Texture2D>("UI/Frontend/level_select_panel") != null &&
                 Resources.Load<Texture2D>("UI/Frontend/game_type_pirates") != null &&
                 Resources.Load<Texture2D>("UI/Frontend/button_small") != null &&
@@ -2196,6 +2324,12 @@ namespace Mutiny.Verification
                 allResourcesPresent &= Resources.Load<Texture2D>($"UI/Frontend/LevelPreviews/{level:D2}") != null;
             result.Assert(allResourcesPresent,
                 "FRONT-01/03 all original front-end panels, buttons and 15 pirate previews load through Resources");
+
+            bool allHelpResourcesPresent = true;
+            for (int i = 1; i <= 160; i++)
+                allHelpResourcesPresent &= Resources.Load<Texture2D>($"UI/Help/tutorial_{i:D3}") != null;
+            result.Assert(allHelpResourcesPresent,
+                "FRONT-HELP-03 all 160 help tutorial animation frames exist in Resources/UI/Help");
         }
 
         private static void VerifyCharacterTimeline(MutinyLevel1VerificationResult result)
@@ -3810,6 +3944,195 @@ namespace Mutiny.Verification
             }
         }
 
+        private static void VerifyBananaLongFlight(MutinyLevel1VerificationResult result)
+        {
+            GameObject levelObject = null;
+            GameObject humanTeamObject = null;
+            GameObject aiTeamObject = null;
+            GameObject humanOwnerObject = null;
+            GameObject aiOwnerObject = null;
+            GameObject managerObject = null;
+            GameObject bananaObject = null;
+            try
+            {
+                // A clear, tall level permits a genuine 30 px/tick twang to fly
+                // beyond the old 3500 px cutoff and 150-tick turn watchdog.
+                levelObject = new GameObject("BananaLongFlight_Level");
+                MutinyLevelRoot level = levelObject.AddComponent<MutinyLevelRoot>();
+                level.Width = 300;
+                level.Height = 700;
+                level.WaterLevelY = -1000f;
+
+                humanTeamObject = new GameObject("BananaLongFlight_HumanTeam");
+                MutinyTeam humanTeam = humanTeamObject.AddComponent<MutinyTeam>();
+                humanTeam.TeamNumber = 1;
+                humanOwnerObject = new GameObject("BananaLongFlight_HumanOwner");
+                MutinyCharacter humanOwner = humanOwnerObject.AddComponent<MutinyCharacter>();
+                humanOwner.AddWeapon("banana");
+                humanTeam.RegisterCharacter(humanOwner);
+
+                aiTeamObject = new GameObject("BananaLongFlight_AiTeam");
+                MutinyTeam aiTeam = aiTeamObject.AddComponent<MutinyTeam>();
+                aiTeam.TeamNumber = 2;
+                aiTeam.IsAiControlled = true;
+                aiOwnerObject = new GameObject("BananaLongFlight_AiOwner");
+                MutinyCharacter aiOwner = aiOwnerObject.AddComponent<MutinyCharacter>();
+                aiTeam.RegisterCharacter(aiOwner);
+
+                managerObject = new GameObject("BananaLongFlight_TurnManager");
+                MutinyTurnManager manager = managerObject.AddComponent<MutinyTurnManager>();
+                manager.Initialize(humanTeam, aiTeam);
+                humanTeam.SelectCharacter(humanOwner);
+
+                MutinyBanana banana = MutinyWeaponFactory.SpawnAndLaunch(
+                    "banana", humanOwner, Vector2.zero, new Vector2(-400f, 0f)) as MutinyBanana;
+                bananaObject = banana != null ? banana.gameObject : null;
+                result.Assert(banana != null, "BAN-LIFE-01 production factory launches the long-flight Banana");
+                if (banana == null)
+                    return;
+                banana.PhysicsBody.SetTerrain(new string[level.Height, level.Width], level.Width, level.Height);
+
+                for (int tick = 0; tick < 205; tick++)
+                {
+                    banana.PhysicsBody.AdvanceSimulationTick();
+                    manager.AdvanceSimulationTick();
+                }
+
+                result.Assert(!banana.IsFinished &&
+                              banana.PhysicsBody.State.X > 3500f &&
+                              banana.PhysicsBody.State.Y < level.Height * MutinyPhysics.PixelsPerUnit &&
+                              manager.CurrentTeam == humanTeam && manager.TurnCount == 0,
+                    "BAN-LIFE-01 fired Banana survives 205 production ticks, the former turn watchdog and horizontal cutoff");
+
+                for (int tick = 0; tick < 40 && !banana.IsFinished; tick++)
+                {
+                    banana.PhysicsBody.AdvanceSimulationTick();
+                    manager.AdvanceSimulationTick();
+                }
+                result.Assert(banana.IsFinished &&
+                              banana.PhysicsBody.State.Y > level.Height * MutinyPhysics.PixelsPerUnit &&
+                              banana.PhysicsBody.State.VelocityY > 0f,
+                    "BAN-LIFE-01 Banana finishes only after descending beyond the original level-bottom boundary");
+            }
+            finally
+            {
+                DestroyNow(bananaObject);
+                DestroyNow(managerObject);
+                DestroyNow(aiOwnerObject);
+                DestroyNow(humanOwnerObject);
+                DestroyNow(aiTeamObject);
+                DestroyNow(humanTeamObject);
+                DestroyNow(levelObject);
+            }
+        }
+
+        private static void VerifySharedWeaponLifecycle(MutinyLevel1VerificationResult result)
+        {
+            GameObject levelObject = null;
+            GameObject ownerObject = null;
+            GameObject weaponObject = null;
+            try
+            {
+                levelObject = new GameObject("WeaponLifecycleVerification_Level");
+                MutinyLevelRoot level = levelObject.AddComponent<MutinyLevelRoot>();
+                level.Width = 300;
+                level.Height = 700;
+                level.WaterLevelY = -1000f;
+                string[,] clearTerrain = new string[level.Height, level.Width];
+                ownerObject = new GameObject("WeaponLifecycleVerification_Owner");
+                MutinyCharacter owner = ownerObject.AddComponent<MutinyCharacter>();
+
+                string[] inheritedTypes = { "cherryBomb", "dynamite", "rumBottle" };
+                for (int weaponIndex = 0; weaponIndex < inheritedTypes.Length; weaponIndex++)
+                {
+                    string weaponType = inheritedTypes[weaponIndex];
+                    owner.AddWeapon(weaponType);
+                    MutinyWeapon weapon = MutinyWeaponFactory.SpawnAndLaunch(
+                        weaponType, owner, Vector2.zero, new Vector2(-400f, 0f));
+                    weaponObject = weapon != null ? weapon.gameObject : null;
+                    result.Assert(weapon != null, $"WPN-LIFE-01 production factory launches {weaponType}");
+                    if (weapon == null)
+                        continue;
+                    weapon.PhysicsBody.SetTerrain(clearTerrain, level.Width, level.Height);
+
+                    for (int tick = 0; tick < 205; tick++)
+                        weapon.PhysicsBody.AdvanceSimulationTick();
+                    result.Assert(!weapon.IsFinished && weapon.PhysicsBody.State.X > 3500f &&
+                                  weapon.PhysicsBody.State.Y < level.Height * MutinyPhysics.PixelsPerUnit,
+                        $"WPN-LIFE-01 {weaponType} survives 205 flight ticks past the removed world-X and lifetime cutoffs");
+
+                    for (int tick = 0; tick < 40 && !weapon.IsFinished; tick++)
+                        weapon.PhysicsBody.AdvanceSimulationTick();
+                    result.Assert(weapon.IsFinished &&
+                                  weapon.PhysicsBody.State.Y > level.Height * MutinyPhysics.PixelsPerUnit,
+                        $"WPN-LIFE-01 {weaponType} ends on the inherited descending level-bottom rule");
+                    DestroyNow(weaponObject);
+                    weaponObject = null;
+                    DestroySmokeTrails();
+                }
+
+                owner.AddWeapon("rumBottle");
+                MutinyWeapon wetBottle = MutinyWeaponFactory.SpawnAndFire(
+                    "rumBottle", owner, new Vector2(3f, 5f));
+                weaponObject = wetBottle != null ? wetBottle.gameObject : null;
+                if (wetBottle != null)
+                {
+                    wetBottle.PhysicsBody.SetTerrain(clearTerrain, level.Width, level.Height);
+                    wetBottle.PhysicsBody.WaterPixelY = 0f;
+                    for (int tick = 0; tick < 20; tick++)
+                        wetBottle.PhysicsBody.AdvanceSimulationTick();
+                    result.Assert(wetBottle.PhysicsBody.IsInWater &&
+                                  !wetBottle.PhysicsBody.ApplyWaterMotion &&
+                                  Mathf.Approximately(wetBottle.PhysicsBody.State.VelocityX, 3f) &&
+                                  !wetBottle.IsFinished,
+                        "WPN-WATER-01 fired bottle crosses water without character-only drag or generic water expiry");
+                    DestroyNow(weaponObject);
+                    weaponObject = null;
+                    DestroySmokeTrails();
+                }
+
+                owner.AddWeapon("dynamite");
+                MutinyDynamite wetDynamite = MutinyWeaponFactory.SpawnAndFire(
+                    "dynamite", owner, new Vector2(0f, 5f)) as MutinyDynamite;
+                weaponObject = wetDynamite != null ? wetDynamite.gameObject : null;
+                if (wetDynamite != null)
+                {
+                    string[,] wetTerrain = new string[8, 8];
+                    for (int column = 0; column < 8; column++)
+                        wetTerrain[3, column] = "solid";
+                    wetDynamite.PhysicsBody.SetTerrain(wetTerrain, 8, 8);
+                    wetDynamite.PhysicsBody.WaterPixelY = 32f;
+                    PhysicsBodyState startState = wetDynamite.PhysicsBody.State;
+                    startState.X = 64f;
+                    wetDynamite.PhysicsBody.State = startState;
+                    bool sawUnlitBeforeFinish = false;
+                    for (int tick = 0; tick < 80 && !wetDynamite.IsFinished; tick++)
+                    {
+                        wetDynamite.PhysicsBody.AdvanceSimulationTick();
+                        sawUnlitBeforeFinish |= wetDynamite.PhysicsBody.IsInWater &&
+                                                !wetDynamite.IsLit && !wetDynamite.IsFinished;
+                    }
+                    bool exploded = false;
+                    MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>();
+                    for (int i = 0; i < explosions.Length; i++)
+                        exploded |= Mathf.Approximately(explosions[i].Size, 250f) &&
+                                    Mathf.Approximately(explosions[i].MaxDamage, 70f);
+                    result.Assert(sawUnlitBeforeFinish && wetDynamite.IsFinished && exploded,
+                        "DYN-WATER-02 submerged production Dynamite shows unlit then detonates on physical rest, never dud-expires");
+                }
+            }
+            finally
+            {
+                DestroyNow(weaponObject);
+                MutinyExplosion[] explosions = Object.FindObjectsByType<MutinyExplosion>();
+                for (int i = 0; i < explosions.Length; i++)
+                    DestroyNow(explosions[i].gameObject);
+                DestroySmokeTrails();
+                DestroyNow(ownerObject);
+                DestroyNow(levelObject);
+            }
+        }
+
         private static void VerifyParachuteBomb(MutinyLevel1VerificationResult result)
         {
             GameObject teamObject = null;
@@ -4229,7 +4552,7 @@ namespace Mutiny.Verification
 
                 for (int tick = 0; tick <= 150; tick++)
                     turnManager.AdvanceSimulationTick();
-                result.Assert(!seagull.IsFinished && !seagull.CanExpireFromTurnSafetyTimeout,
+                result.Assert(!seagull.IsFinished,
                     "SEA-END-02 production turn watchdog does not expire a normally flying Seagull after 150 ticks");
 
                 seagull.SpriteRenderer.sortingOrder = MutinyWeapon.WeaponSortingOrder + 5;
@@ -4426,6 +4749,81 @@ namespace Mutiny.Verification
             }
         }
 
+        private static void VerifyLongRunningWaveTurn(MutinyLevel1VerificationResult result)
+        {
+            GameObject levelObject = null;
+            GameObject humanTeamObject = null;
+            GameObject aiTeamObject = null;
+            GameObject ownerObject = null;
+            GameObject opponentObject = null;
+            GameObject managerObject = null;
+            GameObject waveObject = null;
+            try
+            {
+                levelObject = new GameObject("LongWaveTurnVerification_Level");
+                MutinyLevelRoot level = levelObject.AddComponent<MutinyLevelRoot>();
+                level.Width = 200;
+                level.Height = 20;
+                level.WaterLevelY = -12.5f;
+                humanTeamObject = new GameObject("LongWaveTurnVerification_HumanTeam");
+                MutinyTeam humanTeam = humanTeamObject.AddComponent<MutinyTeam>();
+                humanTeam.TeamNumber = 1;
+                ownerObject = new GameObject("LongWaveTurnVerification_Owner");
+                MutinyCharacter owner = ownerObject.AddComponent<MutinyCharacter>();
+                humanTeam.RegisterCharacter(owner);
+                aiTeamObject = new GameObject("LongWaveTurnVerification_AiTeam");
+                MutinyTeam aiTeam = aiTeamObject.AddComponent<MutinyTeam>();
+                aiTeam.TeamNumber = 2;
+                aiTeam.IsAiControlled = true;
+                opponentObject = new GameObject("LongWaveTurnVerification_Opponent");
+                MutinyCharacter opponent = opponentObject.AddComponent<MutinyCharacter>();
+                aiTeam.RegisterCharacter(opponent);
+                managerObject = new GameObject("LongWaveTurnVerification_Manager");
+                MutinyTurnManager manager = managerObject.AddComponent<MutinyTurnManager>();
+                manager.Initialize(humanTeam, aiTeam);
+                humanTeam.SelectCharacter(owner);
+
+                MutinyTidalWave wave = MutinyWeaponFactory.SpawnWeapon("tidalWave", owner) as MutinyTidalWave;
+                waveObject = wave != null ? wave.gameObject : null;
+                if (wave == null)
+                {
+                    result.Assert(false, "WPN-LIFE-02 production factory creates long-running Tidal Wave");
+                    return;
+                }
+                wave.PhysicsBody.SetTerrain(new string[level.Height, level.Width], level.Width, level.Height);
+                wave.StartWave(0f, 400f);
+                manager.NotifyActionStarted();
+                for (int tick = 0; tick < 205; tick++)
+                {
+                    wave.PhysicsBody.AdvanceSimulationTick();
+                    manager.AdvanceSimulationTick();
+                }
+                result.Assert(!wave.IsFinished && manager.CurrentTeam == humanTeam && manager.TurnCount == 0 &&
+                              Mathf.Approximately(wave.PhysicsBody.State.X, -550f + 205f * MutinyTidalWave.OriginalSpeed),
+                    "WPN-LIFE-02 Tidal Wave remains active after 205 production turn ticks without a 150-tick forced finish");
+
+                for (int tick = 0; tick < 200 && !wave.IsFinished; tick++)
+                {
+                    wave.PhysicsBody.AdvanceSimulationTick();
+                    manager.AdvanceSimulationTick();
+                }
+                for (int tick = 0; tick < 11; tick++)
+                    manager.AdvanceSimulationTick();
+                result.Assert(wave.IsFinished && manager.CurrentTeam == aiTeam && manager.TurnCount == 1,
+                    "WPN-LIFE-02 wave exits by its own level-width rule before the normal 11-tick turn transition");
+            }
+            finally
+            {
+                DestroyNow(waveObject);
+                DestroyNow(managerObject);
+                DestroyNow(opponentObject);
+                DestroyNow(ownerObject);
+                DestroyNow(aiTeamObject);
+                DestroyNow(humanTeamObject);
+                DestroyNow(levelObject);
+            }
+        }
+
         private static void VerifyVoodooDoll(MutinyLevel1VerificationResult result)
         {
             GameObject inputObject = null;
@@ -4587,7 +4985,7 @@ namespace Mutiny.Verification
 
                 for (int tick = 0; tick <= 150; tick++)
                     turnManager.AdvanceSimulationTick();
-                result.Assert(!doll.IsFinished && !doll.CanExpireFromTurnSafetyTimeout,
+                result.Assert(!doll.IsFinished,
                     "VOO-END-02 production turn watchdog cannot expire a doll waiting for its target-camera pan");
 
                 Vector3 targetCameraPosition = target.transform.position;

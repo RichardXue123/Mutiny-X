@@ -167,7 +167,7 @@ namespace Mutiny.Simulation
 
         public void AdvanceSimulationTick()
         {
-            bool allAtRest = CheckAllBodiesAtRest(out string restBlocker, out MutinyWeapon blockingWeapon);
+            bool allAtRest = CheckAllBodiesAtRest(out string restBlocker);
 
             if (allAtRest)
             {
@@ -203,18 +203,6 @@ namespace Mutiny.Simulation
                         $"still waiting ticks={m_RestBlockerTicks} {DescribeRestBlocker(restBlocker)}", this);
                 }
 
-                // Unity-only recovery for genuinely stuck weapons (150 ticks = 6.0 seconds).
-                // Apply it only to the exact blocker. Source-authentic long-running weapons
-                // such as Parachute Bomb own their finish conditions and explicitly opt out.
-                if (m_RestBlockerTicks > 150 && blockingWeapon != null &&
-                    blockingWeapon.CanExpireFromTurnSafetyTimeout)
-                {
-                    MutinyDebugLog.Warning("Turn", $"force settling stuck weapon blocker: {restBlocker}", this);
-                    blockingWeapon.Finish();
-                    Destroy(blockingWeapon.gameObject, 0.1f);
-                    m_RestBlockerTicks = 0;
-                }
-
                 InactivityTicks = 0;
                 if (m_ActionCommittedThisTurn)
                     CurrentPhase = TurnPhase.ActionExecuting;
@@ -228,13 +216,11 @@ namespace Mutiny.Simulation
 
         public bool CheckAllBodiesAtRest()
         {
-            return CheckAllBodiesAtRest(out _, out _);
+            return CheckAllBodiesAtRest(out _);
         }
 
-        private bool CheckAllBodiesAtRest(out string blocker, out MutinyWeapon blockingWeapon)
+        private bool CheckAllBodiesAtRest(out string blocker)
         {
-            blockingWeapon = null;
-
             // 1. Check characters
             for (int i = 0; i < m_AllCharacters.Count; i++)
             {
@@ -269,7 +255,6 @@ namespace Mutiny.Simulation
                     // Character.advance keeps inactivity at zero while its selected
                     // weapon has not fired. Cannon.aiPerform waits 25 ticks before
                     // firing, so that delay is part of the committed action.
-                    blockingWeapon = cannon;
                     blocker = "cannon:ai-fire-pending";
                     return false;
                 }
@@ -305,7 +290,6 @@ namespace Mutiny.Simulation
                     continue; // Mine.limitedToTurn=false: an armed idle mine persists across turns.
                 if (w != null && w.IsFired && !w.IsFinished)
                 {
-                    blockingWeapon = w;
                     blocker = $"weapon:{w.WeaponType}/{w.name} fired={w.IsFired} finished={w.IsFinished}";
                     return false;
                 }
@@ -390,6 +374,8 @@ namespace Mutiny.Simulation
 
             if (team1Defeated || team2Defeated)
             {
+                MutinyLevelController controller = GetComponentInParent<MutinyLevelController>() ??
+                    FindAnyObjectByType<MutinyLevelController>();
                 CurrentPhase = TurnPhase.GameOver;
                 if (team1Defeated && team2Defeated)
                 {
@@ -399,11 +385,11 @@ namespace Mutiny.Simulation
                 {
                     GameResult = GameOverResult.Team1Wins;
 
-                    var controller = FindAnyObjectByType<MutinyLevelController>();
                     if (controller != null)
                     {
-                        Mutiny.Persistence.MutinySaveSystem.UnlockLevel(controller.CurrentLevelIndex + 1);
-                        if (Team2 != null && Team2.IsAiControlled)
+                        if (controller.ActiveGameMode == MutinyGameMode.SinglePlayer)
+                            Mutiny.Persistence.MutinySaveSystem.UnlockLevel(controller.CurrentLevelIndex + 1);
+                        if (controller.ActiveGameMode == MutinyGameMode.SinglePlayer && Team2 != null && Team2.IsAiControlled)
                             controller.AwardSinglePlayerLevelWin(Team1);
                     }
                 }
@@ -412,10 +398,12 @@ namespace Mutiny.Simulation
                     GameResult = GameOverResult.Team2Wins;
                 }
 
+                controller?.RecordGameResult(GameResult);
+
                 int clearedBoxes = MutinyBoxRegistry.ClearForLevelEnd();
 
                 MutinyDebugLog.Info("Turn",
-                    $"END-POP result={GameResult} team1Alive={Team1.AliveCount} team2Alive={Team2.AliveCount} level={FindAnyObjectByType<MutinyLevelController>()?.CurrentLevelIndex} boxesCleared={clearedBoxes}", this);
+                    $"END-POP result={GameResult} team1Alive={Team1.AliveCount} team2Alive={Team2.AliveCount} level={controller?.CurrentLevelIndex} boxesCleared={clearedBoxes}", this);
                 OnGameOver?.Invoke(GameResult);
                 return;
             }

@@ -5,6 +5,12 @@ using UnityEngine;
 
 namespace Mutiny.Levels
 {
+    public enum MutinyGameMode
+    {
+        SinglePlayer,
+        LocalTwoPlayer
+    }
+
     [DisallowMultipleComponent]
     public sealed class MutinyLevelController : MonoBehaviour
     {
@@ -22,10 +28,44 @@ namespace Mutiny.Levels
         private int m_SinglePlayerScore;
         private int m_LastCompletedLevelScore;
         private int m_AwardedLevelIndex = -1;
+        private bool m_HasMenuSessionMode;
+        private bool m_ResultRecordedForCurrentLevel;
+        private int m_Player1Wins;
+        private int m_Player2Wins;
 
         public int CurrentLevelIndex { get; set; } = 1;
         public int SinglePlayerScore => m_SinglePlayerScore;
         public int LastCompletedLevelScore => m_LastCompletedLevelScore;
+        public MutinyGameMode SessionMode { get; private set; } = MutinyGameMode.SinglePlayer;
+        public MutinyGameMode ActiveGameMode => m_HasMenuSessionMode
+            ? SessionMode
+            : m_CurrentLevel != null && m_CurrentLevel.Players != 1
+                ? MutinyGameMode.LocalTwoPlayer
+                : MutinyGameMode.SinglePlayer;
+        public int Player1Wins => m_Player1Wins;
+        public int Player2Wins => m_Player2Wins;
+
+        public void ConfigureSession(MutinyGameMode mode, bool resetVersusWins = false)
+        {
+            SessionMode = mode;
+            m_HasMenuSessionMode = true;
+            if (resetVersusWins)
+            {
+                m_Player1Wins = 0;
+                m_Player2Wins = 0;
+            }
+        }
+
+        public void RecordGameResult(GameOverResult result)
+        {
+            if (ActiveGameMode != MutinyGameMode.LocalTwoPlayer || m_ResultRecordedForCurrentLevel)
+                return;
+            m_ResultRecordedForCurrentLevel = true;
+            if (result == GameOverResult.Team1Wins)
+                m_Player1Wins++;
+            else if (result == GameOverResult.Team2Wins)
+                m_Player2Wins++;
+        }
 
         public TextAsset LevelXml
         {
@@ -66,21 +106,32 @@ namespace Mutiny.Levels
 
         public void LoadLevel(int levelNumber)
         {
-            levelNumber = Mathf.Clamp(levelNumber, 1, 18);
+            TryLoadLevel(levelNumber);
+        }
+
+        public static bool HasNumberedLevelData(int levelNumber)
+        {
+            return levelNumber >= 1 && levelNumber <= 33 &&
+                   Resources.Load<TextAsset>($"Data/Levels/level_{levelNumber:D2}") != null;
+        }
+
+        public bool TryLoadLevel(int levelNumber)
+        {
+            if (levelNumber < 1 || levelNumber > 33)
+                return false;
+            TextAsset xml = Resources.Load<TextAsset>($"Data/Levels/level_{levelNumber:D2}");
+            if (xml == null)
+            {
+                Debug.LogError($"[MutinyLevelController] Runtime level resource not found: level_{levelNumber:D2}.xml", this);
+                return false;
+            }
             CurrentLevelIndex = levelNumber;
             m_AwardedLevelIndex = -1;
             m_LastCompletedLevelScore = 0;
-            string padded = levelNumber.ToString("D2");
-            TextAsset xml = Resources.Load<TextAsset>($"Data/Levels/level_{padded}");
-            if (xml != null)
-            {
-                LevelXml = xml;
-                BuildLevel();
-            }
-            else
-            {
-                Debug.LogError($"[MutinyLevelController] Runtime level resource not found: level_{padded}.xml", this);
-            }
+            m_ResultRecordedForCurrentLevel = false;
+            LevelXml = xml;
+            BuildLevel();
+            return m_CurrentLevel != null;
         }
 
         public void LoadNextLevel()
@@ -93,7 +144,8 @@ namespace Mutiny.Levels
             MutinyDebugLog.Info("Level",
                 $"restart requested level={CurrentLevelIndex} frame={Time.frameCount} currentRoot={(m_CurrentLevel != null ? m_CurrentLevel.name : "none")}",
                 this);
-            ResetSinglePlayerScore();
+            if (ActiveGameMode == MutinyGameMode.SinglePlayer)
+                ResetSinglePlayerScore();
             LoadLevel(CurrentLevelIndex);
         }
 
@@ -128,6 +180,8 @@ namespace Mutiny.Levels
         /// </summary>
         public int AwardSinglePlayerLevelWin(MutinyTeam playerTeam)
         {
+            if (ActiveGameMode != MutinyGameMode.SinglePlayer)
+                return 0;
             if (m_AwardedLevelIndex == CurrentLevelIndex)
                 return m_LastCompletedLevelScore;
 
@@ -184,7 +238,8 @@ namespace Mutiny.Levels
             try
             {
                 MutinyLevelData levelData = MutinyLevelXmlParser.Parse(m_LevelXml.text, m_LevelXml.name);
-                GameObject levelObj = MutinyLevelBuilder.BuildLevel(levelData, transform, CurrentLevelIndex);
+                GameObject levelObj = MutinyLevelBuilder.BuildLevel(levelData, transform, CurrentLevelIndex,
+                    m_HasMenuSessionMode ? (MutinyGameMode?)SessionMode : null);
                 m_CurrentLevel = levelObj.GetComponent<MutinyLevelRoot>();
                 BindLevelController(m_CurrentLevel, this);
                 Debug.Log($"[MutinyLevelController] Built level '{levelData.Name}': {levelData.Width}x{levelData.Height}, {m_CurrentLevel.Characters.Count} characters.");
@@ -245,6 +300,10 @@ namespace Mutiny.Levels
             replacement.m_LevelXml = xml;
             replacement.m_BuildOnStart = false;
             replacement.CurrentLevelIndex = levelIndex;
+            replacement.SessionMode = SessionMode;
+            replacement.m_HasMenuSessionMode = m_HasMenuSessionMode;
+            replacement.m_Player1Wins = m_Player1Wins;
+            replacement.m_Player2Wins = m_Player2Wins;
             replacement.BuildLevel();
 
             Destroy(gameObject);

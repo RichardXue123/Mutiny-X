@@ -72,6 +72,7 @@ namespace Mutiny.Presentation
         private Vector2 m_MousePosition;
         private float m_RotationDegrees;
         private bool m_AnimateFan;
+        private bool m_HasAppliedSystemCursorVisibility;
         private float m_FanTickAccumulator;
         private int m_FanFrame;
 
@@ -91,7 +92,8 @@ namespace Mutiny.Presentation
 
         internal void SetMode(Mode mode, Vector2 mousePosition, float rotationDegrees = 0f, bool animateFan = false)
         {
-            if (m_Mode != mode)
+            bool modeChanged = m_Mode != mode;
+            if (modeChanged)
             {
                 m_FanFrame = 0;
                 m_FanTickAccumulator = 0f;
@@ -100,7 +102,14 @@ namespace Mutiny.Presentation
             m_MousePosition = mousePosition;
             m_RotationDegrees = rotationDegrees;
             m_AnimateFan = mode == Mode.ParachuteFan && animateFan;
-            Cursor.visible = mode == Mode.None;
+            // CustomCursor.setCursor/restoreCursor return early when the type
+            // has not changed. Re-enabling the OS cursor every Update while
+            // Camera.LateUpdate hides it for scroll1/scroll2 causes flicker.
+            if (modeChanged || !m_HasAppliedSystemCursorVisibility)
+            {
+                Cursor.visible = mode == Mode.None && !IsDesktopScrollArrowActive();
+                m_HasAppliedSystemCursorVisibility = true;
+            }
         }
 
         internal void Clear()
@@ -110,7 +119,13 @@ namespace Mutiny.Presentation
 
         private void OnDisable()
         {
-            Cursor.visible = true;
+            Cursor.visible = !IsDesktopScrollArrowActive();
+        }
+
+        private static bool IsDesktopScrollArrowActive()
+        {
+            MutinyCameraController camera = FindAnyObjectByType<MutinyCameraController>();
+            return camera != null && camera.IsDesktopScrollArrowVisible;
         }
 
         private void Update()
@@ -124,6 +139,13 @@ namespace Mutiny.Presentation
         private void OnGUI()
         {
             if (m_Mode == Mode.None || Event.current.type != EventType.Repaint)
+                return;
+
+            // TileSystem.advance applies scroll1/scroll2 after weapon cursor
+            // selection, so a manual edge scroll replaces that cursor for the
+            // frame instead of drawing two overlapping MovieClips.
+            MutinyCameraController camera = FindAnyObjectByType<MutinyCameraController>();
+            if (camera != null && camera.IsDesktopScrollArrowVisible)
                 return;
 
             EnsureTextures();

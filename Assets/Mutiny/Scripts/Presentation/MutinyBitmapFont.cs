@@ -277,7 +277,7 @@ namespace Mutiny.Presentation
                 char c = text[i];
                 if (s_DangleGlyphs.TryGetValue(c, out Glyph g))
                 {
-                    float charW = (c == 'm') ? 8f : g.Width;
+                    float charW = g.Width;
                     totalWidth += charW;
                     if (i < text.Length - 1)
                         totalWidth += tracking;
@@ -379,7 +379,7 @@ namespace Mutiny.Presentation
                         );
 
                         GUI.DrawTextureWithTexCoords(screenRect, texture, texCoords, true);
-                        float adv = (c == 'm') ? 8f : g.Width;
+                        float adv = g.Width;
                         curX += adv + tracking;
                     }
                 }

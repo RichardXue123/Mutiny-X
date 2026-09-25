@@ -10,6 +10,8 @@ namespace Mutiny.Verification.Editor
     {
         private const string CameraMovementVerificationKey = "Mutiny.CameraMovementPlayModeVerification";
         private const string CannonEffectsVerificationKey = "Mutiny.CannonEffectsPlayModeVerification";
+        private const string WeaponLifecycleVerificationKey = "Mutiny.WeaponLifecyclePlayModeVerification";
+        private const string ScrollArrowVerificationKey = "Mutiny.ScrollArrowPlayModeVerification";
 
         static MutinyParityValidationMenu()
         {
@@ -23,19 +25,27 @@ namespace Mutiny.Verification.Editor
 
             bool verifyCamera = SessionState.GetBool(CameraMovementVerificationKey, false);
             bool verifyCannon = SessionState.GetBool(CannonEffectsVerificationKey, false);
-            if (!verifyCamera && !verifyCannon)
+            bool verifyWeaponLifecycle = SessionState.GetBool(WeaponLifecycleVerificationKey, false);
+            bool verifyScrollArrow = SessionState.GetBool(ScrollArrowVerificationKey, false);
+            if (!verifyCamera && !verifyCannon && !verifyWeaponLifecycle && !verifyScrollArrow)
                 return;
 
             SessionState.EraseBool(CameraMovementVerificationKey);
             SessionState.EraseBool(CannonEffectsVerificationKey);
+            SessionState.EraseBool(WeaponLifecycleVerificationKey);
+            SessionState.EraseBool(ScrollArrowVerificationKey);
             bool passed = false;
             try
             {
                 MutinyLevel1VerificationResult result =
+                    verifyScrollArrow ? MutinyTurnActionUiVerificationTest.RunScrollArrows() :
                     verifyCannon ? MutinyTurnActionUiVerificationTest.RunCannonSmokeTrail() :
-                        MutinyTurnActionUiVerificationTest.RunCameraMovement();
+                        verifyWeaponLifecycle ? MutinyTurnActionUiVerificationTest.RunWeaponLifecycle() :
+                            MutinyTurnActionUiVerificationTest.RunCameraMovement();
                 passed = result.Passed;
-                string label = verifyCannon ? "Cannon effects" : "Camera movement";
+                string label = verifyScrollArrow ? "Scroll arrows" :
+                    verifyCannon ? "Cannon effects" :
+                    verifyWeaponLifecycle ? "Weapon lifecycle" : "Camera movement";
                 if (passed)
                     Debug.Log($"[Mutiny Parity] {label} Play Mode verification passed: {result.PassedAssertions}/{result.TotalAssertions} assertions.");
                 else
@@ -121,10 +131,41 @@ namespace Mutiny.Verification.Editor
                                string.Join("\n", result.Failures));
         }
 
+        [MenuItem("Mutiny/Parity/Validate Two Player Mode")]
+        public static void ValidateTwoPlayerMode()
+        {
+            MutinyLevel1VerificationResult result = MutinyTwoPlayerVerificationTest.Run();
+            if (result.Passed)
+                Debug.Log($"[Mutiny Parity] Two-player mode verification passed: {result.PassedAssertions}/{result.TotalAssertions} assertions.");
+            else
+                Debug.LogError("[Mutiny Parity] Two-player mode verification failed:\n" +
+                               string.Join("\n", result.Failures));
+        }
+
         [MenuItem("Mutiny/Parity/Validate Cannon Effects Play Mode")]
         public static void ValidateCannonEffectsPlayMode()
         {
             SessionState.SetBool(CannonEffectsVerificationKey, true);
+            if (EditorApplication.isPlaying)
+                OnPlayModeStateChanged(PlayModeStateChange.EnteredPlayMode);
+            else
+                EditorApplication.EnterPlaymode();
+        }
+
+        [MenuItem("Mutiny/Parity/Validate Scroll Arrows Play Mode")]
+        public static void ValidateScrollArrowsPlayMode()
+        {
+            SessionState.SetBool(ScrollArrowVerificationKey, true);
+            if (EditorApplication.isPlaying)
+                OnPlayModeStateChanged(PlayModeStateChange.EnteredPlayMode);
+            else
+                EditorApplication.EnterPlaymode();
+        }
+
+        [MenuItem("Mutiny/Parity/Validate Weapon Lifecycle Play Mode")]
+        public static void ValidateWeaponLifecyclePlayMode()
+        {
+            SessionState.SetBool(WeaponLifecycleVerificationKey, true);
             if (EditorApplication.isPlaying)
                 OnPlayModeStateChanged(PlayModeStateChange.EnteredPlayMode);
             else

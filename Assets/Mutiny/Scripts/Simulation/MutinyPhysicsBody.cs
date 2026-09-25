@@ -16,6 +16,7 @@ namespace Mutiny.Simulation
         public bool IsActive = true;
         public bool SyncTransform = true;
         public bool ApplyWaterPhysics = true;
+        public bool ApplyWaterMotion = true;
         public float WaterPixelY = float.PositiveInfinity;
         public bool IsInWater { get; private set; }
 
@@ -288,6 +289,12 @@ namespace Mutiny.Simulation
                 IsInWater = true;
                 OnEnterWater?.Invoke();
             }
+
+            // Only Character.advance applies the original underwater damping.
+            // Solid.splashCheck on weapons detects a crossing but does not alter
+            // their velocity or turn their flight into a slow, stuck projectile.
+            if (!ApplyWaterMotion)
+                return;
 
             // Flash Character.advance: motion continues below the water after the
             // one-shot crossing event, with drag and a capped downward velocity.

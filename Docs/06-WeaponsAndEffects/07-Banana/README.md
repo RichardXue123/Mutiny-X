@@ -25,3 +25,4 @@
 | --- | --- | --- | --- | --- | --- |
 | BAN-PHY-01 | extent 7、bounce .8、friction .5，拉拽预览和正常松手的实际初速上限均为 30 | `Banana.as::constructor`；`TileSystem.as::mouseUp`；`Solid.as::twang` | `MutinyTrajectoryRenderer`、`MutinyBanana` 继承共享 `Twang` | 400 px 满拉力时断言提交 `vx=30`，而不是 20 | 已实现；自动回归已写，待 Unity 运行验证 |
 | BAN-TRAJ-01 | 无碰撞时，预览的每个离散点与香蕉从相同起点发射后的实际 25 Hz 物理位置一致；每 tick 都先加 weight=1 再移动 | `Solid.as::drawTwangLine:94-115`、`twangPrediction:126-129`、`advanceMotion:162` | `PredictVelocityTick()`、`MutinyPhysicsBody.AdvanceSimulationTick()` | 用相同起点和满拉力连续比较前 5 个预览 tick 与实际位置 | 已实现；自动回归已写，待 Unity 运行验证 |
+| BAN-LIFE-01 | 香蕉长距离飞行不因回合 150 tick 看门狗、通用武器 8 秒寿命、固定横向边界或入水短计时消失；仅按香蕉自身静止/点击/AI 条件引爆，或在下降越过地图底部时结束 | `Banana.as::advanceMotion`；`Weapon.as::advance` | `MutinyBanana.AdvanceOriginalTick()`、`MutinyTurnManager.AdvanceSimulationTick()` | 通过工厂发射，在无碰撞长地图推进超过 205 tick 且越过旧横向阈值仍持续飞行，再越过地图底部正常结束 | 已实现；隔离 Unity 6000.6 Play Mode 专项通过；主工程画面待验收 |

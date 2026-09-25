@@ -10,6 +10,7 @@
 
 - `Artifacts/ReverseEngineering/`：反编译、资源导出和映射结果。
 - `Artifacts/LevelScan/`：18 关 XML 扫描结果。
+- [Artifacts/TwoPlayerLevels/](Artifacts/TwoPlayerLevels/README.md)：原站 16–33 关 XML、编号与 SHA-256 清单。
 - `Artifacts/OriginalParityTables/`：旧流程留下且仍有取证价值的结构化表格。
 
 ## 维护规则

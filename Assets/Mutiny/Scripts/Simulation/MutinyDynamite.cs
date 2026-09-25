@@ -92,6 +92,10 @@ namespace Mutiny.Simulation
             PhysicsBody.OnSimulationStep += EmitOriginalSmokeTrail;
             PhysicsBody.OnSimulationStep -= AdvanceOriginalPresentationTick;
             PhysicsBody.OnSimulationStep += AdvanceOriginalPresentationTick;
+            PhysicsBody.OnSimulationStep -= AdvanceOriginalDetonationTick;
+            PhysicsBody.OnSimulationStep += AdvanceOriginalDetonationTick;
+            PhysicsBody.OnSimulationStep -= AdvanceInheritedFinishTick;
+            PhysicsBody.OnSimulationStep += AdvanceInheritedFinishTick;
         }
 
         protected override void OnWaterSubmerged()
@@ -104,53 +108,16 @@ namespace Mutiny.Simulation
             }
         }
 
-        protected override void Update()
+        private void AdvanceOriginalDetonationTick()
         {
-            if (IsFinished)
+            if (!IsFired || IsFinished || PhysicsBody == null)
                 return;
 
-            base.Update();
-
-            if (IsFired && PhysicsBody != null)
-            {
-                // Water extinguishes fuse (Flash: if(y > water.y) mc.gotoAndStop("unlit"))
-                if (PhysicsBody.IsInWater)
-                {
-                    if (IsLit)
-                    {
-                        IsLit = false;
-                        if (UnlitFrame != null && SpriteRenderer != null)
-                        {
-                            SpriteRenderer.sprite = UnlitFrame;
-                        }
-                    }
-
-                    // Once submerged in water, dynamite is a dud and expires after brief sinking
-                    float waterY = PhysicsBody.WaterPixelY;
-                    if (m_WaterTimer >= 0.35f || (!float.IsInfinity(waterY) && PhysicsBody.State.Y > waterY + 16f))
-                    {
-                        Finish();
-                        Destroy(gameObject, 0.4f);
-                        return;
-                    }
-                }
-
-                // Resting check: Dynamite only explodes when it comes to a complete stop!
-                // Flash AS2: if(this.velocityX == 0 && Math.abs(this.velocityY) < 0.2)
-                if (PhysicsBody.IsAtRest)
-                {
-                    if (IsLit && !PhysicsBody.IsInWater)
-                    {
-                        Explode();
-                    }
-                    else
-                    {
-                        // Extinguished in water or rests dud
-                        Finish();
-                        Destroy(gameObject, 0.5f);
-                    }
-                }
-            }
+            // Dynamite.advanceMotion detonates at rest before Weapon.advance's
+            // inherited finish check. The unlit frame is visual only, not a dud.
+            PhysicsBodyState state = PhysicsBody.State;
+            if (state.VelocityX == 0f && Mathf.Abs(state.VelocityY) < 0.2f)
+                Explode();
         }
 
         public void Explode()
@@ -198,6 +165,8 @@ namespace Mutiny.Simulation
             {
                 PhysicsBody.OnSimulationStep -= EmitOriginalSmokeTrail;
                 PhysicsBody.OnSimulationStep -= AdvanceOriginalPresentationTick;
+                PhysicsBody.OnSimulationStep -= AdvanceOriginalDetonationTick;
+                PhysicsBody.OnSimulationStep -= AdvanceInheritedFinishTick;
             }
         }
     }

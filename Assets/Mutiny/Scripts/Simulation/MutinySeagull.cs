@@ -35,7 +35,6 @@ namespace Mutiny.Simulation
 
         public int ActiveShotCount => m_Shots.Count;
         public float FlightY => PhysicsBody == null ? 0f : PhysicsBody.State.Y;
-        public override bool CanExpireFromTurnSafetyTimeout => false;
 
         protected override void Awake()
         {
@@ -130,8 +129,7 @@ namespace Mutiny.Simulation
 
         protected override void Update()
         {
-            // The common projectile timeout/rest rules are not applicable. The
-            // original keeps the bird alive until it clears levelWidth + 275 and
+            // The original keeps the bird alive until it clears levelWidth + 275 and
             // every seagullFire child has ended.
         }
 

@@ -37,7 +37,10 @@ namespace Mutiny.Presentation
         None,
         LevelComplete,
         LevelFailed,
-        GameComplete
+        GameComplete,
+        VersusPlayer1Wins,
+        VersusPlayer2Wins,
+        VersusDraw
     }
 
     [DisallowMultipleComponent]
@@ -311,6 +314,19 @@ namespace Mutiny.Presentation
 
         public static MutinyGameEndPopupKind ResolveGameEndPopupKind(GameOverResult result, int levelIndex)
         {
+            return ResolveGameEndPopupKind(result, levelIndex, MutinyGameMode.SinglePlayer);
+        }
+
+        public static MutinyGameEndPopupKind ResolveGameEndPopupKind(GameOverResult result, int levelIndex,
+            MutinyGameMode mode)
+        {
+            if (mode == MutinyGameMode.LocalTwoPlayer)
+            {
+                if (result == GameOverResult.Team1Wins) return MutinyGameEndPopupKind.VersusPlayer1Wins;
+                if (result == GameOverResult.Team2Wins) return MutinyGameEndPopupKind.VersusPlayer2Wins;
+                if (result == GameOverResult.Draw) return MutinyGameEndPopupKind.VersusDraw;
+                return MutinyGameEndPopupKind.None;
+            }
             if (result == GameOverResult.Team1Wins)
                 return levelIndex == MutinyFrontendController.SinglePlayerLevelCount
                     ? MutinyGameEndPopupKind.GameComplete
@@ -367,7 +383,8 @@ namespace Mutiny.Presentation
         private void OpenGameEndPopupForCurrentResult()
         {
             int levelIndex = LevelController != null ? LevelController.CurrentLevelIndex : 1;
-            m_GameEndPopupKind = ResolveGameEndPopupKind(TurnManager.GameResult, levelIndex);
+            MutinyGameMode mode = LevelController != null ? LevelController.ActiveGameMode : MutinyGameMode.SinglePlayer;
+            m_GameEndPopupKind = ResolveGameEndPopupKind(TurnManager.GameResult, levelIndex, mode);
             if (m_GameEndPopupKind == MutinyGameEndPopupKind.None)
                 return;
 
@@ -870,7 +887,7 @@ namespace Mutiny.Presentation
                 ContinueQuitPrompt();
             if (!MutinyTransitionManager.IsTransitionActive && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
             {
-                MutinyTransitionManager.RequestTransition(() => BackToSinglePlayerMenu(), showLoading: false);
+                MutinyTransitionManager.RequestTransition(() => BackToModeLevelSelect(), showLoading: false);
             }
 
             GUI.color = prior;
@@ -936,6 +953,11 @@ namespace Mutiny.Presentation
 
         public bool BackToSinglePlayerMenu()
         {
+            return BackToModeLevelSelect();
+        }
+
+        public bool BackToModeLevelSelect()
+        {
             MutinyFrontendController frontend = FindAnyObjectByType<MutinyFrontendController>();
             if (frontend == null)
             {
@@ -943,14 +965,17 @@ namespace Mutiny.Presentation
                 return false;
             }
 
-            bool returned = frontend.ReturnToSinglePlayerLevelSelect();
+            bool twoPlayer = LevelController != null && LevelController.ActiveGameMode == MutinyGameMode.LocalTwoPlayer;
+            bool returned = twoPlayer
+                ? frontend.ReturnToTwoPlayerLevelSelect()
+                : frontend.ReturnToSinglePlayerLevelSelect();
             if (returned)
             {
                 m_QuitPromptShow = false;
                 m_QuitPromptAlpha = 0f;
                 m_GameEndPopupShow = false;
                 m_GameEndPopupAlpha = 0f;
-                Debug.Log("[MutinyHUD] HUD-CORNER-04 back to single-player level select", this);
+                Debug.Log($"[MutinyHUD] HUD-CORNER-04 back to {(twoPlayer ? "two-player" : "single-player")} level select", this);
             }
             return returned;
         }
@@ -1570,13 +1595,30 @@ namespace Mutiny.Presentation
 
             bool complete = m_GameEndPopupKind == MutinyGameEndPopupKind.LevelComplete;
             bool finalComplete = m_GameEndPopupKind == MutinyGameEndPopupKind.GameComplete;
-            string title = complete ? "level complete" : finalComplete ? "game complete" : "level failed";
+            bool versus = m_GameEndPopupKind == MutinyGameEndPopupKind.VersusPlayer1Wins ||
+                          m_GameEndPopupKind == MutinyGameEndPopupKind.VersusPlayer2Wins ||
+                          m_GameEndPopupKind == MutinyGameEndPopupKind.VersusDraw;
+            string title = m_GameEndPopupKind == MutinyGameEndPopupKind.VersusPlayer1Wins ? "player 1 wins" :
+                m_GameEndPopupKind == MutinyGameEndPopupKind.VersusPlayer2Wins ? "player 2 wins" :
+                m_GameEndPopupKind == MutinyGameEndPopupKind.VersusDraw ? "draw" :
+                complete ? "level complete" : finalComplete ? "game complete" : "level failed";
             // Title is at popup y=-105 (= -2100 twips); score labels are at
             // y=-40/-10 for complete and y=-44 for failed.  These are stage
             // coordinates after the popup's (275,200) registration point.
             MutinyBitmapFont.DrawPirateText(new Rect(panel.x, 84f, panel.width, 28f), title, false, true, -3);
 
-            if (complete)
+            if (versus)
+            {
+                Rect restartRect = ResolveOriginalPopupPrimaryButtonRect();
+                Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
+                DrawGameEndButton(restartRect, "restart level", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
+                DrawGameEndButton(backRect, "back to title", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(restartRect, GUIContent.none, GUIStyle.none))
+                    MutinyTransitionManager.RequestTransition(() => RestartFromGameEndPopup(), showLoading: true);
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+                    MutinyTransitionManager.RequestTransition(() => BackToModeLevelSelect(), showLoading: false);
+            }
+            else if (complete)
             {
                 DrawGameEndScoreRow(175f, 160f, "level score", m_GameEndDisplayedLevelScore, alpha);
                 DrawGameEndScoreRow(175f, 190f, "total score", m_GameEndDisplayedTotalScore, alpha);
@@ -1680,7 +1722,11 @@ namespace Mutiny.Presentation
 
         public bool RestartFromGameEndPopup()
         {
-            if (!m_GameEndPopupShow || m_GameEndPopupKind != MutinyGameEndPopupKind.LevelFailed || LevelController == null)
+            bool canRestart = m_GameEndPopupKind == MutinyGameEndPopupKind.LevelFailed ||
+                m_GameEndPopupKind == MutinyGameEndPopupKind.VersusPlayer1Wins ||
+                m_GameEndPopupKind == MutinyGameEndPopupKind.VersusPlayer2Wins ||
+                m_GameEndPopupKind == MutinyGameEndPopupKind.VersusDraw;
+            if (!m_GameEndPopupShow || !canRestart || LevelController == null)
                 return false;
 
             m_GameEndPopupShow = false;

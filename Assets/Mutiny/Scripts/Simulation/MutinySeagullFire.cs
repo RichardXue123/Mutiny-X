@@ -46,6 +46,7 @@ namespace Mutiny.Simulation
                 renderer.sprite = Resources.Load<Sprite>("Art/Weapons/SeagullFire/1");
             }
             m_PhysicsBody = gameObject.AddComponent<MutinyPhysicsBody>();
+            m_PhysicsBody.ApplyWaterMotion = false;
             m_PhysicsBody.OnFloorLanded += ExplodeOnContact;
             m_PhysicsBody.OnWallHit += ExplodeOnContact;
             m_PhysicsBody.OnEnterWater += EndInWater;

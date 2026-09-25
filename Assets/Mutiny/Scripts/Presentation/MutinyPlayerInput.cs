@@ -809,6 +809,9 @@ namespace Mutiny.Presentation
 
         internal string SpecialWeaponCursorModeForVerification =>
             m_SpecialWeaponCursor != null ? m_SpecialWeaponCursor.CurrentMode.ToString() : "None";
+        internal bool HasVisibleSpecialCursor =>
+            m_SpecialWeaponCursor != null &&
+            m_SpecialWeaponCursor.CurrentMode != MutinySpecialWeaponCursor.Mode.None;
 
         internal Texture2D SpecialWeaponCursorTextureForVerification =>
             m_SpecialWeaponCursor != null ? m_SpecialWeaponCursor.CurrentTextureForVerification : null;

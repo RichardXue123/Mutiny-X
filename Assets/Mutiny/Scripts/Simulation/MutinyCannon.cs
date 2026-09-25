@@ -50,7 +50,6 @@ namespace Mutiny.Simulation
         private SpriteRenderer m_RangeCircleRenderer;
 
         public override bool AdvancesMotionWhileReady => false;
-        public override bool CanExpireFromTurnSafetyTimeout => false;
         public float PinX { get; private set; } = PinRestX;
         public float RangeCircleAlpha => m_RangeCircleAlpha;
         public int RotationDegrees { get; private set; }

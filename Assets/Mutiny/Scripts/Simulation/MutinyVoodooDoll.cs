@@ -25,7 +25,6 @@ namespace Mutiny.Simulation
         public bool HasTransferredTargetVelocity => m_TransferredTargetVelocity;
         public int FramesOnThis => m_FramesOnThis;
         public int FramesOnTarget => m_FramesOnTarget;
-        public override bool CanExpireFromTurnSafetyTimeout => false;
 
         public static bool HasPlayerCameraHandoff(MutinyTeam inputTeam)
         {
@@ -146,7 +145,7 @@ namespace Mutiny.Simulation
         protected override void Update()
         {
             // VoodooDoll overrides Weapon.advance in AS2. In particular, it does
-            // not inherit generic water, rest, bounds, or safety-timeout paths.
+            // not inherit generic water, rest, or bounds paths.
         }
 
         private void AdvanceOriginalTick()

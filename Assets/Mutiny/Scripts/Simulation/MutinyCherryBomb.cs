@@ -28,6 +28,8 @@ namespace Mutiny.Simulation
             PhysicsBody.State.HitsBoxes = true;
             PhysicsBody.OnSimulationStep -= EmitOriginalSmokeTrail;
             PhysicsBody.OnSimulationStep += EmitOriginalSmokeTrail;
+            PhysicsBody.OnSimulationStep -= AdvanceInheritedFinishTick;
+            PhysicsBody.OnSimulationStep += AdvanceInheritedFinishTick;
         }
 
         public static readonly Vector2 OriginalPivot = new Vector2(10f / 20f, 10f / 32f); // Symbol 844: origin (10, 22) of 20x32
@@ -129,7 +131,10 @@ namespace Mutiny.Simulation
         private void OnDestroy()
         {
             if (PhysicsBody != null)
+            {
                 PhysicsBody.OnSimulationStep -= EmitOriginalSmokeTrail;
+                PhysicsBody.OnSimulationStep -= AdvanceInheritedFinishTick;
+            }
         }
     }
 }

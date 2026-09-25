@@ -81,7 +81,7 @@
 
 继承 `Weapon.advance()` 的武器每 tick：先走 `Solid.advanceMotion()`，再更新显示；发射后若低于地图底部或 `vx==0 && abs(vy)<0.2` 则结束；随后只做水面穿越 splash。原版没有共享 8 秒超时，也没有“入水 0.4 秒自动销毁”的公共规则。
 
-当前 `MutinyWeapon.Update()` 对未覆写它的武器增加了入水失效和 8 秒保险超时。它是 Unity 安全扩展，不是原版一致性规则；所有受影响武器必须单独运行对照。
+先前 `MutinyWeapon.Update()` 增加过入水失效、固定世界坐标和 8 秒保险超时，`MutinyTurnManager` 还增加过 150 tick 强制结束。本轮已移除这些非原版规则；CherryBomb、Dynamite、RumBottle 在 25 Hz 物理 tick 执行继承的原版结束判断，专属状态机仍由各武器负责。原版 `Solid.splashCheck` 只产生水花，武器不再套用角色的水下速度衰减。
 
 ### 4.3 爆炸
 
@@ -137,10 +137,11 @@
 | ID | 可观察行为 | 来源 | Unity 入口 | 状态 |
 | --- | --- | --- | --- | --- |
 | DYN-PHY-01 | extent 11、friction 1.7；飞行时旋转 `vx*2` | `Dynamite.as` | `MutinyDynamite` + rotation rules | 已实现 |
-| DYN-END-01 | `vx==0 && abs(vy)<.2` 时生成 250/70 爆炸 | `Dynamite.as::advanceMotion` | `Update → Explode` | 已实现 |
+| DYN-END-01 | `vx==0 && abs(vy)<.2` 时生成 250/70 爆炸 | `Dynamite.as::advanceMotion` | `AdvanceOriginalDetonationTick → Explode` | 已实现；隔离 Unity Play Mode 水中停稳专项通过 |
 | DYN-ANI-01 | 构造后无论是否已发射都播放 `lit`；可见 frame 1..4，frame 5 动作跳回 frame 1 | `Dynamite.as::Dynamite`；symbol 881 frame 5 | `MutinyDynamite.AdvanceOriginalPresentationTick` | ready 状态推进生产物理 tick，验证 1→2→3→4→1 | 已实现；Unity 定向回归通过 |
 | DYN-ANI-02 | 入水停在 `unlit` frame 6 | `Dynamite.as::advanceMotion`；symbol 881 frame 6 | `MutinyDynamite.OnWaterSubmerged` | 真实水线进入后继续推进，画面保持 frame 6 | 已实现；Unity 定向回归通过 |
-| DYN-WATER-01 | `y>water.y` 只执行 `gotoAndStop("unlit")`；源码没有“熄灭后禁止爆炸”分支 | `Dynamite.as::advanceMotion` | 当前入水后作为 dud 自动结束 | 已知差异 |
+| DYN-WATER-01 | `y>water.y` 只执行 `gotoAndStop("unlit")`；源码没有“熄灭后禁止爆炸”分支 | `Dynamite.as::advanceMotion` | `OnWaterSubmerged` 只切帧；停稳仍 `Explode` | 静态确认、已实现；隔离 Unity Play Mode 专项通过 |
+| DYN-WATER-02 | 入水后不按时间/深度作为 dud 消失，最终由真实静止或地图底部结束 | `Dynamite.as::advanceMotion`、`Weapon.as::advance` | `AdvanceOriginalDetonationTick`、`AdvanceInheritedFinishTick` | 已实现；隔离 Unity Play Mode 水中停稳爆炸专项通过 |
 | DYN-FX-01 | 未结束期间每 tick 生成烟迹，源码没有 `fired` 条件 | `Dynamite.as::advance` | `MutinyDynamite.EmitOriginalSmokeTrail`，装备阶段也生成 | 已接入；待 Unity 运行验证 |
 
 ### 6.3 Banana
@@ -152,6 +153,7 @@
 | BAN-HIT-01 | 每次 Solid 接触只播放 `banana_bounce`，不会按反弹次数自动爆炸 | `Banana.as::contact` | `OnContact` | 已实现 |
 | BAN-DET-01 | 静止时自动爆；人类玩家飞行中下一次全局鼠标按下触发爆炸 | `Banana.as::advanceMotion/fire` | `TryRequestPlayerDetonation` | 已实现；待运行验证 |
 | BAN-AI-01 | AI 最近角色距离 `<400` 时爆；“开始远离且 `<2500`”分支存在，但本 SWF 的 `lastSqDistance` 未更新，实际不可达 | `Banana.as::advanceMotion` | 保留 Infinity，不发明历史更新 | 已实现；静态确认 |
+| BAN-LIFE-01 | 长途飞行不受固定 150 tick、8 秒、横向坐标或入水短计时中断；香蕉自身引爆判断之后，仅在下降越过 `levelHeight × 32` 时按继承 `Weapon.advance` 结束 | `Banana.as::advanceMotion`、`Weapon.as::advance` | `MutinyBanana.AdvanceOriginalTick`、`MutinyTurnManager.AdvanceSimulationTick` | 已实现；隔离 Unity Play Mode 205 tick 长飞行专项通过 |
 
 ### 6.4 Boulder
 
@@ -174,7 +176,7 @@
 | GPB-PLACE-01 | extent 为 left/top 16、right/bottom 15；位置内不能有 tile、箱、宝箱或角色，并计算下方首个阻挡面 | `BoxWeapon.as::canPlace` | `MutinyGunpowderBarrel.CanPlace` | 已实现；待运行验证 |
 | GPB-CUR-01 | 待放置时使用原版火药桶鼠标；非法点切 `cross` 并拒绝放置；第一桶后仍保持输入直至第二桶 | `TileSystem.as::advance`、`BoxWeapon.as::advance/place`、cursor 1813 frames 11/70 | `MutinySpecialWeaponCursor`、`HasPendingBoxPlacement` | 已实现；待运行验证 |
 | BOX-PLC-01/02 | 光标和点击统一检查 pending 子对象；非法按下整次忽略且不改变已有桶，必须重新点击合法位置 | `BoxWeapon.as::canPlace`；原版运行行为 | `CanPlaceNext`、`ShouldHandleWeaponReadyPrimaryInput`、`TryActivateClickWeapon`、`TryPlaceAt` | 已实现；待运行验证 |
-| BOX-WAIT-01 | 连续摆放阶段没有等待超时；第一桶后不能被 Unity 的 150 tick 卡死武器保护强制结束 | `BoxWeapon.as::advance/place` | `CanExpireFromTurnSafetyTimeout=false` | 已实现；待运行验证 |
+| BOX-WAIT-01 | 连续摆放阶段没有等待超时；第一桶后不能被非原版 150 tick 卡死武器保护强制结束 | `BoxWeapon.as::advance/place` | `MutinyTurnManager.AdvanceSimulationTick` | 已实现；待运行验证 |
 | BOX-CAM-01 | 每次摆放同步 `track=false`，等待下一桶时不跟随桶、不回角色并直接允许手动滚屏 | `Weapon.as::place`、`BoxWeapon.as::place`、`TileSystem.as::advanceScrolling` | `IsAwaitingBoxPlacement`、镜头 action-target/manual-scroll 门 | 已实现；待运行验证 |
 | BOX-SUP-01 | 下方承托面扫描为横向任意列命中，不要求全宽承托 | `BoxWeapon.as::canPlace` | `CanPlace` 横向 support scan | 已实现；待运行验证 |
 | GPB-BOX-01 | 木箱和火药桶共同属于 `Controller.boxes`；所有 `hitsBoxes` Solid（含角色、炮弹等武器）把它们作为地形式 AABB 障碍 | `BoxWeapon.as::canPlace/place`、`Solid.as::advanceMotion` | `MutinyBoxRegistry`、`MutinyPhysicsBody.AdvanceSimulationTick` | 已实现；`BOX-COL-01` 已加入生产物理入口回归，待 Unity 运行验证 |
@@ -204,7 +206,7 @@
 | PCB-CUR-01 | 人类炸弹飞行期间使用四帧 fan 鼠标；按相对炸弹的左右方向旋转 ±90°，按住播放、松开停止 | `TileSystem.as`、cursor symbol 1813/1806 | `MutinySpecialWeaponCursor`、ActionExecuting 输入门 | 已实现；待运行验证 |
 | PCB-FAN-01 | 人类按住鼠标时，根据鼠标在炸弹左右反向加 `vx ±=.2`；每 12 tick 播放 fan | `ParachuteBomb.as` | `ApplyFanInput` | 已实现；待运行验证 |
 | PCB-HIT-01 | Solid 接触爆炸 160/50；上边界 y 限制为 -300 | 同上 | `OnContact`、ceiling clamp | 已实现 |
-| PCB-LIFE-01 | 飞行无固定时长上限；仅遵循 `Weapon.advance` 的地图底部/静止结束与自身 Solid 接触爆炸，不受 Unity 150 tick 卡死恢复销毁 | `Weapon.as::advance`、`ParachuteBomb.as::contact/advance` | `CanExpireFromTurnSafetyTimeout=false`、精确阻塞武器恢复 | 已实现；待运行验证 |
+| PCB-LIFE-01 | 飞行无固定时长上限；仅遵循 `Weapon.advance` 的地图底部/静止结束与自身 Solid 接触爆炸，不受非原版 150 tick 卡死恢复销毁 | `Weapon.as::advance`、`ParachuteBomb.as::contact/advance` | `MutinyParachuteBomb.AdvanceOriginalTick`、`MutinyTurnManager.AdvanceSimulationTick` | 已实现；待运行验证 |
 
 ### 6.9 Pieces of Eight
 
@@ -241,7 +243,7 @@
 | SEA-ANI-01 | 飞行显示帧 1..8，帧 9 的 Action 立即跳回 `flying`，透明帧 9/10 不显示；`shot` 标签在帧 11，投弹显示 11..14 后回到帧 1 | DefineSprite 982 时间轴、frame 9 `DoAction.as`、原始帧图 | `MutinySeagull.SpawnShot/AdvanceAnimation` | 原版静态确认；已修复，待 Unity 运行验证 |
 | SEA-HIT-01 | 弹碰 Solid 爆炸 50/50；落水只销毁不爆 | 动态 shot 函数 | `MutinySeagullFire` | 已实现；待运行验证 |
 | SEA-END-01 | 鸟越过 `levelWidth*32+275` 且所有弹已结束，武器才结束 | `Seagull.as::advance/endShot` | `AdvanceOriginalTick` | 已实现 |
-| SEA-END-02 | 原版没有飞行时限；即使阻塞回合超过 Unity 的 150 tick 安全阈值，也不得强制回收正常飞行的海鸥 | `Seagull.as::advance` 仅有 `levelWidth*32+275 && shots.length<1` 完成条件 | `CanExpireFromTurnSafetyTimeout` | 已实现；待运行验证 |
+| SEA-END-02 | 原版没有飞行时限；即使阻塞回合超过旧 Unity 的 150 tick 安全阈值，也不得强制回收正常飞行的海鸥 | `Seagull.as::advance` 仅有 `levelWidth*32+275 && shots.length<1` 完成条件 | `MutinyTurnManager.AdvanceSimulationTick` | 已实现；待运行验证 |
 
 ### 6.12 Tidal Wave
 
@@ -261,7 +263,7 @@
 | VOO-CAM-01 | 选定目标时设置 `panToCharacter=owner`；娃娃发射后 `track=true`，镜头跟随娃娃 | `VoodooDoll.as::setTargetCharacter`、`Weapon.as::twang` | `BindTarget`、`Fire`、`RequestTrackWeapon` | 已实现；待运行验证 |
 | VOO-CAM-02 | 飞行 10 tick 后在同一状态转换中设置 `panToCharacter=targetCharacter`、`track=false`；镜头到达并清除该平移目标后再等待 10 tick | `VoodooDoll.as::advance`、`TileSystem.as::advanceScrolling` | `ReleaseWeaponTracking`、`RequestPanToCharacter`、target-pan gate | 已实现；待运行验证 |
 | VOO-CAM-03 | 目标获得速度后不持续跟随目标，也不得由通用未完成武器兜底重新跟随娃娃；镜头恢复普通手动滚屏 | `VoodooDoll.as::advance` 保持 `track=false`，且 `panToCharacter` 到达后已清空 | `FindActionTarget` 的 Voodoo handoff guard | 已实现；待运行验证 |
-| VOO-END-02 | 等待远距离目标运镜期间没有时间上限，不受 Unity 150 tick 卡死武器看门狗强制回收 | `VoodooDoll.as::advance` 以 `panToCharacter` 清除为门，未定义超时 | `CanExpireFromTurnSafetyTimeout=false` | 已实现；待运行验证 |
+| VOO-END-02 | 等待远距离目标运镜期间没有时间上限，不受非原版 150 tick 卡死武器看门狗强制回收 | `VoodooDoll.as::advance` 以 `panToCharacter` 清除为门，未定义超时 | `MutinyTurnManager.AdvanceSimulationTick` | 已实现；待运行验证 |
 | VOO-XFER-01 | 只把保存速度一次性赋给目标；不复制娃娃后续碰撞、伤害或位置 | 同上 | `TransferVelocityToTarget` | 已实现；纠正旧“100%伤害同调”描述 |
 | VOO-END-01 | 速度传递后每 tick alpha 减 10，归零结束 | 同上 | `FadeAndFinish` | 已实现 |
 
@@ -273,7 +275,7 @@
 | CRT-PLACE-01 | 合法性与火药桶相同；每次按原始鼠标像素坐标放置，不自动吸附网格 | `BoxWeapon.as::canPlace/place` | `MutinyWoodenCrate.CanPlace/TryPlaceAt` | 已实现；待运行验证 |
 | CRT-CUR-01 | 待放置时使用原版木箱鼠标；非法点切 `cross` 并拒绝放置；前两箱后保持输入 | `TileSystem.as::advance`、`BoxWeapon.as::advance/place`、cursor 1813 frames 50/70 | `MutinySpecialWeaponCursor`、`HasPendingBoxPlacement` | 已实现；待运行验证 |
 | BOX-PLC-01/02 | 每次提示与提交指向同一 pending 箱；非法按下忽略整次请求并保留已放箱，合法位置必须重新点击 | `BoxWeapon.as::canPlace`；原版运行行为 | `CanPlaceNext`、`ShouldHandleWeaponReadyPrimaryInput`、`TryActivateClickWeapon`、`TryPlaceAt` | 已实现；待运行验证 |
-| BOX-WAIT-01 | 前两箱后可无限等待下一次点击，不受 Unity 150 tick 卡死武器保护影响 | `BoxWeapon.as::advance/place` | `CanExpireFromTurnSafetyTimeout=false` | 已实现；待运行验证 |
+| BOX-WAIT-01 | 前两箱后可无限等待下一次点击，不受非原版 150 tick 卡死武器保护影响 | `BoxWeapon.as::advance/place` | `MutinyTurnManager.AdvanceSimulationTick` | 已实现；待运行验证 |
 | BOX-CAM-01 | 每次摆放同步 `track=false`，等待下一箱期间不跟随箱、不自动回角色，立即允许鼠标边缘/方向键/WASD 滚屏 | `Weapon.as::place`、`BoxWeapon.as::place`、`TileSystem.as::advanceScrolling` | `IsAwaitingBoxPlacement`、镜头 action-target/manual-scroll 门 | 已实现；待运行验证 |
 | BOX-SUP-01 | 横向覆盖区只有部分下方存在承托也合法 | `BoxWeapon.as::canPlace` | `CanPlace` support scan | 已实现；待运行验证 |
 | CRT-LIFE-01 | `limitedToTurn=false`；进入共享 boxes，作为角色跳跃和所有 `hitsBoxes` 武器运动的地形式障碍 | `BoxWeapon.as`、`Solid.as::advanceMotion` | `MutinyBoxRegistry`、`MutinyPhysicsBody.AdvanceSimulationTick` | 已实现；`BOX-COL-01` 待 Unity 运行验证 |
@@ -297,8 +299,6 @@
 | 优先级 | 差异 | 影响 | 建议修复入口 |
 | --- | --- | --- | --- |
 | P0 | RumBottle 仍被二次截速到 20，原版 twangMaxForce 为 30 | 射程和 AI/玩家落点错误 | 移除 `Twang` 中额外的 20 截断；补 30 力生产入口用例 |
-| P0 | Dynamite 入水被当作 dud 并自动结束；原版静态代码只切换 unlit 帧 | 生效/回合结束不同 | 先运行原版入水取证，再按结果改 `MutinyDynamite` |
-| P1 | 通用 `MutinyWeapon.Update` 增加 0.4 秒入水结束和 8 秒超时 | CherryBomb、Dynamite、RumBottle 等可能提前结束 | 将扩展与原版规则分层，逐武器选择是否启用 |
 | P1 | CherryBomb 的 Water 被当作 contact 爆炸 | 原版静态路径不支持该结论 | 原版运行对照；不要仅据 Unity 现状定规格 |
 | P1 | Mine 忽略所有静止角色，未保留“当前 twanging 的静止角色仍触发”例外 | 少数交互时序不一致 | 给 `CheckForProximity` 传入当前 twang 目标 |
 | P2 | Boulder/Anchor 的 `Global.whiteOut` 加色阶段由普通 SpriteRenderer 近似 | 淡出颜色不完全一致 | 专用材质或 shader |
@@ -328,6 +328,6 @@
 
 - 静态确认：15 个库存武器、公共 twang/爆炸规则、全部专用 AS2 状态机和关键常量。
 - 已实现：Unity 已有 15 种武器类、炮弹/火焰子效果、工厂、输入与 AI 接口。
-- 实际测试通过：本轮没有执行 Unity，因此没有新增“通过”结论。
-- 待运行验证：第 8 节全部用例，尤其是跨回合对象、水中行为和镜头门控。
+- 实际测试通过：2026-09-25，Unity 6000.6.0f1 隔离 Play Mode 武器生命周期专项 16/16 断言通过，覆盖 `BAN-LIFE-01`、`WPN-LIFE-01/02`、`WPN-WATER-01`、`DYN-WATER-02`。
+- 待运行验证：第 8 节其他用例、主工程真实关卡画面及长时间连续运行表现；专项逻辑通过不等于全部武器已完成实机验收。
 - 已知差异：第 7 节；在修复前不得把相关武器标记为原版一致。

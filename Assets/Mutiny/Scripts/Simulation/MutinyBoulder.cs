@@ -88,9 +88,8 @@ namespace Mutiny.Simulation
 
         protected override void Update()
         {
-            // Boulder inherits Weapon.advance in Flash, but this project base Update
-            // adds non-original water timers and an eight-second timeout. The exact
-            // source checks are applied in the 25 Hz simulation callback below.
+            // Boulder applies its inherited Weapon.advance completion checks in
+            // the fixed 25 Hz simulation callback below.
         }
 
         public void AdvanceOriginalTickForVerification()

@@ -32,7 +32,7 @@
 | PCB-FAN-01 | 按住左键每 tick 根据鼠标相对位置反向施加 `vx ±=.2` | `ParachuteBomb.as:91-104` | `ApplyFanInput()` | 左侧输入使 vx +0.2；相等位置走右侧分支使 vx -0.2 | 已实现；待 Unity 运行验证 |
 | PCB-AUD-01 | 持续扇风时每 12 个发射 tick 播放一次 `fan` | `ParachuteBomb.as:104-108` | `ApplyFanInput()` → `PlaySFX("fan")` | 监听 `SfxPlayed`，第 12 tick 收到 `fan` 且资源可解析 | 已实现；待 Unity 运行验证 |
 | PCB-HIT-01 | 与 Solid 接触时隐藏并产生 160/50 爆炸和 `pop`；顶部限制 y=-300 | `ParachuteBomb.as:27-48,113-121` | `OnContact()`、ceiling clamp | 实心地形接触后断言炸弹结束并生成 160/50 爆炸 | 已实现；待 Unity 运行验证 |
-| PCB-LIFE-01 | 飞行没有固定时长上限；只在越过地图底部、达到原版静止条件或接触 Solid 时结束，不能被 Unity 的 150 tick 回合兜底销毁 | `Weapon.as:60-78`；`ParachuteBomb.as:33-47,124-134` | `CanExpireFromTurnSafetyTimeout=false`、`MutinyTurnManager.AdvanceSimulationTick()` | 发射后仅推进回合结算 152 tick，断言炸弹仍未结束 | 已实现；待 Unity 运行验证 |
+| PCB-LIFE-01 | 飞行没有固定时长上限；只在越过地图底部、达到原版静止条件或接触 Solid 时结束，不能被非原版 150 tick 回合兜底销毁 | `Weapon.as:60-78`；`ParachuteBomb.as:33-47,124-134` | `MutinyParachuteBomb.AdvanceOriginalTick()`、`MutinyTurnManager.AdvanceSimulationTick()` | 发射后仅推进回合结算 152 tick，断言炸弹仍未结束 | 已实现；待 Unity 运行验证 |
 | AND-PCB-FAN-01 | Android 降落伞炸弹飞行时，按住屏幕沿用原版每 tick 扇风；触点位于炸弹左/右侧时保持原版反向水平冲量。为避免短触摸落在两个 25 Hz 物理 tick 之间，`Began` 至少锁存一个 fan tick | 用户报告：Android 点击屏幕没有扇风；原版持续按键规则见 `ParachuteBomb.as:91-110` | `CaptureMobileFanInput()`、`TryGetFanInput()`、`ResolveMobileFanActive()` | 持续触摸每 tick 生效；仅出现按下沿但物理 tick 延后时仍消费一次锁存脉冲；随后无触摸不继续施力 | 已实现；锁存消费回归已加入、C# 编译通过，待 Android 真机验证 |
 
 ## 本次缺陷原因
@@ -40,7 +40,7 @@
 - Unity 原先把复合导出的第 1 帧当作静态图，遗漏了其内部独立运行的四帧引信时间轴。
 - Unity 原先把第 30 帧透明导出图实际显示一个 tick；原版在该帧执行跳转，因此降落过程出现周期性闪烁/消失。
 - 发射后回合进入 `ActionExecuting`，旧输入门没有为 Parachute Bomb 保持开放；专用鼠标实现也只有 Seagull 与 Tidal Wave 两种模式，所以物理扇风虽能轮询鼠标，却没有原版 fan 光标反馈。
-- 回合管理器另有一个 Unity 专用的 150 tick（约 6 秒）卡死恢复逻辑；它原先会把所有未结束武器一起 `Finish + Destroy`，因此正常缓慢下降的 Parachute Bomb 会在尚未碰撞时直接消失。现在恢复逻辑只处理准确的阻塞武器，且 Parachute Bomb 按原版生命周期明确豁免。
+- 回合管理器先前另有 Unity 专用的 150 tick（约 6 秒）卡死恢复逻辑，会让正常缓慢下降的 Parachute Bomb 在尚未碰撞时消失。本轮已从公共回合结算中完全移除，不再依赖单个武器豁免。
 - Android 缺陷来自 `TryGetFanInput()` 只轮询 `Mouse.current`；移动端已有统一触摸指针，但物理武器没有读取 `Touchscreen.current`，所以扇形光标可能变化而实际 `vx` 完全不受力。
 
 ## 验证状态

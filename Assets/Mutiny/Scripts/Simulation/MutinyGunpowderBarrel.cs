@@ -16,8 +16,7 @@ namespace Mutiny.Simulation
         // BoxWeapon constructor omits show(); each legal place() reveals one box.
         public override bool IsBodyVisibleWhileReady => false;
         // Original BoxWeapon waits indefinitely for the follow-up placement.
-        // The Unity stuck-projectile watchdog must never expire this input state.
-        public override bool CanExpireFromTurnSafetyTimeout => false;
+        // Placement remains pending until its original click/AI state resolves.
 
         public const float LeftExtentPixels = 16f;
         public const float RightExtentPixels = 15f;

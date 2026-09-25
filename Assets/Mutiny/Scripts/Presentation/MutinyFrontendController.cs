@@ -16,6 +16,21 @@ namespace Mutiny.Presentation
 
         private readonly MutinyFrontendFlow m_Flow = new MutinyFrontendFlow();
         private readonly Texture2D[] m_LevelPreviews = new Texture2D[SinglePlayerLevelCount];
+        private readonly Texture2D[] m_TwoPlayerPreviews = new Texture2D[18];
+        private static readonly string[] TwoPlayerLevelNames =
+        {
+            "the docks", "island hopping", "about turn", "battleships", "boom boom beach", "king of the hill",
+            "boulder dash", "marooned", "tower of terror", "the galleon", "mountain madness", "one on one",
+            "flatlands", "skull island", "stepping stones", "death bowl", "mega beach", "blast caverns"
+        };
+        private Texture2D m_TwoPlayerPrevUp;
+        private Texture2D m_TwoPlayerPrevOver;
+        private Texture2D m_TwoPlayerNextUp;
+        private Texture2D m_TwoPlayerNextOver;
+        private string m_TwoPlayerLoadError;
+        private const int HelpTutorialFrameCount = 160;
+        private readonly Texture2D[] m_HelpTutorialFrames = new Texture2D[HelpTutorialFrameCount];
+        private float m_HelpOpenTime;
         // Flash menu_background_anim: bg children in display-depth order, then water.
         private readonly Texture2D[] m_BackgroundLayers = new Texture2D[7];
         private readonly float[] m_BackgroundOffsets = new float[5];
@@ -26,6 +41,7 @@ namespace Mutiny.Presentation
         private Texture2D m_Background;
         private Texture2D m_TitleLogo;
         private Texture2D m_GameSelectPanel;
+        private Texture2D m_HelpPanel;
         private Texture2D m_LevelSelectPanel;
         private Texture2D m_GameTypePirates;
         private Texture2D m_ButtonSmall;
@@ -104,6 +120,7 @@ namespace Mutiny.Presentation
             }
             m_TitleLogo = Resources.Load<Texture2D>("UI/Frontend/title_logo");
             m_GameSelectPanel = Resources.Load<Texture2D>("UI/Frontend/game_select_panel");
+            m_HelpPanel = LoadPointTexture("UI/Frontend/help_panel");
             m_LevelSelectPanel = Resources.Load<Texture2D>("UI/Frontend/level_select_panel");
             m_GameTypePirates = Resources.Load<Texture2D>("UI/Frontend/game_type_pirates");
             m_ButtonSmall = Resources.Load<Texture2D>("UI/Frontend/button_small");
@@ -116,6 +133,14 @@ namespace Mutiny.Presentation
             m_LevelSlotOver = Resources.Load<Texture2D>("UI/Frontend/level_slot_over");
             for (int i = 0; i < SinglePlayerLevelCount; i++)
                 m_LevelPreviews[i] = Resources.Load<Texture2D>($"UI/Frontend/LevelPreviews/{i + 1:D2}");
+            for (int i = 0; i < m_TwoPlayerPreviews.Length; i++)
+                m_TwoPlayerPreviews[i] = LoadPointTexture($"UI/Frontend/TwoPlayerPreviews/{i + 1:D2}");
+            m_TwoPlayerPrevUp = LoadPointTexture("UI/Frontend/TwoPlayerPreviews/prev_up");
+            m_TwoPlayerPrevOver = LoadPointTexture("UI/Frontend/TwoPlayerPreviews/prev_over");
+            m_TwoPlayerNextUp = LoadPointTexture("UI/Frontend/TwoPlayerPreviews/next_up");
+            m_TwoPlayerNextOver = LoadPointTexture("UI/Frontend/TwoPlayerPreviews/next_over");
+            for (int i = 0; i < HelpTutorialFrameCount; i++)
+                m_HelpTutorialFrames[i] = LoadPointTexture($"UI/Help/tutorial_{i + 1:D3}");
 
             m_MusicCornerOnUpTexture = LoadPointTexture("UI/CornerControls/music_on_up");
             m_MusicCornerOnOverTexture = LoadPointTexture("UI/CornerControls/music_on_over");
@@ -217,6 +242,12 @@ namespace Mutiny.Presentation
                 case MutinyFrontendPage.LevelSelect:
                     DrawLevelSelect();
                     break;
+                case MutinyFrontendPage.TwoPlayerLevelSelect:
+                    DrawTwoPlayerLevelSelect();
+                    break;
+                case MutinyFrontendPage.Help:
+                    DrawHelp();
+                    break;
             }
 
             DrawCornerAudioControls();
@@ -238,18 +269,26 @@ namespace Mutiny.Presentation
             }
 
             DrawOriginalButton(new Rect(193f, 216f, 163f, 24f), "scores", m_ButtonSmall, m_ButtonSmallOver);
-            DrawOriginalButton(new Rect(193f, 245f, 163f, 24f), "help", m_ButtonSmall, m_ButtonSmallOver);
+            if (DrawOriginalButton(new Rect(193f, 245f, 163f, 24f), "help", m_ButtonSmall, m_ButtonSmallOver))
+            {
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    m_HelpOpenTime = Time.unscaledTime;
+                    m_Flow.PressHelp();
+                    LogPage("FRONT-03 help", m_Flow.CurrentPage);
+                }, showLoading: false);
+            }
             DrawOriginalButton(new Rect(193f, 274f, 163f, 24f), "credits", m_ButtonSmall, m_ButtonSmallOver);
         }
 
         private void DrawGameSelect()
         {
             DrawTexture(new Rect(44f, 24f, 460f, 350f), m_GameSelectPanel);
-            MutinyBitmapFont.DrawPirateText(new Rect(44f, 38f, 460f, 26f), "select game", false, true, -3);
-            MutinyBitmapFont.DrawDangleText(new Rect(161f, 76f, 300f, 60f), "click one of the buttons below.||play against the computer or|against a friend!", Color.black, TextAnchor.UpperLeft, 0, 13);
+            MutinyBitmapFont.DrawPirateText(new Rect(44f, 32f, 460f, 23f), "select game", false, true, -3);
+            MutinyBitmapFont.DrawDangleText(new Rect(161f, 76f, 300f, 60f), "click one of the buttons below.||play against the computer or|against a friend!", Color.white, TextAnchor.UpperLeft, 0, 13);
             DrawTexture(new Rect(127f, 169.5f, 345f, 80f), m_GameTypePirates);
 
-            if (DrawOriginalButton(new Rect(63f, 263f, 200f, 24f), "1 player", m_ButtonWide, m_ButtonWideOver))
+            if (DrawOriginalButton(new Rect(63f, 251f, 200f, 24f), "1 player", m_ButtonWide, m_ButtonWideOver))
             {
                 MutinyTransitionManager.RequestTransition(() =>
                 {
@@ -258,8 +297,19 @@ namespace Mutiny.Presentation
                 }, showLoading: false);
             }
 
-            DrawOriginalButton(new Rect(287f, 263f, 200f, 24f), "2 player", m_ButtonWide, m_ButtonWideOver);
-            if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
+            if (DrawOriginalButton(new Rect(287f, 251f, 200f, 24f), "2 player", m_ButtonWide, m_ButtonWideOver))
+            {
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    if (m_LevelController == null)
+                        m_LevelController = FindAnyObjectByType<MutinyLevelController>();
+                    m_LevelController?.ConfigureSession(MutinyGameMode.LocalTwoPlayer, resetVersusWins: true);
+                    m_TwoPlayerLoadError = null;
+                    m_Flow.PressTwoPlayer();
+                    LogPage("2P-NAV-01 two player", m_Flow.CurrentPage);
+                }, showLoading: false);
+            }
+            if (DrawOriginalButton(new Rect(205f, 322f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
             {
                 MutinyTransitionManager.RequestTransition(() =>
                 {
@@ -271,8 +321,8 @@ namespace Mutiny.Presentation
 
         private void DrawLevelSelect()
         {
-            DrawTexture(new Rect(44f, 24f, 462f, 352f), m_LevelSelectPanel);
-            MutinyBitmapFont.DrawPirateText(new Rect(44f, 34f, 462f, 26f), "select level", false, true, -3);
+            DrawTexture(new Rect(44f, 24f, 460f, 350f), m_LevelSelectPanel);
+            MutinyBitmapFont.DrawPirateText(new Rect(44f, 32f, 460f, 23f), "select level", false, true, -3);
 
             for (int level = 1; level <= SinglePlayerLevelCount; level++)
             {
@@ -281,12 +331,113 @@ namespace Mutiny.Presentation
                 DrawLevelButton(level, new Rect(110f + column * 70f, 68f + row * 90f, 51f, 77f));
             }
 
-            if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
+            if (DrawOriginalButton(new Rect(205f, 322f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
             {
                 MutinyTransitionManager.RequestTransition(() =>
                 {
                     m_Flow.PressLevelSelectBack();
                     LogPage("FRONT-03 back", m_Flow.CurrentPage);
+                }, showLoading: false);
+            }
+        }
+
+        private void DrawTwoPlayerLevelSelect()
+        {
+            DrawTexture(new Rect(44f, 24f, 460f, 350f), m_LevelSelectPanel);
+            MutinyBitmapFont.DrawPirateText(new Rect(44f, 32f, 460f, 23f), "select level", false, true, -3);
+            int level = m_Flow.SelectedTwoPlayerLevel;
+            // Sprite 628 is a per-level preview and name field. Its exported PNG
+            // keeps the Flash registration offset: sprite 629 starts at (97,125).
+            DrawTexture(new Rect(97f, 125f, 427f, 263f), m_TwoPlayerPreviews[level - 16]);
+            // FFDec leaves the dynamic DangleFont field as a narrow white stub.
+            // Rebuild that field so long level names remain legible.
+            Color prior = GUI.color;
+            GUI.color = Color.white;
+            GUI.DrawTexture(new Rect(175f, 256f, 200f, 20f), Texture2D.whiteTexture);
+            GUI.color = prior;
+            MutinyBitmapFont.DrawDangleText(new Rect(175f, 256f, 200f, 20f),
+                TwoPlayerLevelNames[level - 16], Color.black, TextAnchor.MiddleCenter, 0, 13);
+            if (level > 16 && DrawTwoPlayerArrow(new Rect(117.5f, 182f, 35f, 38f), m_TwoPlayerPrevUp, m_TwoPlayerPrevOver))
+            {
+                m_Flow.StepTwoPlayerLevel(-1);
+                m_TwoPlayerLoadError = null;
+            }
+            if (level < 33 && DrawTwoPlayerArrow(new Rect(394.5f, 182f, 35f, 38f), m_TwoPlayerNextUp, m_TwoPlayerNextOver))
+            {
+                m_Flow.StepTwoPlayerLevel(1);
+                m_TwoPlayerLoadError = null;
+            }
+
+            int p1 = m_LevelController != null ? m_LevelController.Player1Wins : 0;
+            int p2 = m_LevelController != null ? m_LevelController.Player2Wins : 0;
+            MutinyBitmapFont.DrawDangleText(new Rect(179f, 67f, 120f, 14f),
+                "player 1", Color.white, TextAnchor.MiddleCenter, 0, 13);
+            MutinyBitmapFont.DrawDangleText(new Rect(251f, 67f, 120f, 14f),
+                "player 2", Color.white, TextAnchor.MiddleCenter, 0, 13);
+            MutinyBitmapFont.DrawDangleText(new Rect(171f, 81f, 207f, 20f),
+                $"{p1}                {p2}", Color.white, TextAnchor.MiddleCenter, 0, 13);
+            if (DrawOriginalButton(new Rect(205f, 296f, 140f, 24f), "play", m_ButtonBack, m_ButtonBackOver))
+            {
+                if (!MutinyLevelController.HasNumberedLevelData(level))
+                    m_TwoPlayerLoadError = $"level {level:D2} data unavailable";
+                else
+                {
+                    MutinyTransitionManager.RequestTransition(() =>
+                    {
+                        if (StartLevel(level, MutinyGameMode.LocalTwoPlayer))
+                            m_Flow.TrySelectTwoPlayerLevel(MutinyLevelController.HasNumberedLevelData);
+                        else
+                            m_TwoPlayerLoadError = $"level {level:D2} failed to load";
+                    }, showLoading: true);
+                }
+            }
+            if (!string.IsNullOrEmpty(m_TwoPlayerLoadError))
+                MutinyBitmapFont.DrawDangleText(new Rect(94f, 320f, 360f, 20f),
+                    m_TwoPlayerLoadError, Color.white, TextAnchor.MiddleCenter, 0, 13);
+            if (DrawOriginalButton(new Rect(205f, 345f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
+            {
+                MutinyTransitionManager.RequestTransition(() => m_Flow.PressTwoPlayerLevelSelectBack(), showLoading: false);
+            }
+        }
+
+        private static bool DrawTwoPlayerArrow(Rect rect, Texture2D up, Texture2D over)
+        {
+            bool active = !MutinyTransitionManager.IsTransitionActive;
+            bool hovered = active && rect.Contains(GetCanvasMousePosition());
+            Texture2D texture = hovered && over != null ? over : up;
+            if (texture != null)
+                GUI.DrawTexture(rect, texture, ScaleMode.StretchToFill, true);
+            return active && GUI.Button(rect, GUIContent.none, GUIStyle.none);
+        }
+
+        private void DrawHelp()
+        {
+            DrawTexture(new Rect(44f, 24f, 460f, 350f), m_HelpPanel != null ? m_HelpPanel : m_GameSelectPanel);
+            MutinyBitmapFont.DrawPirateText(new Rect(44f, 32f, 460f, 23f), "help", false, true, -3);
+
+            float elapsed = Mathf.Max(0f, Time.unscaledTime - m_HelpOpenTime);
+            int frameIndex = (int)(elapsed * 25f) % HelpTutorialFrameCount;
+            if (frameIndex < 0)
+                frameIndex += HelpTutorialFrameCount;
+
+            Texture2D frameTex = m_HelpTutorialFrames[frameIndex];
+            if (frameTex != null)
+            {
+                DrawTexture(new Rect(114f, 94f, 514f, 351f), frameTex);
+            }
+
+            string tutorialText = (frameIndex < 64)
+                ? "use your weapons to fire at your opponents|click and drag and then let go to throw them"
+                : "click on a character and throw him to move him";
+
+            MutinyBitmapFont.DrawDangleText(new Rect(44f, 286f, 460f, 40f), tutorialText, Color.white, TextAnchor.UpperCenter, 0, 13);
+
+            if (DrawOriginalButton(new Rect(205f, 322f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
+            {
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    m_Flow.PressHelpBack();
+                    LogPage("FRONT-HELP back", m_Flow.CurrentPage);
                 }, showLoading: false);
             }
         }
@@ -323,10 +474,9 @@ namespace Mutiny.Presentation
                     int targetLevel = level;
                     MutinyTransitionManager.RequestTransition(() =>
                     {
-                        if (m_Flow.TrySelectLevel(targetLevel, MutinySaveSystem.IsLevelUnlocked))
-                        {
-                            StartLevel(targetLevel);
-                        }
+                        if (MutinySaveSystem.IsLevelUnlocked(targetLevel) &&
+                            StartLevel(targetLevel, MutinyGameMode.SinglePlayer))
+                            m_Flow.TrySelectLevel(targetLevel, MutinySaveSystem.IsLevelUnlocked);
                     }, showLoading: true);
                 }
             }
@@ -366,7 +516,7 @@ namespace Mutiny.Presentation
             return Event.current != null ? Event.current.mousePosition : Vector2.zero;
         }
 
-        private void StartLevel(int level)
+        private bool StartLevel(int level, MutinyGameMode mode)
         {
             Debug.Log($"[MutinyFrontend] FRONT-05 select level={level:D2}; loading production level", this);
             if (m_LevelController == null)
@@ -375,16 +525,20 @@ namespace Mutiny.Presentation
             if (m_LevelController == null)
             {
                 Debug.LogError("[MutinyFrontend] Cannot enter gameplay: MutinyLevelController was not found.", this);
-                return;
+                return false;
             }
 
             // LevelSelectButton.doPress clears `_root.score` before entering a
             // new one-player game.  Advancing inside an active game does not.
-            m_LevelController.ResetSinglePlayerScore();
-            m_LevelController.LoadLevel(level);
+            m_LevelController.ConfigureSession(mode);
+            if (mode == MutinyGameMode.SinglePlayer)
+                m_LevelController.ResetSinglePlayerScore();
+            if (!m_LevelController.TryLoadLevel(level))
+                return false;
             if (m_LevelController.CurrentLevel != null)
                 m_LevelController.CurrentLevel.gameObject.SetActive(true);
             MutinyAudioManager.Instance?.PlayMusic("game_music");
+            return true;
         }
 
         /// <summary>
@@ -403,6 +557,18 @@ namespace Mutiny.Presentation
 
             MutinyAudioManager.Instance?.PlayMusic("menu_music");
             Debug.Log("[MutinyFrontend] HUD-CORNER-04 back to menu -> level select 1p", this);
+            return true;
+        }
+
+        public bool ReturnToTwoPlayerLevelSelect()
+        {
+            if (!m_Flow.ReturnToTwoPlayerLevelSelect())
+                return false;
+            if (m_LevelController == null)
+                m_LevelController = FindAnyObjectByType<MutinyLevelController>();
+            if (m_LevelController != null && m_LevelController.CurrentLevel != null)
+                m_LevelController.CurrentLevel.gameObject.SetActive(false);
+            MutinyAudioManager.Instance?.PlayMusic("menu_music");
             return true;
         }
 
