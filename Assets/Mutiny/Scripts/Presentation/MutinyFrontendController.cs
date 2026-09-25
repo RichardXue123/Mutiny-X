@@ -1040,6 +1040,15 @@ namespace Mutiny.Presentation
             m_EndingShipTick = 0;
             m_EndingScore = finalScore;
             m_BackgroundTickAccumulator = 0f;
+            // Root frame 131 does not change music. Preserve the active
+            // AudioSource itself so the original game track keeps its position.
+            // Recover the logical target only if this page was reached with a
+            // different track (for example, a restored session).
+            MutinyAudioManager audio = MutinyAudioManager.Instance;
+            if (audio != null &&
+                (audio.MusicSource == null || audio.MusicSource.clip == null ||
+                 audio.MusicSource.clip.name != "game_music"))
+                audio.PlayMusic("game_music");
             Debug.Log($"[MutinyFrontend] END-SEQ-01 congratulations -> ending score={finalScore}", this);
             return true;
         }

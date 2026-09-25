@@ -68,6 +68,8 @@
 
 主时间轴调用点：frame 40、41、91、101、111 启动菜单音乐；frame 121 在 `startGame` 后启动战斗音乐。
 
+单人结局沿用战斗音乐：`CongratulationsButton.onRelease` 转场后执行 `Controller.endGame()` 与根时间轴 `gotoAndStop("congratulations")`，目标 frame 131 只执行 `stop()`，没有菜单曲调用。frame 40 创建的 MusicController 与两条 Sound 宿主未在 frame 131 移除；结局 sprite 802 及可达时间轴也没有直接 `StartSound`/音频流数据。因此 `game_music` 不被重启，直到结局按钮返回标题的 frame 41 才切换到 `menu_music`。规则见 [END-SEQ-07](../../01-GameFlowAndProgression/03-ResultsAndProgression/ENDING_SEQUENCE.md)。
+
 ## SFX 事件规格
 
 ### 玩法事件

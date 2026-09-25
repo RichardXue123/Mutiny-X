@@ -3858,6 +3858,10 @@ namespace Mutiny.Verification
                     flow.PressOnePlayer();
                     flow.TrySelectLevel(15, level => level == 15);
                 }
+                MutinyAudioManager audio = MutinyAudioManager.Instance;
+                AudioClip gameMusic = Resources.Load<AudioClip>("Audio/Music/game_music");
+                AudioClip menuMusic = Resources.Load<AudioClip>("Audio/Music/menu_music");
+                audio?.PlayMusic("game_music");
                 hudObject = new GameObject("EndingVerification_Hud");
                 MutinyGameHUD hud = hudObject.AddComponent<MutinyGameHUD>();
                 hud.TurnManager = manager;
@@ -3871,6 +3875,8 @@ namespace Mutiny.Verification
                 bool opened = hud.SynchronizeGameEndPopup();
                 int finalScore = controller.SinglePlayerScore;
                 bool entered = hud.CompleteCampaignAndShowEnding();
+                bool endingKeptGameMusic = entered && audio != null && audio.MusicSource != null &&
+                    gameMusic != null && audio.MusicSource.clip == gameMusic;
                 bool unloaded = controller.CurrentLevel == null;
                 for (int tick = 1; tick < MutinyEndingSequence.FrameCount; tick++)
                     frontend.AdvanceEndingTick();
@@ -3881,7 +3887,12 @@ namespace Mutiny.Verification
                     frontend.CurrentEndingShipTick == stoppedShipTick + 1 &&
                     MutinyEndingSequence.ShipFrameAt(frontend.CurrentEndingShipTick, 7) !=
                     stoppedCharacterFrame;
+                bool endingFinishedWithGameMusic = audio.MusicSource.clip == gameMusic;
                 bool returned = frontend.ReturnFromEndingToTitle();
+                result.Assert(endingKeptGameMusic && endingFinishedWithGameMusic &&
+                    returned && menuMusic != null &&
+                    audio.MusicSource.clip == menuMusic,
+                    "END-SEQ-07 final victory retains game_music through ending and back to title selects menu_music");
                 result.Assert(flow != null && frontend.HasAnimatedEndingShip && opened && entered && returned &&
                     manager.GameResult == GameOverResult.Team1Wins &&
                     hud.GameEndPopupKind == MutinyGameEndPopupKind.GameComplete &&

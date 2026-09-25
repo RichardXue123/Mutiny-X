@@ -166,6 +166,8 @@ namespace Mutiny.Presentation
         private int m_Team2HealthFrame = 1;
         private TextAsset m_CachedMapXml;
         private MutinyLevelData m_CachedMapLevel;
+        private Texture2D m_CachedMapTexture;
+        private MutinyLevelData m_CachedMapTextureLevel;
 
         public float ActionPanelAlpha => Mathf.Clamp01(m_ActionPanelAlpha);
         public bool ActionPanelContentsActive => m_ActionPanelContentsActive;
@@ -680,6 +682,27 @@ namespace Mutiny.Presentation
             }
         }
 
+        private void OnDestroy()
+        {
+            if (m_CachedMapTexture != null)
+            {
+                DestroyTexture(m_CachedMapTexture);
+                m_CachedMapTexture = null;
+                m_CachedMapTextureLevel = null;
+            }
+        }
+
+        private static void DestroyTexture(Texture2D texture)
+        {
+            if (texture == null)
+                return;
+
+            if (Application.isPlaying)
+                Destroy(texture);
+            else
+                DestroyImmediate(texture);
+        }
+
         private void DrawIngameText()
         {
             if (IngameText == null || !IngameText.IsVisible ||
@@ -1111,17 +1134,11 @@ namespace Mutiny.Presentation
             const float holderX = OriginalMapHolderX;
             const float holderY = OriginalMapHolderY;
             const float dotSize = 3f;
-            for (int x = -2; x < level.Width + 2; x++)
-            {
-                for (int y = -2; y < level.Height + 2; y++)
-                {
-                    bool occupied = x >= 0 && y >= 0 && x < level.Width && y < level.Height &&
-                                    level.Terrain != null && level.Terrain[y, x] != null;
-                    byte alpha = occupied ? (byte)128 : (byte)51;
-                    DrawSolidRect(new Rect(holderX + x * dotSize, holderY + y * dotSize, dotSize, dotSize),
-                        new Color32(0, 0, 0, alpha));
-                }
-            }
+            EnsureMapTexture(level);
+            Rect mapRect = new Rect(holderX - 2f * dotSize, holderY - 2f * dotSize,
+                (level.Width + 4) * dotSize, (level.Height + 4) * dotSize);
+            if (m_CachedMapTexture != null)
+                GUI.DrawTexture(mapRect, m_CachedMapTexture, ScaleMode.StretchToFill, true);
 
             MutinyTreasureChest[] chests = FindObjectsByType<MutinyTreasureChest>();
             for (int i = 0; i < chests.Length; i++)
@@ -1143,6 +1160,58 @@ namespace Mutiny.Presentation
             DrawOutline(new Rect(borderRect.x + 1f, borderRect.y + 1f, borderRect.width, borderRect.height),
                 new Color32(0, 0, 0, 52));
             DrawOutline(borderRect, Color.white);
+        }
+
+        internal Texture2D CachedMapTexture => m_CachedMapTexture;
+
+        public void InvalidateMapTexture()
+        {
+            m_CachedMapTextureLevel = null;
+        }
+
+        internal void EnsureMapTexture(MutinyLevelData level)
+        {
+            if (level == null || level.Width <= 0 || level.Height <= 0)
+                return;
+
+            int width = level.Width + 4;
+            int height = level.Height + 4;
+            if (m_CachedMapTexture != null && m_CachedMapTextureLevel == level &&
+                m_CachedMapTexture.width == width && m_CachedMapTexture.height == height)
+            {
+                return;
+            }
+
+            if (m_CachedMapTexture == null || m_CachedMapTexture.width != width || m_CachedMapTexture.height != height)
+            {
+                DestroyTexture(m_CachedMapTexture);
+                m_CachedMapTexture = new Texture2D(width, height, TextureFormat.RGBA32, false)
+                {
+                    filterMode = FilterMode.Point,
+                    wrapMode = TextureWrapMode.Clamp,
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+            }
+
+            Color32 emptyColor = new Color32(0, 0, 0, 51);
+            Color32 occupiedColor = new Color32(0, 0, 0, 128);
+            Color32[] pixels = new Color32[width * height];
+
+            for (int y = 0; y < height; y++)
+            {
+                int mapY = (height - 1 - y) - 2;
+                for (int x = 0; x < width; x++)
+                {
+                    int mapX = x - 2;
+                    bool occupied = mapX >= 0 && mapY >= 0 && mapX < level.Width && mapY < level.Height &&
+                                    level.Terrain != null && level.Terrain[mapY, mapX] != null;
+                    pixels[y * width + x] = occupied ? occupiedColor : emptyColor;
+                }
+            }
+
+            m_CachedMapTexture.SetPixels32(pixels);
+            m_CachedMapTexture.Apply(false, false);
+            m_CachedMapTextureLevel = level;
         }
 
         public static Rect ResolveOriginalMapBorderRect(int levelWidth, int levelHeight)
