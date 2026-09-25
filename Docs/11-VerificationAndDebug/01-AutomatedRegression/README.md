@@ -26,11 +26,14 @@
 
 ## Cannon 范围锚点回归
 
+- `CAN-AI-TURN-01`：经 `MutinyAIController.ExecuteMove` 同源执行入口提交大炮，并交替推进正式 `MutinyTurnManager.AdvanceSimulationTick` 与大炮 25 Hz tick；前 24 tick 不得换回合或积累静止计数，第 25 tick 生成炮弹且镜头目标为该炮弹；炮弹未结束时再等待 151 tick 不得被通用安全超时强制结束，然后驱动正式炮弹物理跨出原版边界、炮身结束，最后才通过通常 11 tick 静止门。用例已添加，待 Unity 运行验证。
 - `CAN-PLACE-01`：角色位于 `(100,200)` 时，通过生产 `MutinyCannon.PlacementCenterPixels` 与独立 `RangeCircle` Transform 断言范围中心均为 `(100,100)`，即原始 100 px 圆的底部落在角色坐标。
 - `CAN-PLACE-03`：从炮身初始 `(100,190)` 按住并把指针快速移到 `(100,400)`，驱动生产 25 Hz tick；以 `(100,100)` 为中心的 120 px 约束应先把目标裁到 `(100,220)`，再按原版半距离移动至 `(100,205)`，并保持拖动资格。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；待 Unity Play Mode 实际执行，不能登记为通过。
 
 ## AI 武器候选缺口回归
+
+- `GM-07`：通过 GM 正式解析入口覆盖 AI 武器候选；验证无库存也能评估强制武器、首行动仍保留跳跃、续行动无合格武器候选时仍可 Pass、正式开火不扣真实弹药、`0` 恢复库存选择、非法编号不改设置及 1..15 菜单映射。此项是 Unity 调试扩展，不是原版一致性规则。2026-09-25 在当前工程 Unity Play Mode 通过专项回归 `7/7`；“有候选但评分非正”的续行动分支尚未由此专项用例单独覆盖。
 
 - `AI-WPN-04`：通过 `EvaluateCharacterWeapons` 的生产分发与 Anchor 正式执行入口，在固定随机种子和地面上验证全图垂直采样会生成 Anchor 候选；胜出后创建已发射的正式 Anchor，并消费库存。
 - `AI-WPN-05`：通过同一生产分发器验证 Wooden Crate 获得至少 3 个合法 BoxWeapon 位置后进入候选；随后启动正式 `BeginAiPlacement` 并推进原版 40 tick 延迟，断言第一箱落地且三箱序列仍处于活动状态。
@@ -109,6 +112,13 @@
 - `JUMP-CAN-01`：通过生产 `SelectCharacterThrow` 进入跳跃待命，刷新实际角色覆盖层并断言取消叉可见；点击原版 20 px 命中区后断言回到行动菜单且 `CanThrow` 未消耗。
 - `EXT-JUMP-CAN-01`：进入实际 Aiming 状态后调用与鼠标右键共用的取消处理，断言轨迹蓄力撤销、回到跳跃待命、取消叉恢复且 `CanThrow` 未消耗。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`，尚未在 Unity Play Mode 实际执行，不能登记为通过。
+
+## 高刷新率镜头跟随回归（feature/cameramovement）
+
+- `CAM-PRES-01`：驱动生产 `MutinyPhysicsBody.AdvanceSimulationFrame` 与显示入口，验证角色/武器显示位置由相邻已完成 tick 插值，权威 `State` 不随中间渲染帧改变；外部改位不复用旧轨迹。
+- `CAM-PRES-02`：驱动生产 `MutinyCameraController.AdvanceCamera`，验证跳跃角色、海鸥、海啸、炮弹的镜头目标与其显示位置同源；60/120 FPS 中间帧仍前进，远距离跟随不超过 30 px/tick；空投优先于武器并保持 50 px/tick 切入。
+- `CAM-TRACK-SEA-01`：验证海鸥使用原版 `trackY=y+100` 偏移。
+- 实际结果：Unity 6000.6.0f1 独立临时工程 Play Mode 批处理运行 `Validate Camera Movement`，11/11 断言通过；两个 C# 工程编译通过。该结果证明数值及生产方法路径，不等于主工程真实 25/60/120 FPS 画面验收。
 
 ## Android 镜头缺陷回归
 

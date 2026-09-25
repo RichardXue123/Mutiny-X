@@ -50,6 +50,7 @@
 | CAN-LIFE-01 | 炮身保持全不透明 10 tick，再淡出 10 tick；炮弹结束且炮身透明后完成 | `Cannon.as:71-87` | `MutinyCannon.AdvanceOriginalTick()` | 验证第 19 个淡出 tick 尚未完成，第 20 个完成 | 已实现；待 Unity 运行验证 |
 | CAN-AI-01 | AI 候选摆放先用炮身碰撞修正，再从修正位置模拟炮弹 | `Cannon.as:179-225` | `MutinyAIController.EvaluateCannon()`、`MutinyCannon.BeginAiFire()` | AI 请求穿过 x=128 墙体时炮身同样停在 x=117.9 | 已实现；待 Unity 运行验证 |
 | CAN-AI-02 | AI 的摆放方向和发射方向使用两次独立随机角度 | `Cannon.as:190`、`Cannon.as:199` | `MutinyAIController.EvaluateCannon()` | 静态检查两个独立 `Random.Range(0,360)` 采样 | 已实现；静态确认 |
+| CAN-AI-TURN-01 | AI 提交大炮后，25 tick 待发射期间保持当前回合；发射后镜头跟随炮弹，炮弹结算、大炮淡出且场面稳定后才允许静止计时与切换回合，不会在发射前创建下一回合空投。大炮／炮弹不受 Unity 通用 150 tick 安全超时强制结束；已存在的下落空投仍遵循原版较高镜头优先级 | `Team.as:89-96`；`Cannon.as:45-85,215-225`；`Cannonball.as:46-111`；`Character.as:172-175,226-250`；`Controller.as:200-240,185-195`；`TileSystem.as:438-459` | `MutinyCannon.IsAiFirePending`、`MutinyTurnManager.CheckAllBodiesAtRest()`、`MutinyCannon/MutinyCannonball.CanExpireFromTurnSafetyTimeout`、`MutinyCameraController.FindActionTarget()` | 经 AI 正式执行入口推进 24/25 tick，检查回合、炮弹和镜头目标；炮弹未结束时再等待 151 tick，随后检查结算与切换 | 原版静态确认；已实现、C# 编译通过；自动回归待 Unity 运行验证 |
 
 ## 修复边界
 

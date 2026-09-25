@@ -1,11 +1,50 @@
+using System;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
 namespace Mutiny.Verification.Editor
 {
+    [InitializeOnLoad]
     public static class MutinyParityValidationMenu
     {
+        private const string CameraMovementVerificationKey = "Mutiny.CameraMovementPlayModeVerification";
+
+        static MutinyParityValidationMenu()
+        {
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+        }
+
+        private static void OnPlayModeStateChanged(PlayModeStateChange state)
+        {
+            if (state != PlayModeStateChange.EnteredPlayMode ||
+                !SessionState.GetBool(CameraMovementVerificationKey, false))
+                return;
+
+            SessionState.EraseBool(CameraMovementVerificationKey);
+            bool passed = false;
+            try
+            {
+                MutinyLevel1VerificationResult result =
+                    MutinyTurnActionUiVerificationTest.RunCameraMovement();
+                passed = result.Passed;
+                if (passed)
+                    Debug.Log($"[Mutiny Parity] Camera movement Play Mode verification passed: {result.PassedAssertions}/{result.TotalAssertions} assertions.");
+                else
+                    Debug.LogError("[Mutiny Parity] Camera movement Play Mode verification failed:\n" +
+                                   string.Join("\n", result.Failures));
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+            }
+
+            if (Application.isBatchMode)
+                EditorApplication.Exit(passed ? 0 : 1);
+            else
+                EditorApplication.ExitPlaymode();
+        }
+
         private static readonly string[] CharacterTypes =
         {
             "blindPirate", "blindPirateCaptain", "bluePirate", "bluePirateCaptain",
@@ -74,16 +113,30 @@ namespace Mutiny.Verification.Editor
                                string.Join("\n", result.Failures));
         }
 
-        [MenuItem("Mutiny/Parity/Validate Camera Follow")]
-        public static void ValidateCameraFollow()
+        [MenuItem("Mutiny/Parity/Validate GM Commands")]
+        public static void ValidateGMCommands()
         {
-            MutinyLevel1VerificationResult result =
-                MutinyTurnActionUiVerificationTest.RunCameraFollow();
+            if (!Application.isPlaying)
+            {
+                Debug.LogWarning("[Mutiny Parity] Enter Play Mode before validating GM commands; weapon components require Awake.");
+                return;
+            }
+            MutinyLevel1VerificationResult result = MutinyTurnActionUiVerificationTest.RunGM();
             if (result.Passed)
-                Debug.Log($"[Mutiny Parity] Camera follow verification passed: {result.PassedAssertions}/{result.TotalAssertions} assertions.");
+                Debug.Log($"[Mutiny Parity] GM command verification passed: {result.PassedAssertions}/{result.TotalAssertions} assertions.");
             else
-                Debug.LogError("[Mutiny Parity] Camera follow verification failed:\n" +
+                Debug.LogError("[Mutiny Parity] GM command verification failed:\n" +
                                string.Join("\n", result.Failures));
+        }
+
+        [MenuItem("Mutiny/Parity/Validate Camera Movement")]
+        public static void ValidateCameraMovement()
+        {
+            SessionState.SetBool(CameraMovementVerificationKey, true);
+            if (EditorApplication.isPlaying)
+                OnPlayModeStateChanged(PlayModeStateChange.EnteredPlayMode);
+            else
+                EditorApplication.EnterPlaymode();
         }
 
         [MenuItem("Mutiny/Parity/Validate Weapon Idle Animations")]

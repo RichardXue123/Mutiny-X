@@ -6,6 +6,7 @@ using UnityEngine.InputSystem;
 
 namespace Mutiny.Presentation
 {
+    [DefaultExecutionOrder(500)]
     [DisallowMultipleComponent]
     [RequireComponent(typeof(Camera))]
     public sealed class MutinyCameraController : MonoBehaviour
@@ -166,7 +167,7 @@ namespace Mutiny.Presentation
                         $"airdrop tracking started chest={fallingChest.name} timeTaken={fallingChest.TimeTaken} speed=50px/tick", this);
                 }
                 m_EdgeVelocityPixelsPerSecond = Vector2.zero;
-                PanTowards(GetPresentationPosition(fallingChest.transform), 50f, 0f, deltaTime);
+                PanTowards(fallingChest.transform.position, 50f, 0f, deltaTime);
                 return;
             }
             if (m_AirDropCameraWasLocked)
@@ -180,8 +181,8 @@ namespace Mutiny.Presentation
             if (actionTarget != null)
             {
                 m_EdgeVelocityPixelsPerSecond = Vector2.zero;
-                // Seagull.advance replaces Weapon.trackY with y + 100. In
-                // Unity's upward Y this places the camera 50 px below the bird.
+                // Seagull.advance uses trackY = y + 100, unlike the ordinary
+                // weapon target. The visible body and camera share one pose.
                 float verticalOffset = actionTarget.GetComponent<MutinySeagull>() != null
                     ? -OriginalTrackingVerticalOffsetPixels
                     : OriginalTrackingVerticalOffsetPixels;
@@ -192,8 +193,8 @@ namespace Mutiny.Presentation
 
             if (m_TurnPanTarget != null)
             {
-                if (PanTowards(GetPresentationPosition(m_TurnPanTarget), OriginalTrackingPixelsPerTick,
-                        OriginalTrackingVerticalOffsetPixels, deltaTime))
+                if (PanTowards(GetPresentationPosition(m_TurnPanTarget),
+                        OriginalTrackingPixelsPerTick, OriginalTrackingVerticalOffsetPixels, deltaTime))
                     m_TurnPanTarget = null;
                 return;
             }
@@ -229,6 +230,24 @@ namespace Mutiny.Presentation
             // stale explicit target from the preceding action can take priority.
             if (IsAwaitingPlayerBoxPlacement())
                 return null;
+
+            // Flash follows the selected character's equipped Cannon.trackX/Y,
+            // which Cannon.update assigns from its child cannonball. Resolve that
+            // exact owner before scanning unrelated fired weapons in the scene.
+            MutinyCharacter selectedCharacter = TurnManager.CurrentTeam != null
+                ? TurnManager.CurrentTeam.SelectedCharacter
+                : null;
+            if (selectedCharacter != null)
+            {
+                MutinyCannon[] cannons = FindObjectsByType<MutinyCannon>();
+                for (int i = 0; i < cannons.Length; i++)
+                {
+                    MutinyCannon cannon = cannons[i];
+                    if (cannon != null && cannon.Owner == selectedCharacter &&
+                        cannon.IsFired && !cannon.IsFinished && cannon.CameraFocusTarget != null)
+                        return cannon.CameraFocusTarget;
+                }
+            }
 
             // Weapon.track in the Flash original belongs to the currently
             // equipped weapon, not to whichever fired object happens to be found
@@ -299,8 +318,7 @@ namespace Mutiny.Presentation
         {
             EnsureReferences();
             if (m_TurnPanTarget != null &&
-                PanTowards(GetPresentationPosition(m_TurnPanTarget), OriginalTrackingPixelsPerTick,
-                    OriginalTrackingVerticalOffsetPixels, Time.deltaTime))
+                PanTowards(GetPresentationPosition(m_TurnPanTarget), OriginalTrackingPixelsPerTick))
                 m_TurnPanTarget = null;
         }
         internal bool CanAcceptManualScrollingForVerification()
@@ -313,7 +331,7 @@ namespace Mutiny.Presentation
             if (target == null || m_Camera == null || m_LevelRoot == null)
                 return true;
 
-            Vector3 desired = target.transform.position;
+            Vector3 desired = GetPresentationPosition(target.transform);
             desired.y += OriginalTrackingVerticalOffsetPixels / MutinyPhysics.PixelsPerUnit;
             desired.z = transform.position.z;
             desired = ClampPosition(desired);
@@ -535,18 +553,20 @@ namespace Mutiny.Presentation
             return body != null ? body.PresentationPosition : target.position;
         }
 
-        private bool PanTowards(Vector3 targetWorld, float pixelsPerTick, float verticalOffsetPixels, float deltaTime)
+        private bool PanTowards(Vector3 targetWorld, float pixelsPerTick,
+            float verticalOffsetPixels = OriginalTrackingVerticalOffsetPixels, float deltaTime = -1f)
         {
             Vector3 desired = targetWorld;
             desired.y += verticalOffsetPixels / MutinyPhysics.PixelsPerUnit;
             desired.z = transform.position.z;
-            Vector3 reachable = ClampPosition(desired);
+            desired = ClampPosition(desired);
 
             float speedWorldPerSecond = pixelsPerTick /
                                         (MutinyPhysics.PixelsPerUnit * MutinyPhysics.TimeStep);
-            Vector3 next = Vector3.MoveTowards(transform.position, desired, speedWorldPerSecond * deltaTime);
+            Vector3 next = Vector3.MoveTowards(transform.position, desired,
+                speedWorldPerSecond * (deltaTime >= 0f ? deltaTime : Time.deltaTime));
             SetClampedPosition(next);
-            return Vector2.Distance(transform.position, reachable) < 0.01f;
+            return Vector2.Distance(transform.position, desired) < 0.01f;
         }
 
         private void SetClampedPosition(Vector3 position)

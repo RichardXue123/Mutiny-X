@@ -50,12 +50,14 @@ namespace Mutiny.Simulation
         private SpriteRenderer m_RangeCircleRenderer;
 
         public override bool AdvancesMotionWhileReady => false;
+        public override bool CanExpireFromTurnSafetyTimeout => false;
         public float PinX { get; private set; } = PinRestX;
         public float RangeCircleAlpha => m_RangeCircleAlpha;
         public int RotationDegrees { get; private set; }
         public bool IsDraggingBody => m_DraggingBody;
         public bool IsDraggingPin => m_DraggingPin;
         public MutinyCannonball Cannonball => m_Cannonball;
+        public bool IsAiFirePending => m_AiFireTicksRemaining > 0 && !IsFired && !IsFinished;
         public SpriteRenderer PinRenderer => m_PinRenderer;
         public SpriteRenderer RangeCircleRenderer => m_RangeCircleRenderer;
         public Transform CameraFocusTarget => m_Cannonball != null ? m_Cannonball.transform : null;

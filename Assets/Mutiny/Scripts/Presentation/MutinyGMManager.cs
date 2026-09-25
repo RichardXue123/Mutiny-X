@@ -280,6 +280,25 @@ namespace Mutiny.Presentation
                 m_StatusColor = new Color(1.0f, 0.85f, 0.35f);
                 m_StatusMessage = $"[RESET] Level progress reset to default.\nHighestUnlockedLevel is now {MutinySaveSystem.HighestUnlockedLevel}.";
             }
+            else if (lower.StartsWith("aiforceusewaepon", StringComparison.Ordinal))
+            {
+                string[] parts = cmd.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length != 2 ||
+                    !string.Equals(parts[0], "aiforceusewaepon", StringComparison.OrdinalIgnoreCase) ||
+                    !int.TryParse(parts[1], out int weaponId) ||
+                    !MutinyAIController.TrySetForcedWeaponId(weaponId))
+                {
+                    m_StatusColor = new Color(1.0f, 0.45f, 0.45f);
+                    m_StatusMessage = "[ERROR] Usage: aiforceusewaepon {weaponid} (0..15).";
+                }
+                else
+                {
+                    m_StatusColor = new Color(0.35f, 1.0f, 0.45f);
+                    m_StatusMessage = weaponId == 0
+                        ? "[SUCCESS] AI weapon override disabled; actual inventory restored."
+                        : $"[SUCCESS] All AI teams now consider only infinite weapon {weaponId} ({MutinyAIController.ForcedWeaponType}). Jump and pass remain available.";
+                }
+            }
             else if (lower == "unlockweapons" || lower == "unlockallweapons" || lower == "infiniteweapons" ||
                      lower == "allweapons" || lower == "weapons" || lower == "解锁武器" || lower == "无限武器" ||
                      lower.StartsWith("unlockweapon") || lower.StartsWith("infiniteweapon"))
@@ -332,6 +351,7 @@ namespace Mutiny.Presentation
                                   "• UnlockWeapons   - Unlocks all 15 weapons (infinite ammo) for current character\n" +
                                   "• UnlockAllLevels - Unlocks all 1..18 levels\n" +
                                   "• ResetLevels     - Resets progress to level 1\n" +
+                                  "• aiforceusewaepon 1..15 - Forces one infinite AI weapon; 0 disables\n" +
                                   "• Help            - Shows this help message";
             }
             else

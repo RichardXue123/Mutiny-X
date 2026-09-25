@@ -89,13 +89,15 @@ namespace Mutiny.Simulation
             return weapon;
         }
 
-        public static MutinyWeapon SpawnAndFire(string weaponType, MutinyCharacter owner, Vector2 velocity)
+        public static MutinyWeapon SpawnAndFire(string weaponType, MutinyCharacter owner, Vector2 velocity,
+            bool consumeInventory = true)
         {
             var weapon = SpawnWeapon(weaponType, owner);
             if (weapon != null)
             {
                 weapon.Fire(velocity);
-                owner.ConsumeWeapon(weaponType);
+                if (consumeInventory)
+                    owner.ConsumeWeapon(weaponType);
                 Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("click");
             }
             return weapon;

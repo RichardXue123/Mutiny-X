@@ -5,6 +5,7 @@ using UnityEngine;
 
 namespace Mutiny.Simulation
 {
+    [DefaultExecutionOrder(-1000)]
     [DisallowMultipleComponent]
     public sealed class MutinyPhysicsBody : MonoBehaviour
     {
@@ -32,6 +33,9 @@ namespace Mutiny.Simulation
         private Vector2 m_PreviousTickPositionPixels;
         private Vector2 m_CurrentTickPositionPixels;
         private bool m_HasPresentationTick;
+        private bool m_PresentationApplied;
+        private static readonly HashSet<MutinyPhysicsBody> s_Bodies = new HashSet<MutinyPhysicsBody>();
+        private static int s_LastRestoreFrame = -1;
         private string[,] m_CachedTerrain;
         private int m_GridWidth;
         private int m_GridHeight;
@@ -41,24 +45,34 @@ namespace Mutiny.Simulation
         public float SimulationInterpolationAlpha =>
             Mathf.Clamp01(m_TimeAccumulator / MutinyPhysics.TimeStep);
 
-        // The authoritative State and Transform still move at 25 Hz. Camera
-        // presentation can sample the last two completed ticks between renders.
+        // The simulation stays at 25 Hz. Both the visible object and its camera
+        // target sample the same completed tick, one tick behind authority.
         public Vector3 PresentationPosition => SamplePresentationPosition(SimulationInterpolationAlpha);
 
         public Vector3 SamplePresentationPosition(float alpha)
         {
-            if (!SyncTransform || !m_HasPresentationTick)
+            if (!SyncTransform)
                 return transform.position;
 
             Vector2 current = new Vector2(State.X, State.Y);
-            // Placement/teleport code may assign State outside a physics tick.
-            // Never interpolate that new position from an unrelated old path.
-            if ((current - m_CurrentTickPositionPixels).sqrMagnitude > 0.0001f)
+            if (!IsActive || !m_HasPresentationTick ||
+                (current - m_CurrentTickPositionPixels).sqrMagnitude > 0.0001f)
                 return MutinyPhysics.PixelToUnity(current.x, current.y);
 
             Vector2 sampled = Vector2.Lerp(m_PreviousTickPositionPixels,
                 m_CurrentTickPositionPixels, Mathf.Clamp01(alpha));
             return MutinyPhysics.PixelToUnity(sampled.x, sampled.y);
+        }
+
+        private void OnEnable()
+        {
+            s_Bodies.Add(this);
+        }
+
+        private void OnDisable()
+        {
+            RestoreAuthoritativePose();
+            s_Bodies.Remove(this);
         }
 
         private void Awake()
@@ -129,11 +143,25 @@ namespace Mutiny.Simulation
 
         private void Update()
         {
+            // Restore every body before the first 25 Hz step of this render
+            // frame. A step may query another body's Transform before that
+            // body's own Update has run.
+            if (s_LastRestoreFrame != Time.frameCount)
+            {
+                s_LastRestoreFrame = Time.frameCount;
+                foreach (MutinyPhysicsBody body in s_Bodies)
+                {
+                    if (body != null)
+                        body.RestoreAuthoritativePose();
+                }
+            }
+
             AdvanceSimulationFrame(Time.deltaTime);
         }
 
         internal void AdvanceSimulationFrameForVerification(float deltaTime)
         {
+            RestoreAuthoritativePose();
             AdvanceSimulationFrame(deltaTime);
         }
 
@@ -164,12 +192,49 @@ namespace Mutiny.Simulation
             }
         }
 
+        private void LateUpdate()
+        {
+            ApplyPresentationPose(SimulationInterpolationAlpha);
+        }
+
+        private void ApplyPresentationPose(float alpha)
+        {
+            if (!IsActive || !SyncTransform)
+                return;
+
+            Vector3 presentation = SamplePresentationPosition(alpha);
+            Vector3 authoritative = MutinyPhysics.PixelToUnity(State.X, State.Y);
+            // Resting bodies need no temporary Transform swap at all.
+            if ((presentation - authoritative).sqrMagnitude <= 0.00000001f)
+            {
+                RestoreAuthoritativePose();
+                return;
+            }
+
+            transform.position = presentation;
+            m_PresentationApplied = true;
+        }
+
+        private void RestoreAuthoritativePose()
+        {
+            if (!m_PresentationApplied)
+                return;
+
+            transform.position = MutinyPhysics.PixelToUnity(State.X, State.Y);
+            m_PresentationApplied = false;
+        }
+
+        internal void ApplyPresentationPoseForVerification() => ApplyPresentationPose(SimulationInterpolationAlpha);
+        internal void RestoreAuthoritativePoseForVerification() => RestoreAuthoritativePose();
+
         public StepResult AdvanceSimulationTick()
         {
-            Vector2 tickStartPosition = new Vector2(State.X, State.Y);
             SimulationTickCount++;
             // Flash weapon advanceMotion overrides rotate before Solid.advanceMotion.
             OnBeforeSimulationStep?.Invoke();
+            // A pre-step callback can place a weapon at its owner. Capture after
+            // that transition so rendering never blends from the old location.
+            Vector2 tickStartPosition = new Vector2(State.X, State.Y);
 
             List<PhysicsBoxObstacle> boxes = null;
             if (State.HitsBoxes)

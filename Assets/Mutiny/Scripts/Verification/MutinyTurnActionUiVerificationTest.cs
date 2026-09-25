@@ -72,13 +72,13 @@ namespace Mutiny.Verification
             VerifyWeaponIdleAnimations(result);
             VerifyCannonSmokeTrail(result);
             VerifyCannon(result);
+            VerifyAiCannonTurnSettlement(result);
             VerifyBoulder(result);
             VerifyBanana(result);
             VerifyParachuteBomb(result);
             VerifyPiecesOfEight(result);
             VerifyRumBottle(result);
             VerifyMineCameraAndLevelCleanup(result);
-            VerifyCameraFollowSmoothing(result);
             VerifySeagull(result);
             VerifyTidalWave(result);
             VerifyVoodooDoll(result);
@@ -100,10 +100,10 @@ namespace Mutiny.Verification
             return result;
         }
 
-        public static MutinyLevel1VerificationResult RunCameraFollow()
+        public static MutinyLevel1VerificationResult RunGM()
         {
             var result = new MutinyLevel1VerificationResult();
-            VerifyCameraFollowSmoothing(result);
+            VerifyGMManager(result, includeLegacyChecks: false);
             return result;
         }
 
@@ -111,6 +111,13 @@ namespace Mutiny.Verification
         {
             var result = new MutinyLevel1VerificationResult();
             VerifyWeaponIdleAnimations(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunCameraMovement()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyCameraMovement(result);
             return result;
         }
 
@@ -992,6 +999,145 @@ namespace Mutiny.Verification
                 DestroyNow(ownerObject);
                 DestroyNow(managerObject);
                 DestroyNow(teamObject);
+            }
+        }
+
+        private static void VerifyAiCannonTurnSettlement(MutinyLevel1VerificationResult result)
+        {
+            GameObject aiTeamObject = null;
+            GameObject opposingTeamObject = null;
+            GameObject aiOwnerObject = null;
+            GameObject opposingCharacterObject = null;
+            GameObject turnObject = null;
+            GameObject cameraObject = null;
+            MutinyCannon cannon = null;
+            MutinyCannonball ball = null;
+            try
+            {
+                aiTeamObject = new GameObject("AiCannonTurnVerification_Team");
+                MutinyTeam aiTeam = aiTeamObject.AddComponent<MutinyTeam>();
+                aiTeam.TeamNumber = 1;
+                aiTeam.IsAiControlled = true;
+                MutinyAIController ai = aiTeamObject.AddComponent<MutinyAIController>();
+
+                opposingTeamObject = new GameObject("AiCannonTurnVerification_OpposingTeam");
+                MutinyTeam opposingTeam = opposingTeamObject.AddComponent<MutinyTeam>();
+                opposingTeam.TeamNumber = 2;
+                // StartGame selects Team 1 deterministically when Team 2 is AI.
+                opposingTeam.IsAiControlled = true;
+
+                aiOwnerObject = new GameObject("AiCannonTurnVerification_Owner");
+                MutinyCharacter owner = aiOwnerObject.AddComponent<MutinyCharacter>();
+                PhysicsBodyState ownerState = PhysicsBodyState.CreateDefault(100f, 200f);
+                ownerState.Weight = 0f;
+                owner.PhysicsBody.State = ownerState;
+                owner.AddWeapon("cannon");
+                aiTeam.RegisterCharacter(owner);
+
+                opposingCharacterObject = new GameObject("AiCannonTurnVerification_Opponent");
+                MutinyCharacter opponent = opposingCharacterObject.AddComponent<MutinyCharacter>();
+                PhysicsBodyState opponentState = PhysicsBodyState.CreateDefault(500f, 200f);
+                opponentState.Weight = 0f;
+                opponent.PhysicsBody.State = opponentState;
+                opposingTeam.RegisterCharacter(opponent);
+
+                turnObject = new GameObject("AiCannonTurnVerification_TurnManager");
+                MutinyTurnManager manager = turnObject.AddComponent<MutinyTurnManager>();
+                manager.Initialize(aiTeam, opposingTeam);
+                aiTeam.SelectCharacter(owner);
+
+                cameraObject = new GameObject("AiCannonTurnVerification_Camera");
+                cameraObject.AddComponent<Camera>();
+                MutinyCameraController camera = cameraObject.AddComponent<MutinyCameraController>();
+                camera.TurnManager = manager;
+
+                ai.ExecuteMoveForVerification(new AIMove
+                {
+                    MoveType = AIMoveType.ShootWeapon,
+                    Character = owner,
+                    WeaponType = "cannon",
+                    TargetPosition = new Vector2(120f, 190f),
+                    CannonRotationDegrees = 0,
+                    LaunchVelocity = new Vector2(30f, 0f)
+                }, manager);
+                foreach (MutinyCannon candidate in Object.FindObjectsByType<MutinyCannon>())
+                {
+                    if (candidate != null && candidate.Owner == owner)
+                    {
+                        cannon = candidate;
+                        break;
+                    }
+                }
+                if (cannon == null)
+                {
+                    result.Assert(false, "CAN-AI-TURN-01 production AI cannon was created");
+                    return;
+                }
+
+                bool waitsForShot = manager.ActionCommittedThisTurn &&
+                    manager.CurrentTeam == aiTeam && cannon.IsAiFirePending;
+                for (int tick = 0; tick < 24; tick++)
+                {
+                    manager.AdvanceSimulationTick();
+                    cannon.AdvanceOriginalTickForVerification();
+                    waitsForShot &= manager.CurrentTeam == aiTeam && manager.TurnCount == 0 &&
+                        !cannon.IsFired && cannon.IsAiFirePending &&
+                        manager.InactivityTicks == 0;
+                }
+                result.Assert(waitsForShot && !manager.CheckAllBodiesAtRest(),
+                    "CAN-AI-TURN-01 AI action keeps the turn active through all 24 pre-fire ticks");
+
+                manager.AdvanceSimulationTick();
+                cannon.AdvanceOriginalTickForVerification();
+                ball = cannon.Cannonball;
+                result.Assert(cannon.IsFired && ball != null &&
+                              camera.FindActionTargetForVerification() == ball.transform &&
+                              manager.CurrentTeam == aiTeam && manager.TurnCount == 0,
+                    "CAN-AI-TURN-01 the 25th tick fires and the action camera selects the cannonball");
+                if (ball == null)
+                    return;
+
+                bool waitsForBall = true;
+                for (int tick = 0; tick < 151; tick++)
+                {
+                    manager.AdvanceSimulationTick();
+                    cannon.AdvanceOriginalTickForVerification();
+                    waitsForBall &= manager.CurrentTeam == aiTeam && !cannon.IsFinished;
+                }
+                result.Assert(waitsForBall && ball != null && !ball.IsFinished &&
+                              !cannon.CanExpireFromTurnSafetyTimeout &&
+                              !ball.CanExpireFromTurnSafetyTimeout,
+                    "CAN-AI-TURN-01 a faded cannon and unresolved ball still hold the turn past the 150-tick safety threshold");
+
+                ball.PhysicsBody.SetTerrain(new string[20, 20], 20, 20);
+                for (int tick = 0; tick < 60 && !ball.IsFinished; tick++)
+                {
+                    ball.PhysicsBody.AdvanceSimulationTick();
+                    manager.AdvanceSimulationTick();
+                    cannon.AdvanceOriginalTickForVerification();
+                }
+                bool waitForInactivity = ball.IsFinished && cannon.IsFinished &&
+                    manager.CurrentTeam == aiTeam;
+                for (int tick = 0; tick < MutinyTurnManager.InactivitySettlingThreshold; tick++)
+                {
+                    manager.AdvanceSimulationTick();
+                    waitForInactivity &= manager.CurrentTeam == aiTeam;
+                }
+                manager.AdvanceSimulationTick();
+                result.Assert(waitForInactivity && manager.CurrentTeam == opposingTeam &&
+                              manager.TurnCount == 1,
+                    "CAN-AI-TURN-01 turn switches only after cannonball resolution, cannon completion and inactivity");
+            }
+            finally
+            {
+                DestroyNow(ball != null ? ball.gameObject : null);
+                DestroyNow(cannon != null ? cannon.gameObject : null);
+                DestroyNow(cameraObject);
+                DestroyNow(turnObject);
+                DestroyNow(aiOwnerObject);
+                DestroyNow(opposingCharacterObject);
+                DestroyNow(aiTeamObject);
+                DestroyNow(opposingTeamObject);
             }
         }
 
@@ -3908,93 +4054,6 @@ namespace Mutiny.Verification
             }
         }
 
-        private static void VerifyCameraFollowSmoothing(MutinyLevel1VerificationResult result)
-        {
-            GameObject levelObject = null;
-            GameObject managerObject = null;
-            GameObject cameraObject = null;
-            GameObject seagullObject = null;
-            GameObject panTargetObject = null;
-            try
-            {
-                levelObject = new GameObject("CameraFollowVerification_Level");
-                MutinyLevelRoot level = levelObject.AddComponent<MutinyLevelRoot>();
-                level.Width = 100;
-                level.Height = 100;
-                level.WaterLevelY = -80f;
-
-                managerObject = new GameObject("CameraFollowVerification_TurnManager");
-                MutinyTurnManager manager = managerObject.AddComponent<MutinyTurnManager>();
-                manager.CurrentPhase = TurnPhase.ActionExecuting;
-
-                cameraObject = new GameObject("CameraFollowVerification_Camera");
-                cameraObject.AddComponent<Camera>();
-                MutinyCameraController camera = cameraObject.AddComponent<MutinyCameraController>();
-                camera.TurnManager = manager;
-                camera.SetLevelRootForVerification(level);
-
-                seagullObject = new GameObject("CameraFollowVerification_Seagull");
-                MutinySeagull seagull = seagullObject.AddComponent<MutinySeagull>();
-                seagull.Initialize(null);
-                seagull.PlaceAtFlightHeight(1000f);
-                seagull.PhysicsBody.SetTerrain(new string[100, 100], 100, 100);
-                for (int tick = 0; tick < 60; tick++)
-                    seagull.PhysicsBody.AdvanceSimulationTick();
-
-                camera.TrackWeapon(seagull);
-                // The next production physics frame moves x=300 -> 310. Its
-                // presentation starts at the preceding completed tick, x=300.
-                seagull.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
-                float trackX = 300f / MutinyPhysics.PixelsPerUnit;
-                float birdY = -1000f / MutinyPhysics.PixelsPerUnit;
-                cameraObject.transform.position = new Vector3(trackX, birdY, -10f);
-                camera.AdvanceCameraForVerification(MutinyPhysics.TimeStep);
-                bool seagullOffset = camera.FindActionTargetForVerification() == seagull.transform &&
-                    Mathf.Abs(cameraObject.transform.position.x - trackX) < 0.001f &&
-                    cameraObject.transform.position.y < birdY - 28f / MutinyPhysics.PixelsPerUnit;
-                result.Assert(seagullOffset,
-                    "CAM-TRACK-01 production camera tracks Seagull with original trackY=y+100 rather than the generic vertical offset");
-
-                cameraObject.transform.position = new Vector3(trackX,
-                    birdY - 50f / MutinyPhysics.PixelsPerUnit, -10f);
-                camera.AdvanceCameraForVerification(0.02f);
-                float beforeHalfTick = cameraObject.transform.position.x;
-                seagull.PhysicsBody.AdvanceSimulationFrameForVerification(0.02f);
-                camera.AdvanceCameraForVerification(0.02f);
-                float halfTick = cameraObject.transform.position.x;
-                float authoritativeAtHalfTick = seagull.PhysicsBody.State.X;
-                seagull.PhysicsBody.AdvanceSimulationFrameForVerification(0.02f);
-                camera.AdvanceCameraForVerification(0.02f);
-                float nextTick = cameraObject.transform.position.x;
-                result.Assert(Mathf.Abs(beforeHalfTick - trackX) < 0.001f &&
-                              Mathf.Abs(halfTick - (305f / MutinyPhysics.PixelsPerUnit)) < 0.001f &&
-                              Mathf.Abs(nextTick - (310f / MutinyPhysics.PixelsPerUnit)) < 0.001f &&
-                              Mathf.Abs(authoritativeAtHalfTick - 310f) < 0.001f &&
-                              Mathf.Abs(seagull.PhysicsBody.State.X - 320f) < 0.001f,
-                    "CAM-SMOOTH-01 production 25 Hz physics and render-frame camera follow advance 300 -> 305 -> 310 px without changing authoritative 310 -> 320 px ticks");
-
-                camera.TrackWeapon(null);
-                manager.CurrentPhase = TurnPhase.TurnActive;
-                panTargetObject = new GameObject("CameraFollowVerification_WaterTarget");
-                panTargetObject.transform.position = new Vector3(13.125f, -80f, 0f);
-                camera.PanToTarget(panTargetObject.transform);
-                cameraObject.transform.position = new Vector3(10f, -76.25f, -10f);
-                camera.AdvanceCameraForVerification(MutinyPhysics.TimeStep);
-                float horizontalStep = (cameraObject.transform.position.x - 10f) * MutinyPhysics.PixelsPerUnit;
-                result.Assert(horizontalStep > 23f && horizontalStep < 26f &&
-                              Mathf.Abs(cameraObject.transform.position.y + 76.25f) < 0.001f,
-                    "CAM-TRACK-01 production pan moves toward the unclamped water target before clamping the camera, within the original 30 px/tick cap");
-            }
-            finally
-            {
-                DestroyNow(panTargetObject);
-                DestroyNow(seagullObject);
-                DestroyNow(cameraObject);
-                DestroyNow(managerObject);
-                DestroyNow(levelObject);
-            }
-        }
-
         private static bool MatchesSeagullFrame(MutinySeagull seagull, int frame)
         {
             Sprite expected = Resources.Load<Sprite>($"Art/Weapons/Seagull/{frame}");
@@ -4469,36 +4528,155 @@ namespace Mutiny.Verification
             }
         }
 
-        private static void VerifyGMManager(MutinyLevel1VerificationResult result)
+        private static void VerifyGMManager(MutinyLevel1VerificationResult result, bool includeLegacyChecks = true)
         {
             GameObject gmObject = new GameObject("GM_Verification_Host");
             GameObject characterObject = new GameObject("GM_Verification_Character");
+            GameObject aiTeamObject = null;
+            GameObject aiCharacterObject = null;
+            GameObject enemyTeamObject = null;
+            GameObject enemyCharacterObject = null;
             try
             {
                 MutinyGMManager gm = gmObject.AddComponent<MutinyGMManager>();
                 MutinyCharacter character = characterObject.AddComponent<MutinyCharacter>();
                 character.TeamIndex = 1;
                 character.IsSelected = true;
+                character.PhysicsBody.State = PhysicsBodyState.CreateDefault(10000f, 100f);
 
-                gm.ExecuteCommand("UnlockWeapons");
+                if (includeLegacyChecks)
+                {
+                    gm.ExecuteCommand("UnlockWeapons");
 
-                result.Assert(character.HasWeapon("cherryBomb") && character.IsInfinite("cherryBomb"),
-                    "GM-01 UnlockWeapons unlocks cherryBomb with infinite ammo");
-                result.Assert(character.HasWeapon("cannon") && character.HasWeapon("cannonball") && character.IsInfinite("cannon"),
-                    "GM-02 UnlockWeapons unlocks cannon and cannonball aliases");
-                result.Assert(character.GetAmmunition("banana") == -1 && character.GetAmmunition("tidalWave") == -1,
-                    "GM-03 UnlockWeapons sets ammunition to -1 (infinite) for all weapons");
-                result.Assert(character.CanShoot,
-                    "GM-04 UnlockWeapons enables CanShoot on target character");
-                result.Assert(Mathf.Approximately(MutinyGMManager.ButtonSize, 60f) &&
-                              RectApproximately(MutinyGMManager.ResolveButtonRect(400f), new Rect(8f, 170f, 60f, 60f)),
-                    "GM-05 GM button size is 60px (reduced to 1/3 from 180px) and centered on screen height");
-                result.Assert(RectApproximately(MutinyGMManager.ResolveButtonRect(1100f, 800f), new Rect(8f, 370f, 60f, 60f)) &&
-                              RectApproximately(MutinyGMManager.ResolveButtonRect(1920f, 1080f), new Rect(225.5f, 510f, 60f, 60f)),
-                    "GM-06 GM button anchors to the left edge of the visible letterboxed 550x400 game canvas");
+                    result.Assert(character.HasWeapon("cherryBomb") && character.IsInfinite("cherryBomb"),
+                        "GM-01 UnlockWeapons unlocks cherryBomb with infinite ammo");
+                    result.Assert(character.HasWeapon("cannon") && character.HasWeapon("cannonball") && character.IsInfinite("cannon"),
+                        "GM-02 UnlockWeapons unlocks cannon and cannonball aliases");
+                    result.Assert(character.GetAmmunition("banana") == -1 && character.GetAmmunition("tidalWave") == -1,
+                        "GM-03 UnlockWeapons sets ammunition to -1 (infinite) for all weapons");
+                    result.Assert(character.CanShoot,
+                        "GM-04 UnlockWeapons enables CanShoot on target character");
+                    result.Assert(Mathf.Approximately(MutinyGMManager.ButtonSize, 60f) &&
+                                  RectApproximately(MutinyGMManager.ResolveButtonRect(400f), new Rect(8f, 170f, 60f, 60f)),
+                        "GM-05 GM button size is 60px (reduced to 1/3 from 180px) and centered on screen height");
+                    result.Assert(RectApproximately(MutinyGMManager.ResolveButtonRect(1100f, 800f), new Rect(8f, 370f, 60f, 60f)) &&
+                                  RectApproximately(MutinyGMManager.ResolveButtonRect(1920f, 1080f), new Rect(225.5f, 510f, 60f, 60f)),
+                        "GM-06 GM button anchors to the left edge of the visible letterboxed 550x400 game canvas");
+                }
+
+                aiTeamObject = new GameObject("GM_ForceAiTeam");
+                MutinyTeam aiTeam = aiTeamObject.AddComponent<MutinyTeam>();
+                aiTeam.TeamNumber = 2;
+                aiTeam.IsAiControlled = true;
+                MutinyAIController ai = aiTeamObject.AddComponent<MutinyAIController>();
+                ai.UseFixedDecisionSeed = true;
+                ai.FixedDecisionSeed = 41901;
+                ai.SaveDecisionTrace = false;
+
+                aiCharacterObject = new GameObject("GM_ForceAiCharacter");
+                MutinyCharacter aiCharacter = aiCharacterObject.AddComponent<MutinyCharacter>();
+                aiCharacter.TeamIndex = 2;
+                aiCharacter.Luck = 3f;
+                aiCharacter.PhysicsBody.State = PhysicsBodyState.CreateDefault(100f, 100f);
+                aiCharacter.PhysicsBody.WaterPixelY = 10000f;
+                aiCharacter.AddWeapon("banana", 2);
+                aiTeam.RegisterCharacter(aiCharacter);
+
+                enemyTeamObject = new GameObject("GM_ForceEnemyTeam");
+                MutinyTeam enemyTeam = enemyTeamObject.AddComponent<MutinyTeam>();
+                enemyTeam.TeamNumber = 3;
+                enemyCharacterObject = new GameObject("GM_ForceEnemyCharacter");
+                MutinyCharacter enemy = enemyCharacterObject.AddComponent<MutinyCharacter>();
+                enemy.TeamIndex = 3;
+                enemy.PhysicsBody.State = PhysicsBodyState.CreateDefault(10000f, 100f);
+                enemyTeam.RegisterCharacter(enemy);
+                var enemies = new List<MutinyCharacter> { enemy };
+                var allies = new List<MutinyCharacter> { aiCharacter };
+
+                gm.ExecuteCommand("aiforceusewaepon 1");
+                AIMove forcedCherry = ai.EvaluateCharacterWeaponsForVerification(
+                    aiCharacter, enemies, allies, null, 0, 0, 10000f, out int cherryCandidates);
+                result.Assert(MutinyAIController.ForcedWeaponId == 1 && !aiCharacter.HasWeapon("cherryBomb") &&
+                              forcedCherry.WeaponType == "cherryBomb" && forcedCherry.UsesForcedWeaponSupply &&
+                              cherryCandidates == 3 && aiCharacter.GetAmmunition("banana") == 2,
+                    "GM-07 forced Cherry Bomb enters the production AI dispatcher without changing real inventory");
+
+                aiCharacter.CanThrow = true;
+                aiCharacter.CanShoot = true;
+                ai.EvaluateBestMove();
+                MutinyAIDecisionTrace firstTrace = ai.LastDecisionTrace;
+                bool hasJump = false;
+                bool onlyCherryWeapons = true;
+                foreach (MutinyAICandidateRecord candidate in firstTrace.Candidates)
+                {
+                    hasJump |= candidate.MoveType == nameof(AIMoveType.SelfThrow);
+                    if (candidate.MoveType == nameof(AIMoveType.ShootWeapon) && candidate.Weapon != "cherryBomb")
+                        onlyCherryWeapons = false;
+                }
+                result.Assert(hasJump && onlyCherryWeapons && firstTrace.Candidates.Count >= 53,
+                    "GM-07 forced weapon preserves the production first-action jump candidates and excludes other weapons");
+
+                aiCharacter.CanThrow = false;
+                aiCharacter.CanShoot = true;
+                aiCharacter.Luck = 0f;
+                aiTeam.SelectCharacter(aiCharacter);
+                AIMove continuation = ai.EvaluateBestMove();
+                result.Assert(continuation.MoveType == AIMoveType.Pass &&
+                              ai.LastDecisionTrace.Candidates.Count == 0,
+                    "GM-07 AI can still pass after a jump when no forced Cherry Bomb shot qualifies");
+
+                aiCharacter.Luck = 3f;
+                aiCharacter.AddWeapon("cherryBomb", 2);
+                aiCharacter.CanThrow = true;
+                aiCharacter.CanShoot = true;
+                ai.ExecuteMoveForVerification(forcedCherry);
+                result.Assert(aiCharacter.GetAmmunition("cherryBomb") == 2 &&
+                              aiCharacter.GetAmmunition("banana") == 2,
+                    "GM-07 production forced shot does not consume the character's real ammunition");
+
+                gm.ExecuteCommand("aiforceusewaepon 0");
+                aiCharacter.WeaponInventory.Remove("cherryBomb");
+                AIMove restored = ai.EvaluateCharacterWeaponsForVerification(
+                    aiCharacter, enemies, allies, null, 0, 0, 10000f, out int restoredCandidates);
+                result.Assert(MutinyAIController.ForcedWeaponId == 0 && restored.WeaponType == "banana" &&
+                              !restored.UsesForcedWeaponSupply && restoredCandidates == 3 &&
+                              aiCharacter.GetAmmunition("banana") == 2,
+                    "GM-07 zero restores normal production inventory-based candidate selection");
+
+                gm.ExecuteCommand("aiforceusewaepon 6");
+                gm.ExecuteCommand("aiforceusewaepon 16");
+                gm.ExecuteCommand("aiforceusewaepon nope");
+                gm.ExecuteCommand("aiforceusewaepon");
+                result.Assert(MutinyAIController.ForcedWeaponId == 6 &&
+                              MutinyAIController.ForcedWeaponType == "banana",
+                    "GM-07 invalid IDs do not change the active AI override");
+
+                string[] expectedWeapons =
+                {
+                    "cherryBomb", "boulder", "dynamite", "piecesOfEight", "rumBottle",
+                    "banana", "parachuteBomb", "woodenCrate", "gunpowderBarrel", "seagull",
+                    "mine", "cannon", "anchor", "voodooDoll", "tidalWave"
+                };
+                bool allIdsMapToMenuWeapons = true;
+                for (int weaponId = 1; weaponId <= expectedWeapons.Length; weaponId++)
+                {
+                    gm.ExecuteCommand($"aiforceusewaepon {weaponId}");
+                    allIdsMapToMenuWeapons &= MutinyAIController.ForcedWeaponId == weaponId &&
+                                              MutinyAIController.ForcedWeaponType == expectedWeapons[weaponId - 1];
+                }
+                result.Assert(allIdsMapToMenuWeapons,
+                    "GM-07 IDs 1..15 map to the 15 selectable weapons in menu order");
             }
             finally
             {
+                MutinyAIController.TrySetForcedWeaponId(0);
+                foreach (MutinyCherryBomb bomb in Object.FindObjectsByType<MutinyCherryBomb>())
+                    if (bomb != null && bomb.Owner != null && bomb.Owner.name == "GM_ForceAiCharacter")
+                        DestroyNow(bomb.gameObject);
+                DestroyNow(enemyCharacterObject);
+                DestroyNow(enemyTeamObject);
+                DestroyNow(aiCharacterObject);
+                DestroyNow(aiTeamObject);
                 DestroyNow(characterObject);
                 DestroyNow(gmObject);
             }
@@ -4669,6 +4847,203 @@ namespace Mutiny.Verification
             finally
             {
                 Object.DestroyImmediate(transitionObject);
+            }
+        }
+
+        private static void VerifyCameraMovement(MutinyLevel1VerificationResult result)
+        {
+            GameObject levelObject = null;
+            GameObject turnObject = null;
+            GameObject cameraObject = null;
+            GameObject teamObject = null;
+            GameObject characterObject = null;
+            GameObject seagullObject = null;
+            GameObject waveObject = null;
+            GameObject ballObject = null;
+            GameObject chestObject = null;
+            var existingSmoke = new HashSet<MutinyRumBottleSmokeTrail>(
+                Object.FindObjectsByType<MutinyRumBottleSmokeTrail>());
+            try
+            {
+                levelObject = new GameObject("CameraMovement_Level");
+                MutinyLevelRoot level = levelObject.AddComponent<MutinyLevelRoot>();
+                level.Width = 100;
+                level.Height = 100;
+                level.WaterLevelY = -80f;
+
+                turnObject = new GameObject("CameraMovement_Turn");
+                MutinyTurnManager turn = turnObject.AddComponent<MutinyTurnManager>();
+                turn.CurrentPhase = TurnPhase.ActionExecuting;
+
+                cameraObject = new GameObject("CameraMovement_Camera");
+                cameraObject.AddComponent<Camera>();
+                MutinyCameraController camera = cameraObject.AddComponent<MutinyCameraController>();
+                camera.TurnManager = turn;
+                camera.SetLevelRootForVerification(level);
+
+                teamObject = new GameObject("CameraMovement_Team");
+                MutinyTeam team = teamObject.AddComponent<MutinyTeam>();
+                characterObject = new GameObject("CameraMovement_JumpingCharacter");
+                characterObject.transform.position = MutinyPhysics.PixelToUnity(1000f, 1000f);
+                MutinyCharacter character = characterObject.AddComponent<MutinyCharacter>();
+                team.RegisterCharacter(character);
+                team.SelectedCharacter = character;
+                turn.CurrentTeam = team;
+                MutinyPhysicsBody characterBody = character.PhysicsBody;
+                characterBody.ApplyWaterPhysics = false;
+                characterBody.State.HitsTiles = false;
+                characterBody.State.HitsBoxes = false;
+                characterBody.SetVelocity(0f, -10f);
+                float jumpStartY = characterBody.State.Y;
+                characterBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                float jumpCurrentY = characterBody.State.Y;
+                characterBody.ApplyPresentationPoseForVerification();
+                result.Assert(Mathf.Abs(MutinyPhysics.UnityToPixel(characterObject.transform.position).y - jumpStartY) < 0.001f &&
+                              Mathf.Abs(jumpCurrentY - jumpStartY) > 0.001f,
+                    "CAM-PRES-01 production character tick preserves the 25 Hz authority and starts visible interpolation at the prior pose");
+
+                characterBody.AdvanceSimulationFrameForVerification(0.02f);
+                characterBody.ApplyPresentationPoseForVerification();
+                Vector3 jumpRenderPose = characterObject.transform.position;
+                cameraObject.transform.position = jumpRenderPose +
+                    new Vector3(0f, 50f / MutinyPhysics.PixelsPerUnit, -10f);
+                camera.AdvanceCameraForVerification(0.02f);
+                bool jumpTargetMatches = camera.FindActionTargetForVerification() == character.transform;
+                float jumpCameraError = Vector2.Distance(cameraObject.transform.position,
+                    jumpRenderPose + new Vector3(0f, 50f / MutinyPhysics.PixelsPerUnit));
+                float jumpInterpolationError = Mathf.Abs(MutinyPhysics.UnityToPixel(jumpRenderPose).y -
+                    (jumpStartY + jumpCurrentY) * 0.5f);
+                result.Assert(jumpTargetMatches && jumpCameraError < 0.001f &&
+                              jumpInterpolationError < 0.001f &&
+                              Mathf.Abs(characterBody.State.Y - jumpCurrentY) < 0.001f,
+                    "CAM-PRES-01 jumping character and camera consume the same half-tick render pose without changing physics");
+                if (!jumpTargetMatches || jumpCameraError >= 0.001f || jumpInterpolationError >= 0.001f)
+                    Debug.LogWarning($"[CameraMovement] jump target={jumpTargetMatches} cameraError={jumpCameraError:F5} interpolationError={jumpInterpolationError:F5} startY={jumpStartY:F3} currentY={jumpCurrentY:F3} alpha={characterBody.SimulationInterpolationAlpha:F3}");
+
+                characterBody.AdvanceSimulationFrameForVerification(1f / 60f);
+                characterBody.ApplyPresentationPoseForVerification();
+                camera.AdvanceCameraForVerification(1f / 60f);
+                float laterJumpY = MutinyPhysics.UnityToPixel(characterObject.transform.position).y;
+                result.Assert(laterJumpY > jumpCurrentY &&
+                              laterJumpY < (jumpStartY + jumpCurrentY) * 0.5f &&
+                              Mathf.Abs(characterBody.State.Y - jumpCurrentY) < 0.001f &&
+                              Mathf.Abs(cameraObject.transform.position.y -
+                                  (characterObject.transform.position.y + 50f / MutinyPhysics.PixelsPerUnit)) < 0.001f,
+                    "CAM-PRES-02 production jumping character and camera both advance on a 60 FPS render frame without a physics tick");
+
+                seagullObject = new GameObject("CameraMovement_Seagull");
+                MutinySeagull seagull = seagullObject.AddComponent<MutinySeagull>();
+                seagull.Initialize(null);
+                seagull.PhysicsBody.SetTerrain(new string[100, 100], 100, 100);
+                seagull.CallAirstrike(1000f, 1000f, 0f);
+                seagull.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                seagull.PhysicsBody.AdvanceSimulationFrameForVerification(0.02f);
+                seagull.PhysicsBody.ApplyPresentationPoseForVerification();
+                camera.TrackWeapon(seagull);
+                Vector3 birdPose = seagull.transform.position;
+                cameraObject.transform.position = birdPose +
+                    new Vector3(0f, -50f / MutinyPhysics.PixelsPerUnit, -10f);
+                camera.AdvanceCameraForVerification(0.02f);
+                result.Assert(camera.FindActionTargetForVerification() == seagull.transform &&
+                              Mathf.Abs(MutinyPhysics.UnityToPixel(birdPose).x - 1005f) < 0.001f &&
+                              Mathf.Abs(seagull.PhysicsBody.State.X - 1010f) < 0.001f &&
+                              Vector2.Distance(cameraObject.transform.position,
+                                  birdPose + new Vector3(0f, -50f / MutinyPhysics.PixelsPerUnit)) < 0.001f,
+                    "CAM-PRES-02/CAM-TRACK-SEA-01 Seagull visible pose and camera track at half-tick with original trackY offset");
+
+                seagull.PhysicsBody.AdvanceSimulationFrameForVerification(1f / 120f);
+                seagull.PhysicsBody.ApplyPresentationPoseForVerification();
+                camera.AdvanceCameraForVerification(1f / 120f);
+                float laterBirdX = MutinyPhysics.UnityToPixel(seagull.transform.position).x;
+                result.Assert(laterBirdX > 1005f && laterBirdX < 1010f &&
+                              Mathf.Abs(seagull.PhysicsBody.State.X - 1010f) < 0.001f &&
+                              Mathf.Abs(MutinyPhysics.UnityToPixel(cameraObject.transform.position).x - laterBirdX) < 0.001f,
+                    "CAM-PRES-02 production Seagull and camera both advance on a 120 FPS render frame without a physics tick");
+                seagull.PhysicsBody.RestoreAuthoritativePoseForVerification();
+                result.Assert(Mathf.Abs(MutinyPhysics.UnityToPixel(seagull.transform.position).x -
+                                        seagull.PhysicsBody.State.X) < 0.001f,
+                    "CAM-PRES-01 visible interpolation is restored to authoritative Transform before the next simulation frame");
+
+                waveObject = new GameObject("CameraMovement_TidalWave");
+                MutinyTidalWave wave = waveObject.AddComponent<MutinyTidalWave>();
+                wave.Initialize(null);
+                wave.PhysicsBody.SetTerrain(new string[100, 100], 100, 100);
+                wave.StartWave(0f, 2560f);
+                for (int tick = 0; tick < 80; tick++)
+                    wave.PhysicsBody.AdvanceSimulationTick();
+                float wavePreviousX = wave.PhysicsBody.State.X;
+                wave.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                wave.PhysicsBody.AdvanceSimulationFrameForVerification(0.02f);
+                wave.PhysicsBody.ApplyPresentationPoseForVerification();
+                camera.TrackWeapon(wave);
+                cameraObject.transform.position = new Vector3(
+                    wavePreviousX / MutinyPhysics.PixelsPerUnit, -76.25f, -10f);
+                camera.AdvanceCameraForVerification(0.02f);
+                float waveRenderX = MutinyPhysics.UnityToPixel(wave.transform.position).x;
+                result.Assert(camera.FindActionTargetForVerification() == wave.transform &&
+                              Mathf.Abs(waveRenderX - (wavePreviousX + 10f)) < 0.001f &&
+                              Mathf.Abs(wave.PhysicsBody.State.X - (wavePreviousX + 20f)) < 0.001f &&
+                              Mathf.Abs(MutinyPhysics.UnityToPixel(cameraObject.transform.position).x - waveRenderX) < 0.001f,
+                    "CAM-PRES-02 Tidal Wave and camera each advance 10 visible pixels in a half-tick while authority advances 20");
+
+                ballObject = new GameObject("CameraMovement_Cannonball");
+                MutinyCannonball ball = ballObject.AddComponent<MutinyCannonball>();
+                ball.Initialize(null);
+                ball.PhysicsBody.SetTerrain(new string[100, 100], 100, 100);
+                ball.PhysicsBody.State.HitsTiles = false;
+                ball.SetLaunchPosition(new Vector2(1200f, 1000f));
+                ball.Fire(new Vector2(30f, 0f));
+                ball.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                ball.PhysicsBody.AdvanceSimulationFrameForVerification(0.02f);
+                ball.PhysicsBody.ApplyPresentationPoseForVerification();
+                camera.TrackWeapon(ball);
+                cameraObject.transform.position = new Vector3(1200f / MutinyPhysics.PixelsPerUnit,
+                    -1000f / MutinyPhysics.PixelsPerUnit + 50f / MutinyPhysics.PixelsPerUnit, -10f);
+                camera.AdvanceCameraForVerification(0.02f);
+                result.Assert(camera.FindActionTargetForVerification() == ball.transform &&
+                              Mathf.Abs(MutinyPhysics.UnityToPixel(ball.transform.position).x - 1215f) < 0.001f &&
+                              Mathf.Abs(ball.PhysicsBody.State.X - 1230f) < 0.001f &&
+                              Mathf.Abs(MutinyPhysics.UnityToPixel(cameraObject.transform.position).x - 1215f) < 0.001f,
+                    "CAM-PRES-02 Cannonball and camera share the half-tick pose within the original 30 px/tick cap");
+
+                ball.PhysicsBody.State.X = 2000f;
+                result.Assert(Mathf.Abs(MutinyPhysics.UnityToPixel(
+                                  ball.PhysicsBody.SamplePresentationPosition(0.5f)).x - 2000f) < 0.001f,
+                    "CAM-PRES-01 an external position change does not interpolate from the old cannonball path");
+
+                cameraObject.transform.position = new Vector3(0f,
+                    -1000f / MutinyPhysics.PixelsPerUnit + 50f / MutinyPhysics.PixelsPerUnit, -10f);
+                camera.AdvanceCameraForVerification(MutinyPhysics.TimeStep);
+                result.Assert(Mathf.Abs(MutinyPhysics.UnityToPixel(cameraObject.transform.position).x - 30f) < 0.001f,
+                    "CAM-PRES-02 distant weapon follow remains capped at the original 30 pixels per 25 Hz tick");
+
+                chestObject = new GameObject("CameraMovement_AirDrop");
+                MutinyTreasureChest chest = chestObject.AddComponent<MutinyTreasureChest>();
+                chest.Initialize(null, 1400f, 500f, new List<string> { "cherryBomb" });
+                chest.AdvanceOriginalTick();
+                cameraObject.transform.position = new Vector3(1000f / MutinyPhysics.PixelsPerUnit, 0f, -10f);
+                camera.AdvanceCameraForVerification(MutinyPhysics.TimeStep);
+                result.Assert(camera.IsTrackingAirDrop && chest.IsFalling &&
+                              Mathf.Abs(chest.PixelY + 297f) < 0.001f &&
+                              Mathf.Abs(MutinyPhysics.UnityToPixel(cameraObject.transform.position).x - 1050f) < 0.001f,
+                    "CAM-PRES-02 falling chest keeps priority over the weapon and its existing 50 px/tick camera pan");
+            }
+            finally
+            {
+                DestroyNow(chestObject);
+                DestroyNow(ballObject);
+                DestroyNow(waveObject);
+                DestroyNow(seagullObject);
+                DestroyNow(characterObject);
+                DestroyNow(teamObject);
+                DestroyNow(cameraObject);
+                DestroyNow(turnObject);
+                DestroyNow(levelObject);
+                foreach (MutinyRumBottleSmokeTrail smoke in Object.FindObjectsByType<MutinyRumBottleSmokeTrail>())
+                {
+                    if (smoke != null && !existingSmoke.Contains(smoke))
+                        DestroyNow(smoke.gameObject);
+                }
             }
         }
 

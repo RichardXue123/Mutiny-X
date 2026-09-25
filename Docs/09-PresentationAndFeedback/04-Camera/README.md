@@ -23,17 +23,19 @@
 | MINE-CAM-01 | 投掷中的地雷可被跟随；落地安置后即使继续监测靠近目标，也不再抢占镜头 | `Mine.as::advanceMotion` 设置 `finished=true`；`TileSystem.as::advanceScrolling` 只跟随未完成的武器 | `MutinyCameraController.FindActionTarget` | 校验飞行中跟随、安置后释放普通与显式跟随 | 已实现；待 Unity 运行验证 |
 | AI-CAM-01 | AI 完成候选选择后，镜头显式平移到胜出角色；只有平移目标清空才执行行动 | `Team.as::advance` | `MutinyAIController.ExecuteAITurnRoutine`、`PanToCharacter` | 已实现；局部回归已写，待 Unity 运行 |
 | AI-CAM-02 | 当前 AI 尚在求值时，镜头在 speech/popup 后立即返回，不进入下降宝箱、行动目标或回合角色分支 | `TileSystem.as::advanceScrolling:438-445` | `IsEvaluatingCandidates`、`ShouldPauseForAiThinking` | 已实现；状态真值表回归已写，待 Unity 运行 |
+| CAN-AI-TURN-01 | AI 大炮正式发射后，以当前选中角色的大炮子炮弹为跟随目标，而不是场景中先枚举到的其他武器；25 tick 待开火时不因提前切换回合生成新空投。原版已在下降且 `timeTaken<100` 的空投仍优先于炮弹 | `Cannon.as::update/advance/aiPerform`；`Character.as::advance`；`TileSystem.as::advanceScrolling:438-459`；`Controller.as::nextTurn` | `MutinyTurnManager.CheckAllBodiesAtRest`、`MutinyCameraController.FindActionTarget` | AI 提交大炮后 24/25 tick 与炮弹跟踪目标、结算后切回合 | 已实现、C# 编译通过；待 Unity 运行验证 |
 
-## 武器跟随速度与画面平滑度
+## 高刷新率跟随规格（feature/cameramovement）
 
-原版 SWF 为 25 FPS。`TileSystem.as::advanceScrolling:448-467` 对投掷角色、活动武器及回合平移目标调用 `panTowards(...,30)`；`panTowards:600-612` 每帧沿目标方向最多移动 30 px，距离不超过 30 px 时到位，再由 `panCamera:497-518` 钳制边界。跟随海鸥时，`Seagull.as:118` 把 `trackY` 改为 `y+100`；大炮由 `Cannon.as:45-53` 把目标设为炮弹；海啸由 `TidalWave.as:74-85` 开启跟随。原版没有按武器种类另设缓动系数。
+原版 SWF 为 25 FPS；`Controller.as::enterFrame` 每帧先推进队伍角色和武器，再调用 `TileSystem.as::advanceScrolling`。原版自动跟随角色、武器和平移目标使用 `panTowards(..., 30)`，空投使用 50 px/tick；`Seagull.as::advance` 将独立的跟随点设为 `trackY = y + 100`。以下显示插值属于用户授权的高刷新率扩展，并非原版行为。
 
-| ID | 可观察行为 | 原版来源 / 扩展依据 | Unity 入口 | 验收用例 | 当前结果 |
+| ID | 可观察行为及状态转换 | 原版来源 / 扩展依据 | Unity 入口 | 验收用例 | 当前结果 |
 | --- | --- | --- | --- | --- | --- |
-| CAM-TRACK-01 | 自动跟随以 30 px/原版 tick 限速；先朝未钳制的目标移动，再钳制镜头；炮弹为大炮跟随目标，海鸥在画面中使用原版 `trackY=y+100` 偏移 | `TileSystem.as:455-465,497-518,600-612`、`Cannon.as:45-53`、`Seagull.as:118` | `MutinyCameraController.FindActionTarget/PanTowards` | 经生产物理 tick 与镜头更新，断言炮弹目标、海鸥纵向目标和水边界下的移动方向 | 静态确认；待实现与运行验证 |
-| CAM-SMOOTH-01 | 在高于 25 FPS 的渲染帧中，自动镜头读取相邻物理 tick 的插值表现位置，避免目标每 0.04 秒跳跃；权威坐标、伤害和原版 30 px/tick 上限不变 | 用户授权的高刷新率表现扩展；原版 SWF `frameRate=25.0`，Unity 物理步长 `0.04` 秒 | `MutinyPhysicsBody` 表现位置采样、`MutinyCameraController.LateUpdate` | 驱动真实 `AdvanceSimulationTick()` 后在两个 tick 间采样 0/0.5/1，镜头连续前进且不超过按经过时间换算的 30 px/tick；新目标切换时不从旧目标位置插值 | 已登记规格；待实现与运行验证 |
+| CAM-PRES-01 | 物理仍按 0.04 秒推进；每次 tick 保存起止权威位置，渲染帧对目标画面及镜头目标读取同一已完成 tick 的插值位置。位置被外部放置/瞬移时不得跨旧轨迹插值 | SWF `frameRate=25.0`；`Controller.as::enterFrame`；用户授权的显示扩展 | `MutinyPhysicsBody`、`MutinyCameraController.LateUpdate` | 经生产物理 tick 与显示入口核对 tick 边界、半 tick、外部改位，断言显示位置与镜头同源且 `State` 不被插值改写 | 已实现；Unity 6.6 隔离工程 Play Mode 数值回归通过；主工程真实画面待验收 |
+| CAM-PRES-02 | 海鸥、海啸、跳跃角色和炮弹以渲染帧频率更新画面/镜头位置；远距离平移仍受原版 30 px/tick 速度上限约束，空投继续使用现有 50 px/tick 分支 | `TileSystem.as::advanceScrolling/panTowards`；`Seagull.as`；`TidalWave.as`；用户反馈 | `MutinyCameraController`、相应 `MutinyPhysicsBody` | 生产入口测试 60/120 FPS 中间帧、原版跟随上限与空投优先级；25/60/120 FPS 主工程画面检查待做 | 已实现；Unity 6.6 隔离工程 Play Mode 数值回归通过；画面待验收 |
+| CAM-TRACK-SEA-01 | 跟随海鸥使用 `trackY=y+100`，不复用普通武器的 `y-50` 目标 | `Seagull.as::advance:118`、`TileSystem.as::advanceScrolling:455-460` | `MutinyCameraController` | 经真实海鸥飞行物理 tick 和镜头入口检查目标纵向偏移 | 原版静态确认、已实现；Unity 6.6 隔离工程 Play Mode 断言通过 |
 
-`CAM-SMOOTH-01` 是用户要求的 Unity 表现优化，不应写作 Flash 原版的插帧行为。静态数值核对不能替代 60/120 FPS 的 Play Mode 画面验收。
+一个已完成物理 tick 的显示延迟（至多 40 ms）是该扩展的明确取舍；画面与镜头必须共用该延迟，不允许只平滑镜头或只预测目标。碰撞、伤害、行动资格继续读取权威状态。
 
 ## 画面比例与视口适配规格（11:8 Letterbox / Pillarbox）
 
