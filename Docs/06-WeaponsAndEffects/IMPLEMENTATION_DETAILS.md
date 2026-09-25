@@ -291,7 +291,9 @@
 | ANC-CUR-01 | 人类选择 Anchor 且未投放时显示 `anchor` 光标，投放或取消后恢复普通鼠标 | `TileSystem.as::advance`、DefineSprite 1813 `anchor` 标签帧 1 | `UpdateSpecialWeaponCursor`、`MutinySpecialWeaponCursor` | 原版静态确认；已修复，待 Unity 运行验证 |
 | ANC-PHY-01 | extent 为 left/right 48、top 96、bottom 0；每 tick 强制 vy=40 | `Anchor.as::advance` | `AdvanceOriginalTick` | 已实现 |
 | ANC-HIT-01 | 首次 Floor 接触，对 `abs(char.x-anchor.x)<48` 且 `anchor.y-64<char.y<anchor.y` 的角色造成 60 | `Anchor.as::contact` | `HitFloor` | 已实现 |
-| ANC-END-01 | 落地动画开始，hold 30 tick，再 whiteOut 10 tick，随后隐藏结束 | 同上 | impact timeline | 已实现；加色白化受 Unity 默认材质限制 |
+| ANC-END-01 | 落地动画开始，hold 30 tick，再 whiteOut 10 tick，随后隐藏结束 | 同上 | impact timeline | 已实现；隔离 Unity Play Mode 专项通过 |
+| ANC-ANI-02 | 落地 frame 3 生成镜像的双侧 1002 子时间轴，子 frame 17 移除；下落中只显示主 frame 1 | `Anchor.as::contact`；1003/1002 时间轴 | `MutinyAnchor.AdvanceImpactTimelineTick` | 已实现；隔离 Unity Play Mode 专项通过 |
+| ANC-ANI-03 | 30 tick hold 后按 `Global.whiteOut` 逐 tick 先加白再淡出 | `Anchor.as::advance`；`Global.as::whiteOut` | `MutinyAnchor.ApplyWhiteOut`、`SpriteColorTransform.shader` | 已实现；隔离 Unity Play Mode 参数专项通过；实际画面对照待验收 |
 | ANC-AI-01 | AI 先 place/show，再等待 20 tick 才开始下落 | `Anchor.as::aiPerform/advance` | `DropForAi` | 已实现；待运行验证 |
 
 ## 7. 当前已知差异与实现优先级
@@ -301,7 +303,7 @@
 | P0 | RumBottle 仍被二次截速到 20，原版 twangMaxForce 为 30 | 射程和 AI/玩家落点错误 | 移除 `Twang` 中额外的 20 截断；补 30 力生产入口用例 |
 | P1 | CherryBomb 的 Water 被当作 contact 爆炸 | 原版静态路径不支持该结论 | 原版运行对照；不要仅据 Unity 现状定规格 |
 | P1 | Mine 忽略所有静止角色，未保留“当前 twanging 的静止角色仍触发”例外 | 少数交互时序不一致 | 给 `CheckForProximity` 传入当前 twang 目标 |
-| P2 | Boulder/Anchor 的 `Global.whiteOut` 加色阶段由普通 SpriteRenderer 近似 | 淡出颜色不完全一致 | 专用材质或 shader |
+| P2 | Boulder 的 `Global.whiteOut` 加色阶段仍由普通 SpriteRenderer 近似；Anchor 已使用专用材质 | Boulder 淡出颜色不完全一致；Anchor 需实际画面对照 | Boulder 专用材质；Anchor 手动截图验收 |
 
 ## 8. 验收矩阵
 

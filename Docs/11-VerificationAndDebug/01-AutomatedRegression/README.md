@@ -27,6 +27,8 @@
 
 ## Cannon 范围锚点回归
 
+- `ANC-ANI-02/03`：通过生产 `MutinyPlayerInput` 投放 Anchor，逐 25 Hz tick 检查下落 frame 1、触地后主 frame 3 的双侧镜像 1002 碎屑、主 frame 12 停止后子帧继续、子 frame 17 移除，以及 30+10 tick 的 `Global.whiteOut` 乘色/加色/透明度。2026-09-26 Unity 6000.6.0f1 隔离 Play Mode 执行 `Validate Anchor Animation Play Mode`，9/9 断言通过；实际战斗画面待验收。
+
 - `CAN-SMOKE-02`：发射正式炮弹、推进 25 Hz 物理 tick 与半 tick 表现采样；确认首团烟与炮弹显示起点重合，随后炮弹向前移动且烟保持在身后，权威位置仍独立推进。
 - `CAN-AUD-02`：以正式物理地形接触和角色包围盒重叠分别触发炮弹爆炸，监听 `SfxPlayed`，再执行正式爆炸命中入口；地形接触 `pop` 总计一次，直接命中角色零次。
 - 实际结果：2026-09-25，Unity 6000.6.0f1 隔离临时工程 Play Mode 执行 `Validate Cannon Effects Play Mode`，连同原有烟迹检查共 15/15 断言通过；主工程实机画面与听感仍待验收。

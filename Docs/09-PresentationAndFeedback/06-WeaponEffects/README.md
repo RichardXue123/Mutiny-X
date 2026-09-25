@@ -55,14 +55,14 @@ Unity 主要用 PNG 序列 + `SpriteRenderer` 复现这些时间轴，以 `Mutin
 | Rum Bottle | 12 帧瓶体循环并留烟；地面命中生成双向 sweepingFlame | `MutinyRumBottle` + `MutinySweepingFlame`，未结束时留烟 | 烟迹已接入；待运行验证 |
 | Seagull | flying 1..8 循环；frame 9 动作回 flying；shot 10..14 | `MutinySeagull` 分 flying/shot 帧段 | 已实现，待运行验证 |
 | Tidal Wave | 根据 skyColour 选 anim1/2/3；每段 9 帧区间中前 5 帧可见循环，动作帧回标签 | `MutinyTidalWave` 加载 27 帧，每色显示 5 帧 | 已实现，待运行验证 |
-| Anchor | frame 1 停止；命中后播至 frame 12 停，再 hold/whiteOut/隐藏 | `MutinyAnchor` | 时间轴已实现；白化材质效果存在差异 |
+| Anchor | 下落 frame 1 停止；命中后主帧播至 12，双侧 1002 碎屑各自播至 frame 17 移除，再 hold/whiteOut/隐藏 | `MutinyAnchor`、`SpriteColorTransform.shader` | 父子时间轴和白化参数隔离 Play Mode 专项通过；像素级画面对照待验收 |
 
 各武器的逻辑规则与更精确的 AS2 条目见 [06 武器实现审计](../../06-WeaponsAndEffects/IMPLEMENTATION_DETAILS.md)和各武器子目录。
 
 ## 资源基线
 
 - 已有通用效果：Explosion 8 帧、Splash 72 张导出图、SweepingFlame 11 帧、Water 30 帧。
-- 已有复合武器帧：Anchor 12、CherryBomb 4、Dynamite 13、GunpowderBarrel 12、Mine 30、ParachuteBomb 30、RumBottle 12、Seagull 14、TidalWave 27、WoodenCrate 18。
+- 已有复合武器帧：Anchor 主 12 + 撞击子 18、CherryBomb 4、Dynamite 13、GunpowderBarrel 12、Mine 30、ParachuteBomb 30、RumBottle 12、Seagull 14、TidalWave 27、WoodenCrate 18。
 - 单帧/组件化资源：Banana、PiecesOfEight、VoodooDoll、SeagullFire、Cannonball；Boulder 和 Cannon 为多部件图层。
 - 烟迹：`Assets/Mutiny/Resources/Art/Effects/CannonSmokeTrail/1..19` 已在项目中。
 

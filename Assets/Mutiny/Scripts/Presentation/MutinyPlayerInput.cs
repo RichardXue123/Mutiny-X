@@ -296,6 +296,28 @@ namespace Mutiny.Presentation
 
             UpdateSpecialWeaponCursor(selectedCharacter, pointer.Position, pointer.IsPressed);
 
+            if (ShouldShowCancelWeapon(selectedCharacter) && selectedCharacter.PhysicsBody != null)
+            {
+                Vector2 mousePixels = MutinyPhysics.UnityToPixel(mouseWorld);
+                float centerX = selectedCharacter.PhysicsBody.State.X;
+                float centerY = selectedCharacter.PhysicsBody.State.Y + 33f;
+                if (Mathf.Abs(mousePixels.x - centerX) <= 10f && Mathf.Abs(mousePixels.y - centerY) <= 10f)
+                {
+                    MutinyCursorManager.NotifyHoverInteractable();
+                }
+            }
+
+            if (InteractionState == MutinyPlayerInteractionState.WeaponReady &&
+                (m_SpecialWeaponCursor == null || m_SpecialWeaponCursor.CurrentMode == MutinySpecialWeaponCursor.Mode.None))
+            {
+                Vector3 readyOrigin = GetReadyActionOrigin(selectedCharacter);
+                float distancePixels = PixelDistance(mouseWorld, readyOrigin);
+                if (distancePixels <= DragSelectionRadiusPixels && CanAim(selectedCharacter))
+                {
+                    MutinyCursorManager.NotifyHoverInteractable();
+                }
+            }
+
             // CancelWeaponButton.onPress is consumed before TileSystem begins a
             // drag.
             if (pointer.PressedThisFrame &&
@@ -1497,6 +1519,9 @@ namespace Mutiny.Presentation
                 hovered = FindCharacterNearPosition(mouseWorld, team, CharacterSelectionRadiusPixels);
             else if (IsVoodooTargetSelection())
                 hovered = FindCharacterNearPosition(mouseWorld, FindOpposingTeam(team), CharacterSelectionRadiusPixels);
+
+            if (hovered != null && hovered.IsAlive && (m_SpecialWeaponCursor == null || m_SpecialWeaponCursor.CurrentMode == MutinySpecialWeaponCursor.Mode.None))
+                MutinyCursorManager.NotifyHoverInteractable();
 
             if (hovered == m_HoveredCharacter)
                 return;

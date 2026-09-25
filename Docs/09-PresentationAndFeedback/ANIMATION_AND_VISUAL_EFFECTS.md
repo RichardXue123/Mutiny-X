@@ -73,7 +73,7 @@
 | P1 | VIS-WATER-01 | 已按关卡传递水面天色并修复 44 px 透明尾部造成的拼接缺口，待 Unity Play Mode 核对 | 超宽 Scene View 下的底色和实际关卡镜头仍需截图对照 |
 | P1 | VIS-SMOKE-01 | 五种投射物烟迹已接入，待 Unity Play Mode 核对 | 生产场景中的位置和寿命尚未逐帧确认 |
 | P1 | VIS-FRONT-01 | 已接入原版分层资源和 25 Hz 循环，待 Unity Play Mode 核对 | 各层回卷时的实际画面尚未确认 |
-| P2 | VIS-MAT-01 | Anchor 白化受 Unity 默认 Sprite 材质限制 | 落地结束的颜色过渡不能保证像素级一致 |
+| P2 | VIS-MAT-01 | Anchor 已接入原版 RGB 加白和 alpha 变换材质，参数专项通过；实际画面对照未完成 | 像素级颜色过渡仍待人工截图核对 |
 
 ## 验收口径
 

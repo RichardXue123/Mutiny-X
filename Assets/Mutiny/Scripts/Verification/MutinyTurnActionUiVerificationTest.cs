@@ -1724,6 +1724,9 @@ namespace Mutiny.Verification
                     leftRenderer.flipX && !rightRenderer.flipX &&
                     Mathf.Approximately(leftImpact.localPosition.x, -25f / MutinyPhysics.PixelsPerUnit) &&
                     Mathf.Approximately(rightImpact.localPosition.x, 25f / MutinyPhysics.PixelsPerUnit) &&
+                    Mathf.Approximately(leftImpact.localPosition.y, 12f / MutinyPhysics.PixelsPerUnit) &&
+                    Mathf.Approximately(rightImpact.localPosition.y, 12f / MutinyPhysics.PixelsPerUnit) &&
+                    leftRenderer.sprite == rightRenderer.sprite &&
                     Mathf.Approximately(leftRenderer.color.a, 166f / 256f);
                 Sprite firstImpactSprite = leftRenderer != null ? leftRenderer.sprite : null;
                 for (int tick = 0; tick < 9; tick++)
@@ -1748,8 +1751,26 @@ namespace Mutiny.Verification
                               anchor.CurrentAnimationFrame == 12,
                     "WPN-15-ANI-01 production anchor reaches the stopped twelfth frame during the original 30-tick hold");
 
-                for (int tick = 0; tick < MutinyAnchor.FadeTicks; tick++)
+                anchor.AdvanceOriginalTickForVerification();
+                Material whiteOut = anchor.SpriteRenderer.sharedMaterial;
+                bool brighteningStarts = whiteOut != null &&
+                    whiteOut.shader.name == "Mutiny/SpriteColorTransform" &&
+                    Mathf.Approximately(whiteOut.GetFloat("_ColorMultiplier"), 0.8f) &&
+                    Mathf.Approximately(whiteOut.GetFloat("_ColorAdd"), 0.2f) &&
+                    Mathf.Approximately(whiteOut.GetFloat("_AlphaMultiplier"), 1f);
+                for (int tick = 0; tick < 4; tick++)
                     anchor.AdvanceOriginalTickForVerification();
+                bool whiteMidpoint = Mathf.Approximately(whiteOut.GetFloat("_ColorMultiplier"), 0f) &&
+                    Mathf.Approximately(whiteOut.GetFloat("_ColorAdd"), 1f) &&
+                    Mathf.Approximately(whiteOut.GetFloat("_AlphaMultiplier"), 1f);
+                for (int tick = 0; tick < 4; tick++)
+                    anchor.AdvanceOriginalTickForVerification();
+                bool fadingWhite = Mathf.Approximately(whiteOut.GetFloat("_AlphaMultiplier"), 0.2f);
+                anchor.AdvanceOriginalTickForVerification();
+                bool fullyTransparentAtTenthTick = Mathf.Approximately(whiteOut.GetFloat("_AlphaMultiplier"), 0f);
+                result.Assert(brighteningStarts && whiteMidpoint && fadingWhite && fullyTransparentAtTenthTick,
+                    "ANC-ANI-03 production whiteOut brightens RGB, then fades white alpha over ten ticks");
+                anchor.AdvanceOriginalTickForVerification();
                 anchor.AdvanceOriginalTickForVerification();
                 result.Assert(anchor.IsFinished,
                     "WPN-15-ANI-01 production anchor runs the original 10 white-out ticks then finishes");

@@ -28,6 +28,7 @@ namespace Mutiny.Simulation
         private readonly List<Sprite> m_ImpactFrames = new();
         private SpriteRenderer m_LeftImpactRenderer;
         private SpriteRenderer m_RightImpactRenderer;
+        private Material m_WhiteOutMaterial;
         private bool m_HitBottom;
         private bool m_AnimationPlaying;
         private int m_HoldTicksRemaining;
@@ -346,6 +347,12 @@ namespace Mutiny.Simulation
                 SpriteRenderer.enabled = true;
                 SpriteRenderer.color = Color.white;
             }
+            if (m_WhiteOutMaterial != null)
+            {
+                m_WhiteOutMaterial.SetFloat("_ColorMultiplier", 1f);
+                m_WhiteOutMaterial.SetFloat("_ColorAdd", 0f);
+                m_WhiteOutMaterial.SetFloat("_AlphaMultiplier", 1f);
+            }
             ApplyFrame();
         }
 
@@ -366,19 +373,33 @@ namespace Mutiny.Simulation
             if (SpriteRenderer == null)
                 return;
 
-            // Global.whiteOut is additive for the brightening half. SpriteRenderer's
-            // default material has no additive color-transform term; retain the exact
-            // alpha half and a white tint until a parity material is introduced.
-            if (visibility <= 0.5f)
-                SpriteRenderer.color = new Color(1f, 1f, 1f, visibility * 2f);
-            else
-                SpriteRenderer.color = Color.white;
+            if (m_WhiteOutMaterial == null)
+            {
+                Shader shader = Resources.Load<Shader>("Shaders/SpriteColorTransform");
+                if (shader == null)
+                {
+                    Debug.LogError("[MutinyAnchor] Missing SpriteColorTransform shader for original whiteOut.", this);
+                    return;
+                }
+                m_WhiteOutMaterial = new Material(shader);
+                SpriteRenderer.sharedMaterial = m_WhiteOutMaterial;
+            }
+
+            // Global.whiteOut: RGB = source * multiplier + additive white.
+            // The first five ticks brighten; the final five fade white alpha.
+            float multiplier = visibility > 0.5f ? (visibility - 0.5f) * 2f : 0f;
+            m_WhiteOutMaterial.SetFloat("_ColorMultiplier", multiplier);
+            m_WhiteOutMaterial.SetFloat("_ColorAdd", 1f - multiplier);
+            m_WhiteOutMaterial.SetFloat("_AlphaMultiplier",
+                visibility > 0.5f ? 1f : visibility * 2f);
         }
 
         private void OnDestroy()
         {
             if (PhysicsBody != null)
                 PhysicsBody.OnFloorLanded -= HitFloor;
+            if (m_WhiteOutMaterial != null)
+                Destroy(m_WhiteOutMaterial);
         }
     }
 }
