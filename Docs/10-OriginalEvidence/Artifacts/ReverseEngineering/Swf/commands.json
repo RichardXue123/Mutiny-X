@@ -2,12 +2,12 @@
   {
     "job": "help",
     "argv": [
-      "D:\\My Project\\Mutiny X\\Tools\\java-17\\jdk-17.0.20.1+1-jre\\bin\\java.exe",
+      "Tools/java-17/jdk-17.0.20.1+1-jre/bin/java.exe",
       "-Djava.awt.headless=true",
       "-Dfile.encoding=UTF-8",
       "-Xmx2g",
       "-jar",
-      "D:\\My Project\\Mutiny X\\Tools\\ffdec-26.3.0\\ffdec.jar",
+      "Tools/ffdec-26.3.0/ffdec.jar",
       "-help",
       "-all"
     ],
@@ -16,12 +16,12 @@
   {
     "job": "config",
     "argv": [
-      "D:\\My Project\\Mutiny X\\Tools\\java-17\\jdk-17.0.20.1+1-jre\\bin\\java.exe",
+      "Tools/java-17/jdk-17.0.20.1+1-jre/bin/java.exe",
       "-Djava.awt.headless=true",
       "-Dfile.encoding=UTF-8",
       "-Xmx2g",
       "-jar",
-      "D:\\My Project\\Mutiny X\\Tools\\ffdec-26.3.0\\ffdec.jar",
+      "Tools/ffdec-26.3.0/ffdec.jar",
       "-listconfigs"
     ],
     "exit_code": 0
@@ -29,41 +29,41 @@
   {
     "job": "scripts-index",
     "argv": [
-      "D:\\My Project\\Mutiny X\\Tools\\java-17\\jdk-17.0.20.1+1-jre\\bin\\java.exe",
+      "Tools/java-17/jdk-17.0.20.1+1-jre/bin/java.exe",
       "-Djava.awt.headless=true",
       "-Dfile.encoding=UTF-8",
       "-Xmx2g",
       "-jar",
-      "D:\\My Project\\Mutiny X\\Tools\\ffdec-26.3.0\\ffdec.jar",
+      "Tools/ffdec-26.3.0/ffdec.jar",
       "-dumpAS2",
       "-exportNames",
-      "D:\\My Project\\Mutiny X\\Mutiny Source\\mutiny-flash-game\\mutiny.swf"
+      "Mutiny Source/mutiny-flash-game/mutiny.swf"
     ],
     "exit_code": 0
   },
   {
     "job": "tags",
     "argv": [
-      "D:\\My Project\\Mutiny X\\Tools\\java-17\\jdk-17.0.20.1+1-jre\\bin\\java.exe",
+      "Tools/java-17/jdk-17.0.20.1+1-jre/bin/java.exe",
       "-Djava.awt.headless=true",
       "-Dfile.encoding=UTF-8",
       "-Xmx2g",
       "-jar",
-      "D:\\My Project\\Mutiny X\\Tools\\ffdec-26.3.0\\ffdec.jar",
+      "Tools/ffdec-26.3.0/ffdec.jar",
       "-dumpSWF",
-      "D:\\My Project\\Mutiny X\\Mutiny Source\\mutiny-flash-game\\mutiny.swf"
+      "Mutiny Source/mutiny-flash-game/mutiny.swf"
     ],
     "exit_code": 0
   },
   {
     "job": "source",
     "argv": [
-      "D:\\My Project\\Mutiny X\\Tools\\java-17\\jdk-17.0.20.1+1-jre\\bin\\java.exe",
+      "Tools/java-17/jdk-17.0.20.1+1-jre/bin/java.exe",
       "-Djava.awt.headless=true",
       "-Dfile.encoding=UTF-8",
       "-Xmx2g",
       "-jar",
-      "D:\\My Project\\Mutiny X\\Tools\\ffdec-26.3.0\\ffdec.jar",
+      "Tools/ffdec-26.3.0/ffdec.jar",
       "-onerror",
       "abort",
       "-timeout",
@@ -74,20 +74,20 @@
       "script:as",
       "-export",
       "script",
-      "D:\\My Project\\Mutiny X\\Mutiny X\\Docs\\ReverseEngineering\\Swf\\source",
-      "D:\\My Project\\Mutiny X\\Mutiny Source\\mutiny-flash-game\\mutiny.swf"
+      "Mutiny X/Docs/ReverseEngineering/Swf/source",
+      "Mutiny Source/mutiny-flash-game/mutiny.swf"
     ],
     "exit_code": 0
   },
   {
     "job": "deobfuscated",
     "argv": [
-      "D:\\My Project\\Mutiny X\\Tools\\java-17\\jdk-17.0.20.1+1-jre\\bin\\java.exe",
+      "Tools/java-17/jdk-17.0.20.1+1-jre/bin/java.exe",
       "-Djava.awt.headless=true",
       "-Dfile.encoding=UTF-8",
       "-Xmx2g",
       "-jar",
-      "D:\\My Project\\Mutiny X\\Tools\\ffdec-26.3.0\\ffdec.jar",
+      "Tools/ffdec-26.3.0/ffdec.jar",
       "-config",
       "autoDeobfuscate=true",
       "-onerror",
@@ -100,59 +100,59 @@
       "script:as",
       "-export",
       "script",
-      "D:\\My Project\\Mutiny X\\Mutiny X\\Docs\\ReverseEngineering\\Swf\\deobfuscated",
-      "D:\\My Project\\Mutiny X\\Mutiny Source\\mutiny-flash-game\\mutiny.swf"
+      "Mutiny X/Docs/ReverseEngineering/Swf/deobfuscated",
+      "Mutiny Source/mutiny-flash-game/mutiny.swf"
     ],
     "exit_code": 0
   },
   {
     "job": "pcode",
     "argv": [
-      "D:\\My Project\\Mutiny X\\Tools\\java-17\\jdk-17.0.20.1+1-jre\\bin\\java.exe",
+      "Tools/java-17/jdk-17.0.20.1+1-jre/bin/java.exe",
       "-Djava.awt.headless=true",
       "-Dfile.encoding=UTF-8",
       "-Xmx2g",
       "-jar",
-      "D:\\My Project\\Mutiny X\\Tools\\ffdec-26.3.0\\ffdec.jar",
+      "Tools/ffdec-26.3.0/ffdec.jar",
       "-onerror",
       "abort",
       "-format",
       "script:pcodehex",
       "-export",
       "script",
-      "D:\\My Project\\Mutiny X\\Mutiny X\\Docs\\ReverseEngineering\\Swf\\pcode",
-      "D:\\My Project\\Mutiny X\\Mutiny Source\\mutiny-flash-game\\mutiny.swf"
+      "Mutiny X/Docs/ReverseEngineering/Swf/pcode",
+      "Mutiny Source/mutiny-flash-game/mutiny.swf"
     ],
     "exit_code": 0
   },
   {
     "job": "xml",
     "argv": [
-      "D:\\My Project\\Mutiny X\\Tools\\java-17\\jdk-17.0.20.1+1-jre\\bin\\java.exe",
+      "Tools/java-17/jdk-17.0.20.1+1-jre/bin/java.exe",
       "-Djava.awt.headless=true",
       "-Dfile.encoding=UTF-8",
       "-Xmx2g",
       "-jar",
-      "D:\\My Project\\Mutiny X\\Tools\\ffdec-26.3.0\\ffdec.jar",
+      "Tools/ffdec-26.3.0/ffdec.jar",
       "-swf2xml",
-      "D:\\My Project\\Mutiny X\\Mutiny Source\\mutiny-flash-game\\mutiny.swf",
-      "D:\\My Project\\Mutiny X\\Mutiny X\\Docs\\ReverseEngineering\\Swf\\mutiny.swf.xml"
+      "Mutiny Source/mutiny-flash-game/mutiny.swf",
+      "Mutiny X/Docs/ReverseEngineering/Swf/mutiny.swf.xml"
     ],
     "exit_code": 0
   },
   {
     "job": "symbols",
     "argv": [
-      "D:\\My Project\\Mutiny X\\Tools\\java-17\\jdk-17.0.20.1+1-jre\\bin\\java.exe",
+      "Tools/java-17/jdk-17.0.20.1+1-jre/bin/java.exe",
       "-Djava.awt.headless=true",
       "-Dfile.encoding=UTF-8",
       "-Xmx2g",
       "-jar",
-      "D:\\My Project\\Mutiny X\\Tools\\ffdec-26.3.0\\ffdec.jar",
+      "Tools/ffdec-26.3.0/ffdec.jar",
       "-export",
       "symbolClass",
-      "D:\\My Project\\Mutiny X\\Mutiny X\\Docs\\ReverseEngineering\\Swf\\symbols",
-      "D:\\My Project\\Mutiny X\\Mutiny Source\\mutiny-flash-game\\mutiny.swf"
+      "Mutiny X/Docs/ReverseEngineering/Swf/symbols",
+      "Mutiny Source/mutiny-flash-game/mutiny.swf"
     ],
     "exit_code": 0
   }

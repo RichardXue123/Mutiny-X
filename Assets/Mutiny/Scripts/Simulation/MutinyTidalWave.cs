@@ -57,6 +57,8 @@ namespace Mutiny.Simulation
             IsDraggable = false;
             IsTwangable = false;
             base.Awake();
+            if (SpriteRenderer != null)
+                SpriteRenderer.sortingOrder = MutinyLevelBuilder.TidalWaveSortingOrder;
             LoadFrames();
             if (SpriteRenderer != null)
                 SpriteRenderer.enabled = false;

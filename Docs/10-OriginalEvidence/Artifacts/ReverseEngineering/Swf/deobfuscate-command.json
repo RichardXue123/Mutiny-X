@@ -1,10 +1,10 @@
 [
-  "D:\\My Project\\Mutiny X\\Tools\\java-17\\jdk-17.0.20.1+1-jre\\bin\\java.exe",
+  "Tools/java-17/jdk-17.0.20.1+1-jre/bin/java.exe",
   "-Djava.awt.headless=true",
   "-Dfile.encoding=UTF-8",
   "-Xmx2g",
   "-jar",
-  "D:\\My Project\\Mutiny X\\Tools\\ffdec-26.3.0\\ffdec.jar",
+  "Tools/ffdec-26.3.0/ffdec.jar",
   "-config",
   "autoDeobfuscate=true",
   "-onerror",
@@ -17,6 +17,6 @@
   "script:as",
   "-export",
   "script",
-  "D:\\My Project\\Mutiny X\\Mutiny X\\Docs\\ReverseEngineering\\Swf\\deobfuscated",
-  "D:\\My Project\\Mutiny X\\Mutiny Source\\mutiny-flash-game\\mutiny.swf"
+  "Mutiny X/Docs/ReverseEngineering/Swf/deobfuscated",
+  "Mutiny Source/mutiny-flash-game/mutiny.swf"
 ]

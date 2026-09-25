@@ -43,6 +43,10 @@ namespace Mutiny.Simulation
 
         public bool IsAtRest => State.IsAtRest;
         public long SimulationTickCount { get; private set; }
+        // During OnSimulationStep this is the first pose the renderer presents
+        // for the just-completed tick. Effects emitted there must use the same
+        // origin instead of the ahead-of-render authoritative State position.
+        public Vector2 CurrentStepStartPositionPixels { get; private set; }
         public float SimulationInterpolationAlpha =>
             Mathf.Clamp01(m_TimeAccumulator / MutinyPhysics.TimeStep);
 
@@ -236,6 +240,7 @@ namespace Mutiny.Simulation
             // A pre-step callback can place a weapon at its owner. Capture after
             // that transition so rendering never blends from the old location.
             Vector2 tickStartPosition = new Vector2(State.X, State.Y);
+            CurrentStepStartPositionPixels = tickStartPosition;
 
             List<PhysicsBoxObstacle> boxes = null;
             if (State.HitsBoxes)

@@ -188,6 +188,8 @@ namespace Mutiny.Levels
             m_LastCompletedLevelScore = CalculateOriginalSinglePlayerLevelScore(playerTeam, CurrentLevelIndex);
             m_SinglePlayerScore += m_LastCompletedLevelScore;
             m_AwardedLevelIndex = CurrentLevelIndex;
+            if (CurrentLevelIndex == Mutiny.Presentation.MutinyFrontendController.SinglePlayerLevelCount)
+                Mutiny.Persistence.MutinySaveSystem.RecordCompletedScore(m_SinglePlayerScore);
             MutinyDebugLog.Info("Level",
                 $"END-POP-01 level complete level={CurrentLevelIndex} award={m_LastCompletedLevelScore} total={m_SinglePlayerScore}", this);
             return m_LastCompletedLevelScore;
@@ -253,11 +255,11 @@ namespace Mutiny.Levels
         [ContextMenu("Clear Level")]
         public void ClearLevel()
         {
-            MutinyMine.ClearForLevelEnd();
+            MutinyMine.ClearForLevelUnload();
             // BoxWeapon instances are spawned outside the level-root hierarchy.
             // Clear both their visuals and collision state immediately; do not
             // wait for delayed OnDestroy callbacks from the old scene graph.
-            MutinyBoxRegistry.ClearForLevelEnd();
+            MutinyBoxRegistry.ClearForLevelUnload();
 
             if (m_CurrentLevel != null)
             {

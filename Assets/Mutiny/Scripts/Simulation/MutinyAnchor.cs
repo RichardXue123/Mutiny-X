@@ -18,19 +18,31 @@ namespace Mutiny.Simulation
         public const float CrushDamage = 60f;
         public const int HoldTicks = 30;
         public const int FadeTicks = 10;
+        public const int ImpactStartMainFrame = 3;
+        public const int ImpactRemoveChildFrame = 17;
+        private const float ImpactOffsetXPixels = 25f;
+        private const float ImpactOffsetYPixels = -12f;
+        private const float ImpactAlpha = 166f / 256f;
 
         private readonly List<Sprite> m_Frames = new();
+        private readonly List<Sprite> m_ImpactFrames = new();
+        private SpriteRenderer m_LeftImpactRenderer;
+        private SpriteRenderer m_RightImpactRenderer;
         private bool m_HitBottom;
         private bool m_AnimationPlaying;
         private int m_HoldTicksRemaining;
         private int m_FadeTicksRemaining;
         private int m_AnimationFrame;
+        private int m_ImpactFrame;
         private float m_TickAccumulator;
 
         public bool HasHitBottom => m_HitBottom;
         public int HoldTicksRemaining => m_HoldTicksRemaining;
         public int FadeTicksRemaining => m_FadeTicksRemaining;
         public int CurrentAnimationFrame => m_AnimationFrame + 1;
+        public int CurrentImpactFrame => m_ImpactFrame;
+        public bool AreImpactParticlesVisible => m_LeftImpactRenderer != null && m_LeftImpactRenderer.enabled &&
+            m_RightImpactRenderer != null && m_RightImpactRenderer.enabled;
 
         protected override void Awake()
         {
@@ -38,6 +50,7 @@ namespace Mutiny.Simulation
             Extent = 48f;
             base.Awake();
             LoadFrames();
+            LoadImpactFrames();
         }
 
         public override void Initialize(MutinyCharacter owner)
@@ -194,10 +207,26 @@ namespace Mutiny.Simulation
 
         private void AdvanceImpactTimelineTick(bool advanceAnimation = true)
         {
-            if (advanceAnimation && m_AnimationPlaying && m_AnimationFrame < m_Frames.Count - 1)
+            if (advanceAnimation && m_AnimationPlaying)
             {
-                m_AnimationFrame++;
-                ApplyFrame();
+                bool impactStartedThisTick = false;
+                if (m_AnimationFrame < m_Frames.Count - 1)
+                {
+                    m_AnimationFrame++;
+                    ApplyFrame();
+                    if (m_AnimationFrame + 1 == ImpactStartMainFrame)
+                    {
+                        StartImpactParticles();
+                        impactStartedThisTick = true;
+                    }
+                }
+
+                // DefineSprite_1002 is a child MovieClip. It keeps advancing
+                // after the parent stops on frame 12, then removes its content
+                // on its own frame 17.
+                if (!impactStartedThisTick && m_ImpactFrame > 0 &&
+                    m_ImpactFrame < ImpactRemoveChildFrame)
+                    AdvanceImpactParticles();
             }
 
             if (m_HoldTicksRemaining > 0)
@@ -245,9 +274,73 @@ namespace Mutiny.Simulation
             ApplyFrame();
         }
 
+        private void LoadImpactFrames()
+        {
+            m_ImpactFrames.Clear();
+            for (int i = 1; i < ImpactRemoveChildFrame; i++)
+            {
+                Texture2D texture = Resources.Load<Texture2D>($"Art/Weapons/AnchorImpact/{i}");
+                if (texture == null)
+                    continue;
+                texture.filterMode = FilterMode.Point;
+                m_ImpactFrames.Add(Sprite.Create(texture,
+                    new Rect(0f, 0f, texture.width, texture.height),
+                    new Vector2(0f, 1f), MutinyPhysics.PixelsPerUnit));
+            }
+        }
+
+        private void StartImpactParticles()
+        {
+            if (m_ImpactFrames.Count == 0)
+                return;
+
+            m_LeftImpactRenderer ??= CreateImpactRenderer("AnchorImpact_Left", -ImpactOffsetXPixels, true);
+            m_RightImpactRenderer ??= CreateImpactRenderer("AnchorImpact_Right", ImpactOffsetXPixels, false);
+            m_ImpactFrame = 1;
+            ApplyImpactFrame();
+        }
+
+        private SpriteRenderer CreateImpactRenderer(string objectName, float xPixels, bool mirrored)
+        {
+            GameObject effect = new GameObject(objectName);
+            effect.transform.SetParent(transform, false);
+            effect.transform.localPosition = new Vector3(xPixels / MutinyPhysics.PixelsPerUnit,
+                -ImpactOffsetYPixels / MutinyPhysics.PixelsPerUnit, 0f);
+            SpriteRenderer renderer = effect.AddComponent<SpriteRenderer>();
+            renderer.sortingOrder = SpriteRenderer.sortingOrder + 1;
+            renderer.flipX = mirrored;
+            renderer.color = new Color(1f, 1f, 1f, ImpactAlpha);
+            return renderer;
+        }
+
+        private void AdvanceImpactParticles()
+        {
+            m_ImpactFrame++;
+            ApplyImpactFrame();
+        }
+
+        private void ApplyImpactFrame()
+        {
+            bool visible = m_ImpactFrame >= 1 &&
+                m_ImpactFrame < ImpactRemoveChildFrame &&
+                m_ImpactFrame <= m_ImpactFrames.Count;
+            if (m_LeftImpactRenderer != null)
+            {
+                m_LeftImpactRenderer.enabled = visible;
+                if (visible) m_LeftImpactRenderer.sprite = m_ImpactFrames[m_ImpactFrame - 1];
+            }
+            if (m_RightImpactRenderer != null)
+            {
+                m_RightImpactRenderer.enabled = visible;
+                if (visible) m_RightImpactRenderer.sprite = m_ImpactFrames[m_ImpactFrame - 1];
+            }
+        }
+
         private void ResetVisualState()
         {
             m_AnimationFrame = 0;
+            m_ImpactFrame = 0;
+            ApplyImpactFrame();
             if (SpriteRenderer != null)
             {
                 SpriteRenderer.enabled = true;
@@ -259,7 +352,13 @@ namespace Mutiny.Simulation
         private void ApplyFrame()
         {
             if (SpriteRenderer != null && m_AnimationFrame >= 0 && m_AnimationFrame < m_Frames.Count)
-                SpriteRenderer.sprite = m_Frames[m_AnimationFrame];
+            {
+                // Exported parent frames 3..12 bake the child's first frame into
+                // the raster. Use the bare frame-1 body and render the live child
+                // separately, matching the SWF display-list structure.
+                int bodyFrame = m_AnimationFrame >= ImpactStartMainFrame - 1 ? 0 : m_AnimationFrame;
+                SpriteRenderer.sprite = m_Frames[bodyFrame];
+            }
         }
 
         private void ApplyWhiteOut(float visibility)

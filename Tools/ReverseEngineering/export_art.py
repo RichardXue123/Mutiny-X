@@ -17,6 +17,12 @@ SWF = WORKSPACE / 'Mutiny Source/mutiny-flash-game/mutiny.swf'
 SWF_XML = PROJECT / 'Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/mutiny.swf.xml'
 
 
+def recorded_arg(argument):
+    """Store paths relative to the workspace while running with absolute paths."""
+    path = pathlib.Path(argument)
+    return path.relative_to(WORKSPACE).as_posix() if path.is_absolute() else argument
+
+
 def main():
     java = next((WORKSPACE / 'Tools').glob('java-*/**/bin/java.exe'))
     jar = next((WORKSPACE / 'Tools').glob('ffdec-*/ffdec.jar'))
@@ -39,7 +45,8 @@ def main():
         completed = subprocess.run(base + args, capture_output=True, timeout=1800)
         (logs / (name + '.stdout.log')).write_bytes(completed.stdout)
         (logs / (name + '.stderr.log')).write_bytes(completed.stderr)
-        commands.append(dict(job=name, argv=base + args, exit_code=completed.returncode))
+        commands.append(dict(job=name, argv=[recorded_arg(arg) for arg in base + args],
+                             exit_code=completed.returncode))
         (OUTPUT / 'commands.json').write_text(json.dumps(commands, indent=2), encoding='utf8')
         if completed.returncode:
             raise RuntimeError(name + ' export failed; inspect logs.')

@@ -9,7 +9,10 @@ namespace Mutiny.Presentation
         LevelSelect,
         TwoPlayerLevelSelect,
         Help,
-        Gameplay
+        Gameplay,
+        Ending,
+        Credits,
+        Scores
     }
 
     /// <summary>
@@ -36,6 +39,30 @@ namespace Mutiny.Presentation
         public void PressHelpBack()
         {
             if (CurrentPage == MutinyFrontendPage.Help)
+                CurrentPage = MutinyFrontendPage.Title;
+        }
+
+        public void PressCredits()
+        {
+            if (CurrentPage == MutinyFrontendPage.Title)
+                CurrentPage = MutinyFrontendPage.Credits;
+        }
+
+        public void PressCreditsBack()
+        {
+            if (CurrentPage == MutinyFrontendPage.Credits)
+                CurrentPage = MutinyFrontendPage.Title;
+        }
+
+        public void PressScores()
+        {
+            if (CurrentPage == MutinyFrontendPage.Title)
+                CurrentPage = MutinyFrontendPage.Scores;
+        }
+
+        public void PressScoresBack()
+        {
+            if (CurrentPage == MutinyFrontendPage.Scores)
                 CurrentPage = MutinyFrontendPage.Title;
         }
 
@@ -121,6 +148,22 @@ namespace Mutiny.Presentation
                 return false;
 
             CurrentPage = MutinyFrontendPage.LevelSelect;
+            return true;
+        }
+
+        public bool ShowEnding()
+        {
+            if (CurrentPage != MutinyFrontendPage.Gameplay)
+                return false;
+            CurrentPage = MutinyFrontendPage.Ending;
+            return true;
+        }
+
+        public bool ReturnFromEndingToTitle()
+        {
+            if (CurrentPage != MutinyFrontendPage.Ending)
+                return false;
+            CurrentPage = MutinyFrontendPage.Title;
             return true;
         }
     }

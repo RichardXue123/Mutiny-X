@@ -1,3 +1,4 @@
+using System;
 using Mutiny.Levels;
 using Mutiny.Persistence;
 using Mutiny.Simulation;
@@ -36,12 +37,37 @@ namespace Mutiny.Presentation
         private readonly float[] m_BackgroundOffsets = new float[5];
         private float m_BackgroundTickAccumulator;
         private bool m_HasAnimatedBackground;
+        private Texture2D m_EndingShip;
+        private readonly Texture2D[][] m_EndingShipParts =
+            new Texture2D[MutinyEndingSequence.ShipSymbols.Length][];
+        private bool m_HasAnimatedEndingShip;
+        private int m_EndingShipTick;
+        private Texture2D m_EndingBubble;
+        private Texture2D m_EndingKrakenBubble;
+        private Texture2D m_EndingScorePanel;
+        private Texture2D m_EndingBackButton;
+        private Texture2D m_EndingBackButtonOver;
+        private int m_EndingFrame = 1;
+        private int m_EndingScore;
 
         private MutinyLevelController m_LevelController;
         private Texture2D m_Background;
         private Texture2D m_TitleLogo;
         private Texture2D m_GameSelectPanel;
         private Texture2D m_HelpPanel;
+        private Texture2D m_CreditsPanel;
+        private Texture2D m_CreditsNitromeLogo;
+        private Texture2D m_CreditsNitromeHit;
+        private Texture2D m_CreditsAvatar;
+        private Texture2D m_CreditsCopyright;
+        private Texture2D m_CreditsCopyrightHit;
+        private Texture2D m_ScoresRows;
+        private bool m_CreditsLogoPressed;
+        private bool m_CreditsCopyrightPressed;
+        private bool m_CreditsGithubPressed;
+        private bool m_CreditsNitromeTextPressed;
+        private bool m_CreditsAvatarPressed;
+        private static readonly Color LinkHoverColor = new Color(1f, 0.88f, 0.25f);
         private Texture2D m_LevelSelectPanel;
         private Texture2D m_TwoPlayerPanel;
         private Texture2D m_TwoPlayerScorePirates;
@@ -71,6 +97,10 @@ namespace Mutiny.Presentation
         private GUIStyle m_QuestionStyle;
 
         public MutinyFrontendPage CurrentPage => m_Flow.CurrentPage;
+        public int CurrentEndingFrame => m_EndingFrame;
+        public int CurrentEndingShipTick => m_EndingShipTick;
+        public bool HasAnimatedEndingShip => m_HasAnimatedEndingShip;
+        public int CurrentEndingScore => m_EndingScore;
         public bool AreCornerAudioControlsVisible => m_Flow.CurrentPage != MutinyFrontendPage.Gameplay;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -124,6 +154,13 @@ namespace Mutiny.Presentation
             m_TitleLogo = Resources.Load<Texture2D>("UI/Frontend/title_logo");
             m_GameSelectPanel = Resources.Load<Texture2D>("UI/Frontend/game_select_panel");
             m_HelpPanel = LoadPointTexture("UI/Frontend/help_panel");
+            m_CreditsPanel = LoadPointTexture("UI/Frontend/credits_panel");
+            m_CreditsNitromeLogo = LoadPointTexture("UI/Frontend/credits_nitrome_logo");
+            m_CreditsNitromeHit = LoadPointTexture("UI/Frontend/credits_nitrome_hit");
+            m_CreditsAvatar = LoadAvatarTexture();
+            m_CreditsCopyright = LoadPointTexture("UI/Frontend/credits_copyright");
+            m_CreditsCopyrightHit = LoadPointTexture("UI/Frontend/credits_copyright_hit");
+            m_ScoresRows = LoadPointTexture("UI/Frontend/scores_rows");
             m_LevelSelectPanel = Resources.Load<Texture2D>("UI/Frontend/level_select_panel");
             m_TwoPlayerPanel = LoadPointTexture("UI/Frontend/two_player_panel");
             m_TwoPlayerScorePirates = LoadPointTexture("UI/Frontend/two_player_score_pirates");
@@ -137,6 +174,25 @@ namespace Mutiny.Presentation
             m_ButtonBackOver = Resources.Load<Texture2D>("UI/Frontend/button_back_over");
             m_LevelSlot = Resources.Load<Texture2D>("UI/Frontend/level_slot");
             m_LevelSlotOver = Resources.Load<Texture2D>("UI/Frontend/level_slot_over");
+            m_EndingShip = LoadPointTexture("UI/Ending/ship");
+            m_HasAnimatedEndingShip = true;
+            for (int symbolIndex = 0; symbolIndex < MutinyEndingSequence.ShipSymbols.Length; symbolIndex++)
+            {
+                MutinyEndingSequence.ShipSymbol symbol = MutinyEndingSequence.ShipSymbols[symbolIndex];
+                Texture2D[] frames = new Texture2D[symbol.FrameCount];
+                for (int frame = 1; frame <= frames.Length; frame++)
+                {
+                    frames[frame - 1] = LoadPointTexture($"UI/Ending/ShipParts/{symbol.Id}_{frame:D2}");
+                    if (frames[frame - 1] == null)
+                        m_HasAnimatedEndingShip = false;
+                }
+                m_EndingShipParts[symbolIndex] = frames;
+            }
+            m_EndingBubble = LoadPointTexture("UI/Ending/bubble");
+            m_EndingKrakenBubble = LoadPointTexture("UI/Ending/bubble_kraken");
+            m_EndingScorePanel = LoadPointTexture("UI/Ending/score_panel");
+            m_EndingBackButton = LoadPointTexture("UI/Ending/back_button");
+            m_EndingBackButtonOver = CreateOriginalHoveredTexture(m_EndingBackButton);
             for (int i = 0; i < SinglePlayerLevelCount; i++)
                 m_LevelPreviews[i] = Resources.Load<Texture2D>($"UI/Frontend/LevelPreviews/{i + 1:D2}");
             for (int i = 0; i < m_TwoPlayerPreviews.Length; i++)
@@ -166,6 +222,54 @@ namespace Mutiny.Presentation
             return texture;
         }
 
+        private static Texture2D LoadAvatarTexture()
+        {
+            Texture2D texture = Resources.Load<Texture2D>("UI/Frontend/richard_xue");
+            if (texture != null)
+                return texture;
+
+            string directPath = System.IO.Path.Combine(Application.dataPath, "Mutiny/Art/Logo/RichardXue.jpg");
+            if (System.IO.File.Exists(directPath))
+            {
+                byte[] data = System.IO.File.ReadAllBytes(directPath);
+                texture = new Texture2D(2, 2);
+                if (texture.LoadImage(data))
+                    return texture;
+            }
+            return null;
+        }
+
+        private static void DrawLinkUnderline(Rect textRect, Color color)
+        {
+            Color prev = GUI.color;
+            GUI.color = color;
+            GUI.DrawTexture(new Rect(textRect.x, textRect.y + 12f, textRect.width, 1f), Texture2D.whiteTexture);
+            GUI.color = prev;
+        }
+
+        private static Texture2D CreateOriginalHoveredTexture(Texture2D original)
+        {
+            if (original == null || !original.isReadable)
+                return null;
+            Color32[] pixels = original.GetPixels32();
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                Color32 pixel = pixels[i];
+                pixels[i] = new Color32((byte)(pixel.r / 2 + 128),
+                    (byte)(pixel.g / 2 + 128), (byte)(pixel.b / 2 + 128), pixel.a);
+            }
+            Texture2D hovered = new Texture2D(original.width, original.height,
+                TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            hovered.SetPixels32(pixels);
+            hovered.Apply(false, true);
+            return hovered;
+        }
+
         private void Update()
         {
             if (m_Flow.CurrentPage == MutinyFrontendPage.Gameplay)
@@ -182,7 +286,19 @@ namespace Mutiny.Presentation
                 AdvanceBackgroundOffset(2, 2f, 840f);
                 AdvanceBackgroundOffset(3, 4f, 1000f);
                 AdvanceBackgroundOffset(4, 2f, 550f);
+                if (m_Flow.CurrentPage == MutinyFrontendPage.Ending)
+                    AdvanceEndingTick();
             }
+        }
+
+        // This is the production timeline clock used by Update's 25 Hz tick.
+        public void AdvanceEndingTick()
+        {
+            if (m_Flow.CurrentPage != MutinyFrontendPage.Ending)
+                return;
+            m_EndingShipTick++;
+            if (m_EndingFrame < MutinyEndingSequence.FrameCount)
+                m_EndingFrame++;
         }
 
         private void AdvanceBackgroundOffset(int index, float speed, float width)
@@ -208,7 +324,8 @@ namespace Mutiny.Presentation
             DrawBackgroundLayer(3, m_BackgroundOffsets[3] + 71f, 6f);
             DrawBackgroundLayer(4, m_BackgroundOffsets[4], 275.95f);
             DrawBackgroundLayer(5, 0f, 360f);
-            DrawBackgroundLayer(6, m_BackgroundOffsets[0], 332f);
+            if (m_Flow.CurrentPage != MutinyFrontendPage.Ending)
+                DrawBackgroundLayer(6, m_BackgroundOffsets[0], 332f);
             GUI.EndGroup();
         }
 
@@ -254,6 +371,15 @@ namespace Mutiny.Presentation
                 case MutinyFrontendPage.Help:
                     DrawHelp();
                     break;
+                case MutinyFrontendPage.Credits:
+                    DrawCredits();
+                    break;
+                case MutinyFrontendPage.Scores:
+                    DrawScores();
+                    break;
+                case MutinyFrontendPage.Ending:
+                    DrawEnding();
+                    break;
             }
 
             DrawCornerAudioControls();
@@ -274,7 +400,14 @@ namespace Mutiny.Presentation
                 }, showLoading: false);
             }
 
-            DrawOriginalButton(new Rect(193f, 216f, 163f, 24f), "scores", m_ButtonSmall, m_ButtonSmallOver);
+            if (DrawOriginalButton(new Rect(193f, 216f, 163f, 24f), "scores", m_ButtonSmall, m_ButtonSmallOver))
+            {
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    m_Flow.PressScores();
+                    LogPage("FRONT-SCORES-01 scores", m_Flow.CurrentPage);
+                }, showLoading: false);
+            }
             if (DrawOriginalButton(new Rect(193f, 245f, 163f, 24f), "help", m_ButtonSmall, m_ButtonSmallOver))
             {
                 MutinyTransitionManager.RequestTransition(() =>
@@ -284,7 +417,237 @@ namespace Mutiny.Presentation
                     LogPage("FRONT-03 help", m_Flow.CurrentPage);
                 }, showLoading: false);
             }
-            DrawOriginalButton(new Rect(193f, 274f, 163f, 24f), "credits", m_ButtonSmall, m_ButtonSmallOver);
+            if (DrawOriginalButton(new Rect(193f, 274f, 163f, 24f), "credits", m_ButtonSmall, m_ButtonSmallOver))
+            {
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    m_Flow.PressCredits();
+                    LogPage("FRONT-CRED-01 credits", m_Flow.CurrentPage);
+                }, showLoading: false);
+            }
+        }
+
+        private void DrawCredits()
+        {
+            // Root credits frame 51: shape 1930 is the frame only. Text and
+            // clickable elements remain separate, as on the Flash timeline.
+            DrawTexture(new Rect(44f, 24f, 462f, 352f), m_CreditsPanel);
+            MutinyBitmapFont.DrawPirateText(new Rect(44f, 32f, 462f, 23f), "credits", false, true, -3);
+
+            Vector2 mousePos = GetCanvasMousePosition();
+
+            // Nitrome Logo (Left)
+            Rect logoRect = new Rect(72f, 71f, 99f, 74f);
+            bool logoHovered = !MutinyTransitionManager.IsTransitionActive &&
+                CreditsLinkContains(logoRect, m_CreditsNitromeHit, mousePos);
+            DrawTexture(logoRect, m_CreditsNitromeLogo);
+            HandleCreditsLink(logoRect, m_CreditsNitromeHit, ref m_CreditsLogoPressed,
+                "http://www.nitrome.com");
+
+            // Porter Avatar & Name (Right, symmetric to Nitrome Logo)
+            bool avatarHovered = false;
+            if (m_CreditsAvatar != null)
+            {
+                Rect avatarRect = new Rect(408f, 71f, 58f, 58f);
+                Rect avatarClickRect = new Rect(avatarRect.x - 1f, avatarRect.y - 1f, avatarRect.width + 2f, avatarRect.height + 15f);
+                avatarHovered = !MutinyTransitionManager.IsTransitionActive && avatarClickRect.Contains(mousePos);
+
+                Color prevColor = GUI.color;
+                GUI.color = avatarHovered ? LinkHoverColor : Color.black;
+                GUI.DrawTexture(new Rect(avatarRect.x - 1f, avatarRect.y - 1f, avatarRect.width + 2f, avatarRect.height + 2f), Texture2D.whiteTexture);
+                GUI.color = prevColor;
+                DrawTexture(avatarRect, m_CreditsAvatar);
+
+                float avatarCenterX = avatarRect.x + avatarRect.width * 0.5f;
+                Color nameColor = avatarHovered ? LinkHoverColor : Color.white;
+                MutinyBitmapFont.DrawDangleText(new Rect(avatarCenterX - 50f, 132f, 100f, 11f),
+                    "Richard Xue", nameColor, TextAnchor.UpperCenter);
+
+                HandleCreditsLink(avatarClickRect, null, ref m_CreditsAvatarPressed,
+                    "https://github.com/RichardXue123/Mutiny-X");
+            }
+
+            // Line 1: game by nitrome
+            DrawCreditsLine(71f, "game by nitrome");
+
+            // Line 2: www.nitrome.com (link with underline)
+            float nitromeWidth = MutinyBitmapFont.MeasureDangleText("www.nitrome.com");
+            Rect nitromeTextRect = new Rect(44f + (462f - nitromeWidth) * 0.5f, 85f, nitromeWidth, 11f);
+            Rect nitromeClickRect = new Rect(nitromeTextRect.x, nitromeTextRect.y, nitromeTextRect.width, 14f);
+            bool nitromeHovered = !MutinyTransitionManager.IsTransitionActive && nitromeClickRect.Contains(mousePos);
+            Color nitromeColor = nitromeHovered ? LinkHoverColor : Color.white;
+            MutinyBitmapFont.DrawDangleText(nitromeTextRect, "www.nitrome.com", nitromeColor, TextAnchor.UpperCenter);
+            DrawLinkUnderline(nitromeTextRect, nitromeColor);
+            HandleCreditsLink(nitromeClickRect, null, ref m_CreditsNitromeTextPressed,
+                "http://www.nitrome.com");
+
+            // Line 3: Ported to Unity by Richard Xue
+            DrawCreditsLine(99f, "Ported to Unity by Richard Xue");
+
+            // Line 4: github.com/RichardXue123/Mutiny-X (link with underline)
+            float ghWidth = MutinyBitmapFont.MeasureDangleText("github.com/RichardXue123/Mutiny-X");
+            Rect ghRect = new Rect(44f + (462f - ghWidth) * 0.5f, 113f, ghWidth, 11f);
+            Rect ghClickRect = new Rect(ghRect.x, ghRect.y, ghRect.width, 14f);
+            bool ghHovered = !MutinyTransitionManager.IsTransitionActive && ghClickRect.Contains(mousePos);
+            Color ghColor = ghHovered ? LinkHoverColor : Color.white;
+            MutinyBitmapFont.DrawDangleText(ghRect, "github.com/RichardXue123/Mutiny-X", ghColor, TextAnchor.UpperCenter);
+            DrawLinkUnderline(ghRect, ghColor);
+            HandleCreditsLink(ghClickRect, null, ref m_CreditsGithubPressed,
+                "https://github.com/RichardXue123/Mutiny-X");
+
+            MutinyBitmapFont.DrawPirateText(new Rect(44f, 142f, 462f, 23f), "programming", false, true, -3);
+            DrawCreditsLine(176.3f, "chris burt-brown");
+            DrawCreditsLine(193.3f, "heather stancliffe");
+            MutinyBitmapFont.DrawPirateText(new Rect(44f, 218f, 462f, 23f), "artwork", false, true, -3);
+            DrawCreditsLine(248.3f, "jon annal");
+            DrawCreditsLine(265.3f, "mat annal");
+            MutinyBitmapFont.DrawPirateText(new Rect(44f, 288f, 462f, 23f), "music", false, true, -3);
+            DrawCreditsLine(317.3f, "dave cowen");
+
+            Rect backRect = new Rect(205f, 334f, 140f, 24f);
+            bool backHovered = !MutinyTransitionManager.IsTransitionActive && backRect.Contains(mousePos);
+            if (DrawOriginalButton(backRect, "back", m_ButtonBack, m_ButtonBackOver))
+            {
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    m_CreditsLogoPressed = false;
+                    m_CreditsCopyrightPressed = false;
+                    m_CreditsGithubPressed = false;
+                    m_CreditsNitromeTextPressed = false;
+                    m_CreditsAvatarPressed = false;
+                    m_Flow.PressCreditsBack();
+                    LogPage("FRONT-CRED-03 back", m_Flow.CurrentPage);
+                }, showLoading: false);
+            }
+
+            // Button 1925 persists from the title frame at the bottom of the stage.
+            Rect copyrightRect = new Rect(204.5f, 388f, 141f, 11f);
+            bool copyrightHovered = !MutinyTransitionManager.IsTransitionActive &&
+                CreditsLinkContains(copyrightRect, m_CreditsCopyrightHit, mousePos);
+            DrawTexture(copyrightRect, m_CreditsCopyright);
+            HandleCreditsLink(copyrightRect, m_CreditsCopyrightHit, ref m_CreditsCopyrightPressed,
+                "http://www.nitrome.com/");
+
+            // Interactive clickable pointer feedback
+            if (logoHovered || nitromeHovered || ghHovered || avatarHovered || backHovered || copyrightHovered)
+                MutinyCursorManager.NotifyHoverInteractable();
+        }
+
+        private void DrawScores()
+        {
+            // The original view_scores frame uses the 462x352 panel and
+            // stage-level Back/copyright objects.
+            DrawTexture(new Rect(44f, 24f, 462f, 352f), m_CreditsPanel);
+            MutinyBitmapFont.DrawPirateText(new Rect(44f, 32f, 462f, 23f), "scores", false, true, -3);
+
+            MutinySaveSystem.CompletedScoreEntry[] entries = MutinySaveSystem.GetTopCompletedScoreEntries();
+
+            if (entries.Length == 0)
+            {
+                // Clean empty state: no row frames, stripes, or dummy items are drawn.
+                // Centered pirate guidance message in the middle of the clean panel.
+                MutinyBitmapFont.DrawDangleText(new Rect(44f, 160f, 462f, 60f),
+                    "no completed records yet| |defeat all 15 campaign levels|to record your high score!",
+                    new Color(1f, 0.88f, 0.25f), TextAnchor.MiddleCenter, 0, 14);
+            }
+            else
+            {
+                // Only render the row boxes and text for valid, existing records.
+                for (int i = 0; i < entries.Length; i++)
+                {
+                    float rowY = 66f + i * 26f;
+
+                    // Draw individual red-bordered box for this valid row from scores_rows texture
+                    if (m_ScoresRows != null)
+                    {
+                        float vMin = 1f - (float)((i + 1) * 26) / 261f;
+                        float vHeight = 26f / 261f;
+                        GUI.DrawTextureWithTexCoords(new Rect(76.5f, 62f + i * 26f, 397f, 26f),
+                            m_ScoresRows, new Rect(0f, vMin, 1f, vHeight), true);
+                    }
+
+                    bool isChampion = i == 0;
+                    Color textColor = isChampion ? new Color(1f, 0.88f, 0.25f) : Color.white;
+                    string timeText = string.IsNullOrEmpty(entries[i].Timestamp)
+                        ? DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                        : entries[i].Timestamp;
+
+                    // Column 1: Rank (e.g. 01.)
+                    MutinyBitmapFont.DrawDangleText(new Rect(95f, rowY, 35f, 14f),
+                        (i + 1).ToString("D2") + ".", textColor, TextAnchor.MiddleLeft);
+
+                    // Column 2: Timestamp (accurate to seconds)
+                    MutinyBitmapFont.DrawDangleText(new Rect(145f, rowY, 185f, 14f),
+                        timeText, textColor, TextAnchor.MiddleLeft);
+
+                    // Column 3: Score with PTS unit
+                    MutinyBitmapFont.DrawDangleText(new Rect(335f, rowY, 120f, 14f),
+                        entries[i].Score.ToString() + " pts", textColor, TextAnchor.MiddleRight);
+                }
+            }
+
+            if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
+            {
+                MutinyTransitionManager.RequestTransition(() =>
+                {
+                    m_CreditsCopyrightPressed = false;
+                    m_Flow.PressScoresBack();
+                    LogPage("FRONT-SCORES-03 back", m_Flow.CurrentPage);
+                }, showLoading: false);
+            }
+
+            Rect copyrightRect = new Rect(204.5f, 388f, 141f, 11f);
+            bool copyrightHovered = !MutinyTransitionManager.IsTransitionActive &&
+                CreditsLinkContains(copyrightRect, m_CreditsCopyrightHit, GetCanvasMousePosition());
+            if (copyrightHovered)
+                MutinyCursorManager.NotifyHoverInteractable();
+            DrawTexture(copyrightRect, m_CreditsCopyright);
+            HandleCreditsLink(copyrightRect, m_CreditsCopyrightHit, ref m_CreditsCopyrightPressed,
+                "http://www.nitrome.com/");
+        }
+
+        private static void DrawCreditsLine(float y, string text, int lineSpacing = 13)
+        {
+            MutinyBitmapFont.DrawDangleText(new Rect(44f, y, 462f, 11f), text,
+                Color.white, TextAnchor.UpperCenter, 0, lineSpacing);
+        }
+
+        private static void HandleCreditsLink(Rect rect, Texture2D mask, ref bool pressed, string url)
+        {
+            if (MutinyTransitionManager.IsTransitionActive)
+            {
+                pressed = false;
+                return;
+            }
+
+            Event guiEvent = Event.current;
+            if (guiEvent == null || guiEvent.button != 0)
+                return;
+
+            if (guiEvent.type == EventType.MouseDown && CreditsLinkContains(rect, mask, guiEvent.mousePosition))
+            {
+                pressed = true;
+                guiEvent.Use();
+            }
+            else if (guiEvent.type == EventType.MouseUp && pressed)
+            {
+                pressed = false;
+                bool releasedOnLink = CreditsLinkContains(rect, mask, guiEvent.mousePosition);
+                guiEvent.Use();
+                if (releasedOnLink)
+                    Application.OpenURL(url);
+            }
+        }
+
+        private static bool CreditsLinkContains(Rect rect, Texture2D mask, Vector2 point)
+        {
+            if (!rect.Contains(point))
+                return false;
+            if (mask == null)
+                return true;
+            int x = Mathf.Clamp(Mathf.FloorToInt(point.x - rect.x), 0, mask.width - 1);
+            int y = Mathf.Clamp(Mathf.FloorToInt(rect.yMax - point.y), 0, mask.height - 1);
+            return mask.GetPixel(x, y).a > 0.5f;
         }
 
         private void DrawGameSelect()
@@ -294,7 +657,7 @@ namespace Mutiny.Presentation
             MutinyBitmapFont.DrawDangleText(new Rect(161f, 76f, 300f, 60f), "click one of the buttons below.||play against the computer or|against a friend!", Color.white, TextAnchor.UpperLeft, 0, 13);
             DrawTexture(new Rect(127f, 169.5f, 345f, 80f), m_GameTypePirates);
 
-            if (DrawOriginalButton(new Rect(63f, 251f, 200f, 24f), "1 player", m_ButtonWide, m_ButtonWideOver))
+            if (DrawOriginalButton(new Rect(63f, 263f, 200f, 24f), "1 player", m_ButtonWide, m_ButtonWideOver))
             {
                 MutinyTransitionManager.RequestTransition(() =>
                 {
@@ -303,7 +666,7 @@ namespace Mutiny.Presentation
                 }, showLoading: false);
             }
 
-            if (DrawOriginalButton(new Rect(287f, 251f, 200f, 24f), "2 player", m_ButtonWide, m_ButtonWideOver))
+            if (DrawOriginalButton(new Rect(287f, 263f, 200f, 24f), "2 players", m_ButtonWide, m_ButtonWideOver))
             {
                 MutinyTransitionManager.RequestTransition(() =>
                 {
@@ -315,7 +678,7 @@ namespace Mutiny.Presentation
                     LogPage("2P-NAV-01 two player", m_Flow.CurrentPage);
                 }, showLoading: false);
             }
-            if (DrawOriginalButton(new Rect(205f, 322f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
+            if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
             {
                 MutinyTransitionManager.RequestTransition(() =>
                 {
@@ -337,7 +700,7 @@ namespace Mutiny.Presentation
                 DrawLevelButton(level, new Rect(110f + column * 70f, 68f + row * 90f, 51f, 77f));
             }
 
-            if (DrawOriginalButton(new Rect(205f, 322f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
+            if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
             {
                 MutinyTransitionManager.RequestTransition(() =>
                 {
@@ -424,6 +787,8 @@ namespace Mutiny.Presentation
         {
             bool active = !MutinyTransitionManager.IsTransitionActive;
             bool hovered = active && rect.Contains(GetCanvasMousePosition());
+            if (hovered)
+                MutinyCursorManager.NotifyHoverInteractable();
             Texture2D texture = hovered && over != null ? over : up;
             if (texture != null)
                 GUI.DrawTexture(rect, texture, ScaleMode.StretchToFill, true);
@@ -452,7 +817,7 @@ namespace Mutiny.Presentation
 
             MutinyBitmapFont.DrawDangleText(new Rect(44f, 286f, 460f, 40f), tutorialText, Color.white, TextAnchor.UpperCenter, 0, 13);
 
-            if (DrawOriginalButton(new Rect(205f, 322f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
+            if (DrawOriginalButton(new Rect(205f, 334f, 140f, 24f), "back", m_ButtonBack, m_ButtonBackOver))
             {
                 MutinyTransitionManager.RequestTransition(() =>
                 {
@@ -462,12 +827,92 @@ namespace Mutiny.Presentation
             }
         }
 
+        private void DrawEnding()
+        {
+            // Sprite 802 places sprite 801 at (210,140), which places ship
+            // 780 at (-49,-33). Its nested clips run independently of 801.
+            DrawEndingShip();
+            if (m_HasAnimatedBackground)
+            {
+                GUI.BeginGroup(new Rect(0f, 0f, CanvasWidth, CanvasHeight));
+                DrawBackgroundLayer(6, m_BackgroundOffsets[0], 332f);
+                GUI.EndGroup();
+            }
+
+            int dialogueIndex = MutinyEndingSequence.DialogueIndexAtFrame(m_EndingFrame);
+            if (dialogueIndex >= 0)
+            {
+                MutinyEndingSequence.Dialogue dialogue = MutinyEndingSequence.Dialogues[dialogueIndex];
+                DrawTexture(dialogue.Bubble,
+                    dialogue.Symbol == 792 ? m_EndingKrakenBubble : m_EndingBubble);
+                string[] lines = dialogue.Text.Split('|');
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    float reveal = MutinyEndingSequence.LineRevealAtFrame(m_EndingFrame, dialogueIndex, i);
+                    if (reveal <= 0f)
+                        continue;
+                    float textWidth = Mathf.Min(212f, MutinyBitmapFont.MeasureDangleText(lines[i]));
+                    float lineY = dialogue.TextOrigin.y + i * 13f;
+                    GUI.BeginGroup(new Rect(dialogue.TextOrigin.x, lineY,
+                        Mathf.Max(1f, textWidth * reveal), 13f));
+                    MutinyBitmapFont.DrawSpeechText(new Rect(0f, 0f, textWidth, 13f),
+                        lines[i], TextAnchor.UpperLeft, 0, 13);
+                    GUI.EndGroup();
+                }
+            }
+
+            if (!MutinyEndingSequence.IsScoreVisible(m_EndingFrame))
+                return;
+
+            float top = MutinyEndingSequence.ScorePanelTop(m_EndingFrame);
+            DrawTexture(new Rect(101f, top, 360f, 190f), m_EndingScorePanel);
+            MutinyBitmapFont.DrawPirateText(new Rect(101f, top + 22f, 360f, 24f),
+                "congratulations", false, true, -3);
+            MutinyBitmapFont.DrawDangleText(new Rect(139f, top + 73f, 165f, 20f),
+                "final score", Color.white, TextAnchor.MiddleLeft);
+            MutinyBitmapFont.DrawDangleText(new Rect(314f, top + 73f, 95f, 20f),
+                m_EndingScore.ToString(), Color.white, TextAnchor.MiddleLeft);
+
+            Rect backRect = MutinyEndingSequence.BackButtonRect(m_EndingFrame);
+            bool canReturn = MutinyEndingSequence.CanReturnToTitle(m_EndingFrame) &&
+                !MutinyTransitionManager.IsTransitionActive;
+            bool hovered = canReturn && backRect.Contains(GetCanvasMousePosition());
+            if (hovered)
+                MutinyCursorManager.NotifyHoverInteractable();
+            DrawTexture(backRect, hovered && m_EndingBackButtonOver != null
+                ? m_EndingBackButtonOver : m_EndingBackButton);
+            MutinyBitmapFont.DrawPirateText(backRect, "back to title", hovered, true, -3);
+            if (canReturn && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+                MutinyTransitionManager.RequestTransition(() => ReturnFromEndingToTitle(), showLoading: false);
+        }
+
+        private void DrawEndingShip()
+        {
+            if (!m_HasAnimatedEndingShip)
+            {
+                DrawTexture(new Rect(161f, 107f, 228f, 287f), m_EndingShip);
+                return;
+            }
+
+            for (int i = 0; i < MutinyEndingSequence.ShipLayers.Length; i++)
+            {
+                MutinyEndingSequence.ShipLayer layer = MutinyEndingSequence.ShipLayers[i];
+                int frame = MutinyEndingSequence.ShipFrameAt(m_EndingShipTick, layer.SymbolIndex);
+                Texture2D texture = m_EndingShipParts[layer.SymbolIndex][frame - 1];
+                DrawTexture(new Rect(161f + layer.Offset.x, 107f + layer.Offset.y,
+                    texture.width, texture.height), texture);
+            }
+        }
+
         private void DrawLevelButton(int level, Rect rect)
         {
             bool isTransitioning = MutinyTransitionManager.IsTransitionActive;
             bool unlocked = MutinySaveSystem.IsLevelUnlocked(level);
             bool hovered = !isTransitioning && unlocked && rect.Contains(GetCanvasMousePosition());
             bool pressed = !isTransitioning && unlocked && IsPointerDown(rect);
+
+            if (hovered)
+                MutinyCursorManager.NotifyHoverInteractable();
 
             GUI.color = Color.white;
             DrawTexture(rect, m_LevelSlot);
@@ -511,6 +956,9 @@ namespace Mutiny.Presentation
             bool isTransitioning = MutinyTransitionManager.IsTransitionActive;
             bool hovered = !isTransitioning && rect.Contains(GetCanvasMousePosition());
             bool pressed = !isTransitioning && activateOnPress && IsPointerDown(rect);
+
+            if (hovered)
+                MutinyCursorManager.NotifyHoverInteractable();
 
             Texture2D texToDraw = (hovered && hoverTexture != null) ? hoverTexture : texture;
             DrawTexture(rect, texToDraw);
@@ -563,7 +1011,7 @@ namespace Mutiny.Presentation
 
         /// <summary>
         /// Production counterpart of QuitGameButton's level_select_1p callback.
-        /// The level root is hidden before this front-end draws the level selector.
+        /// QuitGameButton calls Controller.endGame/unloadLevel before the selector.
         /// </summary>
         public bool ReturnToSinglePlayerLevelSelect()
         {
@@ -572,11 +1020,36 @@ namespace Mutiny.Presentation
 
             if (m_LevelController == null)
                 m_LevelController = FindAnyObjectByType<MutinyLevelController>();
-            if (m_LevelController != null && m_LevelController.CurrentLevel != null)
-                m_LevelController.CurrentLevel.gameObject.SetActive(false);
+            m_LevelController?.ClearLevel();
 
             MutinyAudioManager.Instance?.PlayMusic("menu_music");
             Debug.Log("[MutinyFrontend] HUD-CORNER-04 back to menu -> level select 1p", this);
+            return true;
+        }
+
+        public bool ShowEnding(int finalScore, MutinyLevelController levelController)
+        {
+            if (levelController == null)
+                return false;
+            if (!m_Flow.ShowEnding())
+                return false;
+
+            m_LevelController = levelController;
+            m_LevelController.ClearLevel();
+            m_EndingFrame = 1;
+            m_EndingShipTick = 0;
+            m_EndingScore = finalScore;
+            m_BackgroundTickAccumulator = 0f;
+            Debug.Log($"[MutinyFrontend] END-SEQ-01 congratulations -> ending score={finalScore}", this);
+            return true;
+        }
+
+        public bool ReturnFromEndingToTitle()
+        {
+            if (!m_Flow.ReturnFromEndingToTitle())
+                return false;
+            MutinyAudioManager.Instance?.PlayMusic("menu_music");
+            Debug.Log("[MutinyFrontend] END-SEQ-04 ending -> title", this);
             return true;
         }
 
@@ -586,8 +1059,7 @@ namespace Mutiny.Presentation
                 return false;
             if (m_LevelController == null)
                 m_LevelController = FindAnyObjectByType<MutinyLevelController>();
-            if (m_LevelController != null && m_LevelController.CurrentLevel != null)
-                m_LevelController.CurrentLevel.gameObject.SetActive(false);
+            m_LevelController?.ClearLevel();
             MutinyAudioManager.Instance?.PlayMusic("menu_music");
             return true;
         }
@@ -605,6 +1077,9 @@ namespace Mutiny.Presentation
             bool musicHovered = MutinyGameHUD.IsCornerHovered(MutinyCornerControl.Music, mousePosition, m_MusicHovered);
             UpdateCornerHover(ref m_SfxHovered, sfxHovered);
             UpdateCornerHover(ref m_MusicHovered, musicHovered);
+
+            if (!MutinyTransitionManager.IsTransitionActive && (sfxHovered || musicHovered))
+                MutinyCursorManager.NotifyHoverInteractable();
 
             // Draw unhovered first, hovered last so active tooltip bubble is always on top
             if (!musicHovered)

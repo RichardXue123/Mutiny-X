@@ -339,6 +339,8 @@ namespace Mutiny.Simulation
             }
         }
 
+        internal void AdvancePlacementTickForVerification() => AdvanceSequenceTick();
+
         /// <summary>BoxWeapon.aiPerform: retain the first three source candidates.</summary>
         public bool BeginAiPlacement(Vector2[] possibilities)
         {

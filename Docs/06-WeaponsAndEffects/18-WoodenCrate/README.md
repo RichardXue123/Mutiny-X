@@ -21,7 +21,7 @@
 - 跨回合保留并作为碰撞障碍；爆炸命中帧先结算角色伤害/冲量，随后同步从 boxes 移除木箱并直接跳到 `explode` 标签第 11 帧。
 - 角色第一次按爆炸速度移动时，木箱已不再参与碰撞；角色飞行与木箱第 11～18 帧破损动画并行，木箱本身不再产生爆炸。
 - 重开/下一关时，在新关构建前同步清空旧关卡全部箱体状态。
-- 胜利、失败或平局进入结算时立即隐藏并销毁全部已放置/待放置木箱，同时同步退出共享碰撞注册。
+- 胜负 speech 和结算弹窗期间保留已放置木箱及其碰撞，确保站在箱上的角色不会因提前卸载而坠落；重开、下一关或退出当前对局时才清理。
 - AI 与火药桶共用 `BoxWeapon` 合法位置候选；至少得到 3 个位置才加入候选，胜出后按 40 tick 放置、10 tick 间隔继续，直到三箱完成，期间回合不能提前收束。
 
 来源：`BoxWeapon.as`、`WoodenCrate.as`。规则：`CRT-*`，见 [完整审计](../IMPLEMENTATION_DETAILS.md#614-wooden-crate)。
@@ -40,7 +40,8 @@
 | CRT-BOX-01 | 木箱作为共享 Solid 地形，阻挡角色跳跃和武器投掷 | `BoxWeapon.as::place`；`Solid.as::advanceMotion` | `MutinyBoxRegistry`、`MutinyPhysicsBody` | `BOX-COL-01` 驱动角色与炮弹实际物理 tick 撞箱 | 已实现；待 Unity 运行验证 |
 | CRT-BOX-02 | 箱体推出与 tile 地形组成联合约束，箱体纠正不得把角色送入地面或墙体 | 原版 `Solid.as::advanceMotion` 的逐轴扫描；Unity 侧稳定性保护见 `BOX-COL-02` | `MutinyPhysics.Step` | 已落地箱体与角色重叠的向上 tick 仍报告 Ceiling，但角色底边不穿入地面 | 已实现；自动回归已写，待 Unity 运行验证 |
 | CRT-RESET-01 | 重开/下一关时旧木箱不参与新关卡 | `TileSystem.as::readXML` line 72 | `ClearLevel()`、`BuildLevel()` | `BOX-LVL-01` 通过生产关卡构建入口验证同步清空 | 已实现；待 Unity 运行验证 |
-| BOX-END-01 | 关卡胜利、失败或平局确认时，已放置及待放置木箱在结算弹窗出现前同步失活并清空碰撞注册 | `Controller.as::endGame → unloadLevel:88-120` | `EvaluateTurnOrGameOver()` → `ClearForLevelEnd()` | 生产胜/负判定后断言木箱对象失活且共享注册为空 | 已实现；自动回归已写，待 Unity 运行验证 |
+| LVL-PERSIST-01 | 关卡胜负 speech 和结果弹窗期间，已放置木箱保持显示与碰撞，待放置木箱不因结算提前销毁 | `Controller.as::nextTurn/enterFrame` 不卸载关卡 | `MutinyTurnManager.EvaluateTurnOrGameOver()` | 生产胜/负判定后断言木箱对象仍有效且共享碰撞注册保留 | 已实现；Play Mode 回归通过 |
+| LVL-RESET-01 | 重开、下一关或退出对局卸载时才销毁旧木箱 | `Controller.as::changeLevel/endGame → unloadLevel`；`TileSystem.as::readXML` | `MutinyLevelController.ClearLevel()`、`MutinyLevelBuilder.BuildLevel()` | 生产加载下一关后断言旧箱失活、注册为空 | 已实现；Play Mode 回归通过 |
 | CRT-EXP-01 | 爆炸第 3 帧的同一次 `hit()` 中，先写角色伤害/击退，再把命中木箱从 `Controller.boxes` 移除；角色首次爆炸位移不会再撞到该箱 | `Explosion.as::hit`、`BoxWeapon.as::explode` | `MutinyExplosion.ApplyHit()` → `MutinyWoodenCrate.Explode()` | 同次生产命中后断言角色已有向上速度、注册箱数减一；再推进角色物理 tick，确认正常飞离 | 已实现；待 Unity 运行验证 |
 | CRT-EXP-02 | `explode` 标签位于 symbol 965 第 11 帧，命中时立即显示第 11 帧；第 18 帧执行 `cl.destroy()`，破损动画与角色飞行并行 | symbol 965 SWF 时间轴；frame 18 `DoAction.as` | `OriginalExplodeFirstFrame=11`、`AdvanceExplosionTimelineFrame()` | 命中当刻断言 frame 11；同步推进后角色已移动且箱为 frame 12；第 18 帧隐藏 | 已实现；待 Unity 运行验证 |
 | AI-WPN-05 | AI 至少得到 3 个合法 BoxWeapon 位置后才能选择木箱，并按原版延迟序列连续放置三箱 | `Character.as::aiThink`、`BoxWeapon.as::aiSimulation/aiPerform/aiContinue` | `MutinyAIController.EvaluateBoxWeapon()`、`BeginAiPlacement()`、`CheckAllBodiesAtRest()` | 固定种子生成候选并推进正式序列 40 tick，断言第一箱落地且回合仍等待后续箱 | 已实现；自动回归已写；待 Unity 运行验证 |

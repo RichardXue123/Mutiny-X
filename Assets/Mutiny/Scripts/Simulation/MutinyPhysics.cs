@@ -113,12 +113,12 @@ namespace Mutiny.Simulation
         }
 
         /// <summary>
-        /// Original Controller.endGame calls unloadLevel, which destroys every
-        /// Controller.boxes member. Unity keeps the battlefield behind its result
-        /// popup, so make that cleanup explicit at the GameOver boundary. Include
-        /// pending BoxWeapon chain nodes as well as registered, placed obstacles.
+        /// Original changeLevel/endGame calls unloadLevel, which destroys every
+        /// Controller.boxes member. This is a level-unload boundary, not the
+        /// GameOver/speech boundary. Include pending BoxWeapon chain nodes as
+        /// well as registered, placed obstacles.
         /// </summary>
-        public static int ClearForLevelEnd()
+        public static int ClearForLevelUnload()
         {
             var targets = new HashSet<GameObject>();
             AddBoxWeaponTargets<MutinyWoodenCrate>(targets);
@@ -133,7 +133,7 @@ namespace Mutiny.Simulation
 
             // Collision state must disappear synchronously. Object destruction is
             // end-of-frame in Play Mode, so disabling first also removes visuals,
-            // updates and input eligibility before OnGameOver observers run.
+            // updates and input eligibility before the next level is built.
             Bodies.Clear();
             foreach (GameObject target in targets)
             {

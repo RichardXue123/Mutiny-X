@@ -20,6 +20,10 @@ namespace Mutiny.Levels
         public const int CharacterSortingOrder = 20;
         public const int CharacterSortingStride = 8;
         public const int CharacterOverlaySortingOffset = 1;
+        public const int CharacterHealthBarSortingOrder = 210;
+        public const int CharacterHealthBarSortingStride = 2;
+        public const int TidalWaveSortingOrder = 250;
+        public const int SeagullSortingOrder = 260;
         public const int WaterSortingOrder = 300;
         // Solid.splashCheck shows the splash, then hides and re-shows Water in
         // the same Flash waterLayer. Water therefore ends up above the splash.
@@ -28,6 +32,11 @@ namespace Mutiny.Levels
         public static int GetCharacterSortingOrder(int originalCreationIndex)
         {
             return CharacterSortingOrder + Mathf.Max(0, originalCreationIndex) * CharacterSortingStride;
+        }
+
+        public static int GetCharacterHealthBarSortingOrder(int originalCreationIndex)
+        {
+            return CharacterHealthBarSortingOrder + Mathf.Max(0, originalCreationIndex) * CharacterHealthBarSortingStride;
         }
 
         public static GameObject BuildLevel(MutinyLevelData levelData, Transform parent = null, int levelIndex = 1,
@@ -39,8 +48,8 @@ namespace Mutiny.Levels
             // TileSystem.readXML resets Controller.boxes before constructing every
             // level. Do this synchronously because the prior Unity root is normally
             // destroyed at end-of-frame during restart/next-level transitions.
-            MutinyBoxRegistry.ResetForLevel();
-            MutinyMine.ClearForLevelEnd();
+            MutinyBoxRegistry.ClearForLevelUnload();
+            MutinyMine.ClearForLevelUnload();
 
             string rootName = string.IsNullOrEmpty(levelData.Name) || levelData.Name == "undefined"
                 ? "MutinyLevel"

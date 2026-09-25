@@ -62,6 +62,7 @@ namespace Mutiny.Verification
             VerifyCornerLevelControls(result);
             VerifyMutedMusicToggleStartsRequestedTrack(result);
             VerifyGameEndPopup(result);
+            VerifyEndingSequence(result);
             VerifyWeaponReadyAndCancel(result);
             VerifyProductionActionMethods(result);
             VerifyWeaponVelocityLimits(result);
@@ -103,6 +104,27 @@ namespace Mutiny.Verification
             var result = new MutinyLevel1VerificationResult();
             VerifyCannonSmokeTrail(result);
             VerifyCannonImpactEffects(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunEndingSequence()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyEndingSequence(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunLevelLifecycle()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyGameEndPopup(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunAnchorAnimation()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyAnchor(result);
             return result;
         }
 
@@ -295,6 +317,19 @@ namespace Mutiny.Verification
                     "VIS-SMOKE-01 equipped rum bottle emits smoke before firing");
                 result.Assert(WeaponTickCreatesSmoke<MutinyParachuteBomb>(false),
                     "VIS-SMOKE-01 equipped closed parachute bomb emits smoke before firing");
+
+                result.Assert(WeaponSmokeFollowsVisibleTrajectory<MutinyCherryBomb>(true) &&
+                              WeaponSmokeFollowsVisibleTrajectory<MutinyCherryBomb>(false),
+                    "VIS-SMOKE-02 cherry bomb flight and ready smoke starts at its visible pose, then trails behind");
+                result.Assert(WeaponSmokeFollowsVisibleTrajectory<MutinyDynamite>(true) &&
+                              WeaponSmokeFollowsVisibleTrajectory<MutinyDynamite>(false),
+                    "VIS-SMOKE-02 dynamite flight and ready smoke starts at its visible pose, then trails behind");
+                result.Assert(WeaponSmokeFollowsVisibleTrajectory<MutinyRumBottle>(true) &&
+                              WeaponSmokeFollowsVisibleTrajectory<MutinyRumBottle>(false),
+                    "VIS-SMOKE-02 rum bottle flight and ready smoke starts at its visible pose, then trails behind");
+                result.Assert(WeaponSmokeFollowsVisibleTrajectory<MutinyParachuteBomb>(true) &&
+                              WeaponSmokeFollowsVisibleTrajectory<MutinyParachuteBomb>(false),
+                    "VIS-SMOKE-02 closed parachute bomb flight and ready smoke starts at its visible pose, then trails behind");
             }
             finally
             {
@@ -513,8 +548,42 @@ namespace Mutiny.Verification
                 MutinyCameraController.CalculateMouseEdgeScroll(
                     new Vector2(100f, 540f), new Rect(217.5f, 0f, 1485f, 1080f),
                     1920f, 1080f, 108f, ref left, ref rightEdge, ref down, ref up);
+                result.Assert(left && !rightEdge && !down && !up,
+                    "CAM-EDGE-05 pointer in the left pillarbox continues scrolling left and activates the arrow");
+
+                left = false; rightEdge = false; down = false; up = false;
+                MutinyCameraController.CalculateMouseEdgeScroll(
+                    new Vector2(1820f, 540f), new Rect(217.5f, 0f, 1485f, 1080f),
+                    1920f, 1080f, 108f, ref left, ref rightEdge, ref down, ref up);
+                result.Assert(!left && rightEdge && !down && !up,
+                    "CAM-EDGE-05 pointer in the right pillarbox continues scrolling right");
+
+                Rect letterboxedViewport = new Rect(0f, 12f, 1024f, 744f);
+                left = false; rightEdge = false; down = false; up = false;
+                MutinyCameraController.CalculateMouseEdgeScroll(
+                    new Vector2(512f, 762f), letterboxedViewport,
+                    1024f, 768f, 40f, ref left, ref rightEdge, ref down, ref up);
+                bool upperBarScrollsUp = !left && !rightEdge && !down && up;
+                left = false; rightEdge = false; down = false; up = false;
+                MutinyCameraController.CalculateMouseEdgeScroll(
+                    new Vector2(512f, 6f), letterboxedViewport,
+                    1024f, 768f, 40f, ref left, ref rightEdge, ref down, ref up);
+                result.Assert(upperBarScrollsUp && !left && !rightEdge && down && !up,
+                    "CAM-EDGE-05 upper and lower letterbox bars scroll toward their corresponding edges");
+
+                left = false; rightEdge = false; down = false; up = false;
+                MutinyCameraController.CalculateMouseEdgeScroll(
+                    new Vector2(100f, 1030f), new Rect(200f, 50f, 1520f, 980f),
+                    1920f, 1080f, 40f, ref left, ref rightEdge, ref down, ref up);
+                result.Assert(left && !rightEdge && !down && up,
+                    "CAM-EDGE-05 a black corner combines horizontal and vertical scroll directions");
+
+                left = false; rightEdge = false; down = false; up = false;
+                MutinyCameraController.CalculateMouseEdgeScroll(
+                    new Vector2(-10f, 540f), new Rect(217.5f, 0f, 1485f, 1080f),
+                    1920f, 1080f, 108f, ref left, ref rightEdge, ref down, ref up);
                 result.Assert(!left && !rightEdge && !down && !up,
-                    "CUR-SCROLL-01 pointer in a letterbox bar neither scrolls nor activates the arrow");
+                    "CAM-EDGE-05 pointer outside the game window never scrolls");
 
                 Rect viewport = new Rect(217.5f, 0f, 1485f, 1080f);
                 Vector2 right = MutinyCameraController.MobileScrollArrowPosition(
@@ -1608,6 +1677,14 @@ namespace Mutiny.Verification
                               manager.CurrentPhase == TurnPhase.ActionExecuting,
                     "WPN-15-INT-01/02 production selection consumes once and drops at raw click x with forced y=-200");
 
+                Sprite fallingSprite = anchor.SpriteRenderer.sprite;
+                anchor.AdvanceOriginalTickForVerification();
+                result.Assert(anchor.CurrentAnimationFrame == 1 && anchor.CurrentImpactFrame == 0 &&
+                              !anchor.AreImpactParticlesVisible &&
+                              anchor.SpriteRenderer.sprite == fallingSprite &&
+                              Mathf.Approximately(anchor.PhysicsBody.State.Y, -160f),
+                    "ANC-ANI-02 falling anchor retains stopped main frame 1 with no impact children");
+
                 string[,] terrain = new string[6, 12];
                 for (int r = 0; r < 6; r++)
                     for (int c = 0; c < 12; c++)
@@ -1632,8 +1709,41 @@ namespace Mutiny.Verification
                               Mathf.Approximately(verticalBoundaryTarget.Health, 100f),
                     "WPN-15-EFF-01/02 production floor contact keeps the 48/96/0 Solid and applies 60 HP only inside strict anchor bounds");
 
-                for (int tick = 0; tick < 29; tick++)
+                anchor.AdvanceOriginalTickForVerification();
+                bool secondFrameHasNoParticles = anchor.CurrentAnimationFrame == 2 &&
+                    anchor.CurrentImpactFrame == 0 && !anchor.AreImpactParticlesVisible;
+                anchor.AdvanceOriginalTickForVerification();
+                Transform leftImpact = anchor.transform.Find("AnchorImpact_Left");
+                Transform rightImpact = anchor.transform.Find("AnchorImpact_Right");
+                SpriteRenderer leftRenderer = leftImpact != null ? leftImpact.GetComponent<SpriteRenderer>() : null;
+                SpriteRenderer rightRenderer = rightImpact != null ? rightImpact.GetComponent<SpriteRenderer>() : null;
+                bool thirdFrameStartsMirroredChildren = anchor.CurrentAnimationFrame == 3 &&
+                    anchor.CurrentImpactFrame == 1 && anchor.AreImpactParticlesVisible &&
+                    anchor.SpriteRenderer.sprite == fallingSprite &&
+                    leftRenderer != null && rightRenderer != null &&
+                    leftRenderer.flipX && !rightRenderer.flipX &&
+                    Mathf.Approximately(leftImpact.localPosition.x, -25f / MutinyPhysics.PixelsPerUnit) &&
+                    Mathf.Approximately(rightImpact.localPosition.x, 25f / MutinyPhysics.PixelsPerUnit) &&
+                    Mathf.Approximately(leftRenderer.color.a, 166f / 256f);
+                Sprite firstImpactSprite = leftRenderer != null ? leftRenderer.sprite : null;
+                for (int tick = 0; tick < 9; tick++)
                     anchor.AdvanceOriginalTickForVerification();
+                bool childContinuesAfterMainStops = anchor.CurrentAnimationFrame == 12 &&
+                    anchor.CurrentImpactFrame == 10 && anchor.AreImpactParticlesVisible &&
+                    leftRenderer != null && leftRenderer.sprite != firstImpactSprite;
+                for (int tick = 0; tick < 6; tick++)
+                    anchor.AdvanceOriginalTickForVerification();
+                bool childStillVisibleAtSixteen = anchor.CurrentAnimationFrame == 12 &&
+                    anchor.CurrentImpactFrame == 16 && anchor.AreImpactParticlesVisible;
+                anchor.AdvanceOriginalTickForVerification();
+                bool childRemovedAtSeventeen = anchor.CurrentImpactFrame == 17 &&
+                    !anchor.AreImpactParticlesVisible;
+                for (int tick = 0; tick < 11; tick++)
+                    anchor.AdvanceOriginalTickForVerification();
+                result.Assert(secondFrameHasNoParticles && thirdFrameStartsMirroredChildren &&
+                              childContinuesAfterMainStops && childStillVisibleAtSixteen &&
+                              childRemovedAtSeventeen,
+                    "ANC-ANI-02 production anchor spawns mirrored child timelines at main frame 3 and removes their contents at child frame 17");
                 result.Assert(anchor.HoldTicksRemaining == 0 && anchor.FadeTicksRemaining == MutinyAnchor.FadeTicks &&
                               anchor.CurrentAnimationFrame == 12,
                     "WPN-15-ANI-01 production anchor reaches the stopped twelfth frame during the original 30-tick hold");
@@ -1717,13 +1827,26 @@ namespace Mutiny.Verification
                     secondBody.sortingOrder - firstBody.sortingOrder == MutinyLevelBuilder.CharacterSortingStride;
                 bool firstOverlayStaysInsideItsHolderSlot = firstBody != null && secondBody != null &&
                     firstRenderers.Length > 1;
-                for (int i = 0; i < firstRenderers.Length && firstOverlayStaysInsideItsHolderSlot; i++)
+                bool healthBarLayeringValid = false;
+                for (int i = 0; i < firstRenderers.Length; i++)
                 {
                     SpriteRenderer renderer = firstRenderers[i];
                     if (renderer != null && renderer != firstBody)
                     {
-                        firstOverlayStaysInsideItsHolderSlot &= renderer.sortingOrder > firstBody.sortingOrder &&
-                                                            renderer.sortingOrder < secondBody.sortingOrder;
+                        if (renderer.gameObject.name == "OriginalFrame" || renderer.gameObject.name == "DiscreteFill")
+                        {
+                            healthBarLayeringValid =
+                                renderer.sortingOrder > MutinyWeapon.WeaponSortingOrder &&
+                                renderer.sortingOrder > MutinyLevelBuilder.TerrainSortingOrder &&
+                                renderer.sortingOrder < MutinyLevelBuilder.TidalWaveSortingOrder &&
+                                renderer.sortingOrder < MutinyLevelBuilder.SeagullSortingOrder;
+                        }
+                        else
+                        {
+                            firstOverlayStaysInsideItsHolderSlot &= renderer.sortingOrder > firstBody.sortingOrder &&
+                                                                renderer.sortingOrder < secondBody.sortingOrder;
+                        }
+
                     }
                 }
 
@@ -1734,9 +1857,17 @@ namespace Mutiny.Verification
                     MutinyWeapon.WeaponSortingOrder > maxInitialCharacterOrder &&
                     MutinyExplosion.ExplosionSortingOrder > MutinyWeapon.WeaponSortingOrder &&
                     MutinyLevelBuilder.WaterSortingOrder > MutinyExplosion.ExplosionSortingOrder;
+                bool tidalWaveAndSeagullLayeringValid =
+                    MutinyLevelBuilder.TidalWaveSortingOrder > MutinyWeapon.WeaponSortingOrder &&
+                    MutinyLevelBuilder.TidalWaveSortingOrder > MutinyLevelBuilder.TerrainSortingOrder &&
+                    MutinyLevelBuilder.SeagullSortingOrder > MutinyWeapon.WeaponSortingOrder &&
+                    MutinyLevelBuilder.SeagullSortingOrder > MutinyLevelBuilder.TerrainSortingOrder &&
+                    MutinyLevelBuilder.WaterSortingOrder > MutinyLevelBuilder.TidalWaveSortingOrder &&
+                    MutinyLevelBuilder.WaterSortingOrder > MutinyLevelBuilder.SeagullSortingOrder;
 
                 result.Assert(firstSlotMatchesOriginalCreationOrder && secondSlotIsStableAndAboveFirst &&
-                              firstOverlayStaysInsideItsHolderSlot && laterCharacterLayerContentStaysAboveInitialCharacters,
+                              firstOverlayStaysInsideItsHolderSlot && healthBarLayeringValid &&
+                              tidalWaveAndSeagullLayeringValid && laterCharacterLayerContentStaysAboveInitialCharacters,
                     "CHAR-LAYER-01/02/03 production level assigns unique XML-order character holder slots, keeps overlay inside each slot, and layers dynamic content/water above every initial character");
             }
             finally
@@ -2308,6 +2439,32 @@ namespace Mutiny.Verification
             flow.PressHelpBack();
             result.Assert(flow.CurrentPage == MutinyFrontendPage.Title,
                 "FRONT-HELP-02 PressHelpBack returns to the title page");
+
+            flow.PressCreditsBack();
+            result.Assert(flow.CurrentPage == MutinyFrontendPage.Title,
+                "FRONT-CRED-03 Credits Back cannot change a non-Credits page");
+            flow.PressCredits();
+            result.Assert(flow.CurrentPage == MutinyFrontendPage.Credits,
+                "FRONT-CRED-01 production Credits route opens from title");
+            flow.PressPlay();
+            result.Assert(flow.CurrentPage == MutinyFrontendPage.Credits,
+                "FRONT-CRED-01 Play cannot bypass the Credits page");
+            flow.PressCreditsBack();
+            result.Assert(flow.CurrentPage == MutinyFrontendPage.Title,
+                "FRONT-CRED-03 production Back route returns from Credits to title");
+
+            Texture2D creditsPanel = Resources.Load<Texture2D>("UI/Frontend/credits_panel");
+            Texture2D creditsLogo = Resources.Load<Texture2D>("UI/Frontend/credits_nitrome_logo");
+            Texture2D creditsHit = Resources.Load<Texture2D>("UI/Frontend/credits_nitrome_hit");
+            Texture2D creditsCopyright = Resources.Load<Texture2D>("UI/Frontend/credits_copyright");
+            Texture2D creditsCopyrightHit = Resources.Load<Texture2D>("UI/Frontend/credits_copyright_hit");
+            result.Assert(creditsPanel != null && creditsPanel.width == 462 && creditsPanel.height == 352 &&
+                          creditsLogo != null && creditsLogo.width == 99 && creditsLogo.height == 74 &&
+                          creditsHit != null && creditsHit.isReadable && creditsHit.width == 99 && creditsHit.height == 74 &&
+                          creditsCopyright != null && creditsCopyright.width == 141 && creditsCopyright.height == 11 &&
+                          creditsCopyrightHit != null && creditsCopyrightHit.isReadable &&
+                          creditsCopyrightHit.width == 141 && creditsCopyrightHit.height == 11,
+                "FRONT-CRED-02 original Credits panel, Nitrome and copyright hit masks load at SWF dimensions");
 
             bool allResourcesPresent =
                 Resources.Load<Texture2D>("UI/Frontend/background") != null &&
@@ -3378,6 +3535,7 @@ namespace Mutiny.Verification
 
             result.Assert(
                 RectApproximately(MutinyGameHUD.ResolveOriginalPopupPanelRect(), new Rect(100f, 70f, 350f, 260f)) &&
+                RectApproximately(MutinyGameHUD.ResolveOriginalPopupSubmitScoreButtonRect(), new Rect(135f, 209f, 280f, 24f)) &&
                 RectApproximately(MutinyGameHUD.ResolveOriginalPopupPrimaryButtonRect(), new Rect(135f, 245f, 280f, 24f)) &&
                 RectApproximately(MutinyGameHUD.ResolveOriginalPopupSecondaryButtonRect(), new Rect(135f, 280f, 280f, 24f)),
                 "END-POP-T07 popup panel and button bounds match DefineShape_326/328 and the 900/1600-twip timeline placements");
@@ -3391,8 +3549,12 @@ namespace Mutiny.Verification
             GameObject hudObject = null;
             GameObject victoryCrateObject = null;
             GameObject victoryBarrelObject = null;
+            GameObject victoryMineObject = null;
             GameObject defeatCrateObject = null;
             GameObject defeatBarrelObject = null;
+            GameObject defeatMineObject = null;
+            GameObject unloadCrateObject = null;
+            GameObject unloadMineObject = null;
             try
             {
                 controllerObject = new GameObject("GameEndVerification_LevelController");
@@ -3419,10 +3581,31 @@ namespace Mutiny.Verification
                     MutinyWeaponFactory.SpawnWeapon("woodenCrate", player) as MutinyWoodenCrate;
                 MutinyGunpowderBarrel victoryBarrel =
                     MutinyWeaponFactory.SpawnWeapon("gunpowderBarrel", player) as MutinyGunpowderBarrel;
+                MutinyMine victoryMine =
+                    MutinyWeaponFactory.SpawnWeapon("mine", player) as MutinyMine;
                 victoryCrateObject = victoryCrate != null ? victoryCrate.gameObject : null;
                 victoryBarrelObject = victoryBarrel != null ? victoryBarrel.gameObject : null;
+                victoryMineObject = victoryMine != null ? victoryMine.gameObject : null;
+                string[,] boxTerrain = new string[6, 12];
+                for (int row = 0; row < 6; row++)
+                    for (int column = 0; column < 12; column++)
+                        boxTerrain[row, column] = row == 4 ? "ground" : "-";
                 if (victoryCrate != null)
-                    MutinyBoxRegistry.Register(victoryCrate.PhysicsBody);
+                    victoryCrate.PhysicsBody.SetTerrain(boxTerrain, 12, 6);
+                bool victoryCratePlaced = victoryCrate != null &&
+                    victoryCrate.TryPlaceAt(new Vector2(64f, 96f)) &&
+                    victoryCrate.TryPlaceAt(new Vector2(128f, 96f)) &&
+                    victoryCrate.TryPlaceAt(new Vector2(192f, 96f));
+                // BoxWeapon parents complete on their next 25 Hz advance after
+                // the final child finishes; do not leave a staged chain blocking
+                // the genuine GameOver path in this synchronous verification.
+                victoryCrate?.NextBox?.AdvanceAiPlacementTickForVerification();
+                victoryCrate?.AdvanceAiPlacementTickForVerification();
+                if (victoryMine != null)
+                {
+                    victoryMine.Fire(Vector2.zero);
+                    victoryMine.AdvanceOriginalTickForVerification();
+                }
 
                 // Damage uses the real death path.  Make the display immediately
                 // settled so the production turn manager reaches its normal
@@ -3439,19 +3622,22 @@ namespace Mutiny.Verification
                 bool synchronized = hud.SynchronizeGameEndPopup();
 
                 int expectedLevelScore = MutinyLevelController.CalculateOriginalSinglePlayerLevelScore(playerTeam, 2);
-                bool victoryClearedBoxes = MutinyBoxRegistry.Count == 0 &&
-                    (victoryCrateObject == null || !victoryCrateObject.activeSelf) &&
-                    (victoryBarrelObject == null || !victoryBarrelObject.activeSelf);
+                bool victoryObjectsPersist = victoryCratePlaced && victoryMine != null && victoryMine.IsStored &&
+                    MutinyBoxRegistry.Count == 3 &&
+                    MutinyBoxRegistry.GetObstacles().Count == 3 &&
+                    victoryCrateObject != null && victoryCrateObject.activeSelf &&
+                    victoryBarrelObject != null && victoryBarrelObject.activeSelf &&
+                    victoryMineObject != null && victoryMineObject.activeSelf;
                 result.Assert(manager.CurrentPhase == TurnPhase.GameOver &&
                               manager.GameResult == GameOverResult.Team1Wins &&
                               controller.LastCompletedLevelScore == expectedLevelScore &&
                               controller.SinglePlayerScore == expectedLevelScore &&
                               synchronized && hud.GameEndPopupKind == MutinyGameEndPopupKind.LevelComplete &&
-                              victoryClearedBoxes,
-                    "END-POP-T01/BOX-END-01 production victory opens level-complete and clears placed plus pending box weapons before popup observers run");
+                              victoryObjectsPersist,
+                    $"END-POP-T01/LVL-PERSIST-01 victory speech and popup retain placed crate collision, pending barrel, and mine (placed={victoryCratePlaced}, stored={victoryMine?.IsStored}, boxes={MutinyBoxRegistry.Count}, phase={manager.CurrentPhase})");
 
                 // Re-enter the same production state machine with the opposite
-                // team defeated so BOX-END-01 covers both victory and failure.
+                // team defeated so LVL-PERSIST-01 covers both victory and failure.
                 player.Health = player.MaxHealth;
                 player.ShownHealth = player.Health;
                 player.IsAlive = true;
@@ -3465,25 +3651,69 @@ namespace Mutiny.Verification
                     MutinyWeaponFactory.SpawnWeapon("woodenCrate", player) as MutinyWoodenCrate;
                 MutinyGunpowderBarrel defeatBarrel =
                     MutinyWeaponFactory.SpawnWeapon("gunpowderBarrel", player) as MutinyGunpowderBarrel;
+                MutinyMine defeatMine =
+                    MutinyWeaponFactory.SpawnWeapon("mine", player) as MutinyMine;
                 defeatCrateObject = defeatCrate != null ? defeatCrate.gameObject : null;
                 defeatBarrelObject = defeatBarrel != null ? defeatBarrel.gameObject : null;
+                defeatMineObject = defeatMine != null ? defeatMine.gameObject : null;
                 if (defeatBarrel != null)
-                    MutinyBoxRegistry.Register(defeatBarrel.PhysicsBody);
+                    defeatBarrel.PhysicsBody.SetTerrain(boxTerrain, 12, 6);
+                bool defeatBarrelPlaced = defeatBarrel != null &&
+                    defeatBarrel.TryPlaceAt(new Vector2(256f, 96f)) &&
+                    defeatBarrel.TryPlaceAt(new Vector2(320f, 96f));
+                defeatBarrel?.AdvancePlacementTickForVerification();
+                if (defeatMine != null)
+                {
+                    defeatMine.Fire(Vector2.zero);
+                    defeatMine.AdvanceOriginalTickForVerification();
+                }
                 player.TakeDamage(player.MaxHealth);
                 player.ShownHealth = player.Health;
                 for (int tick = 0; tick <= MutinyTurnManager.InactivitySettlingThreshold; tick++)
                     manager.AdvanceSimulationTick();
-                bool defeatClearedBoxes = MutinyBoxRegistry.Count == 0 &&
-                    (defeatCrateObject == null || !defeatCrateObject.activeSelf) &&
-                    (defeatBarrelObject == null || !defeatBarrelObject.activeSelf);
+                bool defeatObjectsPersist = defeatBarrelPlaced && defeatMine != null && defeatMine.IsStored &&
+                    MutinyBoxRegistry.Count == 5 &&
+                    MutinyBoxRegistry.GetObstacles().Count == 5 &&
+                    defeatCrateObject != null && defeatCrateObject.activeSelf &&
+                    defeatBarrelObject != null && defeatBarrelObject.activeSelf &&
+                    defeatMineObject != null && defeatMineObject.activeSelf;
                 result.Assert(manager.CurrentPhase == TurnPhase.GameOver &&
                               manager.GameResult == GameOverResult.Team2Wins &&
-                              defeatClearedBoxes,
-                    "BOX-END-01 production failure path clears WoodenCrate and GunpowderBarrel objects plus shared collision state");
+                              defeatObjectsPersist,
+                    $"LVL-PERSIST-01 production failure path retains both box types, mine, and placed collision state (placed={defeatBarrelPlaced}, stored={defeatMine?.IsStored}, boxes={MutinyBoxRegistry.Count}, phase={manager.CurrentPhase})");
+
+                bool nextLevelBuilt = controller.TryLoadLevel(1);
+                bool oldObjectsCleared = MutinyBoxRegistry.Count == 0 &&
+                    (victoryCrateObject == null || !victoryCrateObject.activeSelf) &&
+                    (victoryBarrelObject == null || !victoryBarrelObject.activeSelf) &&
+                    (victoryMineObject == null || !victoryMineObject.activeSelf) &&
+                    (defeatCrateObject == null || !defeatCrateObject.activeSelf) &&
+                    (defeatBarrelObject == null || !defeatBarrelObject.activeSelf) &&
+                    (defeatMineObject == null || !defeatMineObject.activeSelf);
+                result.Assert(nextLevelBuilt && oldObjectsCleared,
+                    "LVL-RESET-01 production next-level initialization clears prior boxes and mines, not the GameOver speech");
+
+                MutinyWoodenCrate unloadCrate =
+                    MutinyWeaponFactory.SpawnWeapon("woodenCrate", player) as MutinyWoodenCrate;
+                MutinyMine unloadMine =
+                    MutinyWeaponFactory.SpawnWeapon("mine", player) as MutinyMine;
+                unloadCrateObject = unloadCrate != null ? unloadCrate.gameObject : null;
+                unloadMineObject = unloadMine != null ? unloadMine.gameObject : null;
+                if (unloadCrate != null)
+                    MutinyBoxRegistry.Register(unloadCrate.PhysicsBody);
+                controller.ClearLevel();
+                result.Assert(controller.CurrentLevel == null && MutinyBoxRegistry.Count == 0 &&
+                              (unloadCrateObject == null || !unloadCrateObject.activeSelf) &&
+                              (unloadMineObject == null || !unloadMineObject.activeSelf),
+                    "LVL-RESET-01 production explicit level unload removes prior box collision and mine");
 
             }
             finally
             {
+                DestroyNow(unloadMineObject);
+                DestroyNow(unloadCrateObject);
+                DestroyNow(defeatMineObject);
+                DestroyNow(victoryMineObject);
                 DestroyNow(defeatBarrelObject);
                 DestroyNow(defeatCrateObject);
                 DestroyNow(victoryBarrelObject);
@@ -3495,6 +3725,208 @@ namespace Mutiny.Verification
                 DestroyNow(team2Object);
                 DestroyNow(team1Object);
                 DestroyNow(controllerObject);
+            }
+        }
+
+        private static void VerifyEndingSequence(MutinyLevel1VerificationResult result)
+        {
+            AssertTexture(result, "UI/Ending/ship", 228, 287);
+            AssertTexture(result, "UI/Ending/bubble", 244, 132);
+            AssertTexture(result, "UI/Ending/bubble_kraken", 244, 132);
+            AssertTexture(result, "UI/Ending/score_panel", 360, 190);
+            AssertTexture(result, "UI/Ending/back_button", 280, 24);
+
+            int[] shipWidths = { 21, 228, 34, 32, 32, 33, 33, 25, 28 };
+            int[] shipHeights = { 26, 255, 32, 32, 32, 32, 32, 25, 32 };
+            bool shipResources = MutinyEndingSequence.ShipSymbols.Length == shipWidths.Length &&
+                MutinyEndingSequence.ShipLayers.Length == 28;
+            for (int symbolIndex = 0; symbolIndex < MutinyEndingSequence.ShipSymbols.Length; symbolIndex++)
+            {
+                MutinyEndingSequence.ShipSymbol symbol = MutinyEndingSequence.ShipSymbols[symbolIndex];
+                for (int frame = 1; frame <= symbol.FrameCount; frame++)
+                {
+                    Texture2D texture = Resources.Load<Texture2D>(
+                        $"UI/Ending/ShipParts/{symbol.Id}_{frame:D2}");
+                    shipResources &= texture != null && texture.width == shipWidths[symbolIndex] &&
+                        texture.height == shipHeights[symbolIndex];
+                }
+            }
+            result.Assert(shipResources,
+                "END-SEQ-05 all 91 original ship parts load with their source dimensions and depth layout");
+
+            bool nestedFrames = MutinyEndingSequence.ShipFrameAt(0, 7) == 1 &&
+                MutinyEndingSequence.ShipFrameAt(3, 7) == 4 &&
+                MutinyEndingSequence.ShipFrameAt(6, 7) == 7 &&
+                MutinyEndingSequence.ShipFrameAt(9, 7) == 10 &&
+                MutinyEndingSequence.ShipFrameAt(12, 7) == 1 &&
+                MutinyEndingSequence.ShipFrameAt(11, 8) == 12 &&
+                MutinyEndingSequence.ShipFrameAt(12, 8) == 1 &&
+                MutinyEndingSequence.ShipFrameAt(15, 3) == 16 &&
+                MutinyEndingSequence.ShipFrameAt(16, 3) == 1 &&
+                MutinyEndingSequence.ShipLayers[12].SymbolIndex == 7 &&
+                MutinyEndingSequence.ShipLayers[16].SymbolIndex == 8;
+            result.Assert(nestedFrames,
+                "END-SEQ-05 character 12-frame and ripple 16-frame child timelines loop independently");
+
+            bool timing = MutinyEndingSequence.FrameAtElapsed(0f) == 1 &&
+                MutinyEndingSequence.FrameAtElapsed(39f / 25f) == 40 &&
+                MutinyEndingSequence.FrameAtElapsed(100f) == 774 &&
+                MutinyEndingSequence.DialogueIndexAtFrame(39) == -1 &&
+                MutinyEndingSequence.DialogueIndexAtFrame(40) == 0 &&
+                MutinyEndingSequence.DialogueIndexAtFrame(301) == -1 &&
+                MutinyEndingSequence.DialogueIndexAtFrame(310) == 1 &&
+                MutinyEndingSequence.DialogueIndexAtFrame(425) == 2 &&
+                MutinyEndingSequence.DialogueIndexAtFrame(535) == 3 &&
+                MutinyEndingSequence.DialogueIndexAtFrame(645) == 4 &&
+                MutinyEndingSequence.DialogueIndexAtFrame(747) == -1 &&
+                MutinyEndingSequence.LineRevealAtFrame(40, 0, 0) > 0f &&
+                MutinyEndingSequence.LineRevealAtFrame(40, 0, 1) == 0f &&
+                MutinyEndingSequence.LineRevealAtFrame(110, 0, 6) == 1f &&
+                !MutinyEndingSequence.IsScoreVisible(753) &&
+                MutinyEndingSequence.IsScoreVisible(754) &&
+                !MutinyEndingSequence.CanReturnToTitle(753) &&
+                MutinyEndingSequence.CanReturnToTitle(754) &&
+                MutinyEndingSequence.CanReturnToTitle(770) &&
+                Mathf.Approximately(MutinyEndingSequence.ScorePanelTop(770), 91f) &&
+                RectApproximately(MutinyEndingSequence.BackButtonRect(770),
+                    new Rect(141f, 236f, 280f, 24f));
+            result.Assert(timing,
+                "END-SEQ-02/03/04 production timeline switches all five lines, reveals text, lands the score panel and stops at frame 774");
+
+            GameObject controllerObject = null;
+            GameObject managerObject = null;
+            GameObject firstTeamObject = null;
+            GameObject secondTeamObject = null;
+            GameObject firstObject = null;
+            GameObject secondObject = null;
+            GameObject hudObject = null;
+            GameObject frontendObject = null;
+            int savedUnlock = Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel;
+            try
+            {
+                controllerObject = new GameObject("EndingVerification_LevelController");
+                MutinyLevelController controller = controllerObject.AddComponent<MutinyLevelController>();
+                controller.ConfigureSession(MutinyGameMode.SinglePlayer);
+                controller.CurrentLevelIndex = 15;
+                firstTeamObject = new GameObject("EndingVerification_PlayerTeam");
+                secondTeamObject = new GameObject("EndingVerification_EnemyTeam");
+                MutinyTeam firstTeam = firstTeamObject.AddComponent<MutinyTeam>();
+                MutinyTeam secondTeam = secondTeamObject.AddComponent<MutinyTeam>();
+                firstTeam.TeamNumber = 1;
+                secondTeam.TeamNumber = 2;
+                secondTeam.IsAiControlled = true;
+                firstObject = new GameObject("EndingVerification_Player");
+                secondObject = new GameObject("EndingVerification_Enemy");
+                MutinyCharacter first = firstObject.AddComponent<MutinyCharacter>();
+                MutinyCharacter second = secondObject.AddComponent<MutinyCharacter>();
+                firstTeam.RegisterCharacter(first);
+                secondTeam.RegisterCharacter(second);
+                managerObject = new GameObject("EndingVerification_TurnManager");
+                MutinyTurnManager manager = managerObject.AddComponent<MutinyTurnManager>();
+                manager.Initialize(firstTeam, secondTeam);
+                frontendObject = new GameObject("EndingVerification_Frontend");
+                MutinyFrontendController frontend = frontendObject.AddComponent<MutinyFrontendController>();
+                frontend.Initialize(controller);
+                var flowField = typeof(MutinyFrontendController).GetField("m_Flow",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                MutinyFrontendFlow flow = flowField != null
+                    ? flowField.GetValue(frontend) as MutinyFrontendFlow : null;
+                if (flow != null)
+                {
+                    flow.PressPlay();
+                    flow.PressOnePlayer();
+                    flow.TrySelectLevel(15, level => level == 15);
+                }
+                hudObject = new GameObject("EndingVerification_Hud");
+                MutinyGameHUD hud = hudObject.AddComponent<MutinyGameHUD>();
+                hud.TurnManager = manager;
+                hud.LevelController = controller;
+                hud.FrontendController = frontend;
+
+                second.TakeDamage(second.MaxHealth);
+                second.ShownHealth = second.Health;
+                for (int tick = 0; tick <= MutinyTurnManager.InactivitySettlingThreshold; tick++)
+                    manager.AdvanceSimulationTick();
+                bool opened = hud.SynchronizeGameEndPopup();
+                int finalScore = controller.SinglePlayerScore;
+                bool entered = hud.CompleteCampaignAndShowEnding();
+                bool unloaded = controller.CurrentLevel == null;
+                for (int tick = 1; tick < MutinyEndingSequence.FrameCount; tick++)
+                    frontend.AdvanceEndingTick();
+                int stoppedShipTick = frontend.CurrentEndingShipTick;
+                int stoppedCharacterFrame = MutinyEndingSequence.ShipFrameAt(stoppedShipTick, 7);
+                frontend.AdvanceEndingTick();
+                bool childrenContinueAfterStop = frontend.CurrentEndingFrame == 774 &&
+                    frontend.CurrentEndingShipTick == stoppedShipTick + 1 &&
+                    MutinyEndingSequence.ShipFrameAt(frontend.CurrentEndingShipTick, 7) !=
+                    stoppedCharacterFrame;
+                bool returned = frontend.ReturnFromEndingToTitle();
+                result.Assert(flow != null && frontend.HasAnimatedEndingShip && opened && entered && returned &&
+                    manager.GameResult == GameOverResult.Team1Wins &&
+                    hud.GameEndPopupKind == MutinyGameEndPopupKind.GameComplete &&
+                    finalScore >= 150 && frontend.CurrentEndingScore == finalScore &&
+                    unloaded && frontend.CurrentEndingFrame == 774 &&
+                    frontend.CurrentPage == MutinyFrontendPage.Title,
+                    "END-SEQ-01/02/04 final-level production victory opens ending, advances to stop frame and returns to title");
+                result.Assert(childrenContinueAfterStop,
+                    "END-SEQ-05 original nested character clips continue after outer frame 774 stops");
+            }
+            finally
+            {
+                Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel = savedUnlock;
+                DestroyNow(frontendObject);
+                DestroyNow(hudObject);
+                DestroyNow(secondObject);
+                DestroyNow(firstObject);
+                DestroyNow(managerObject);
+                DestroyNow(secondTeamObject);
+                DestroyNow(firstTeamObject);
+                DestroyNow(controllerObject);
+            }
+        }
+
+        private static bool WeaponSmokeFollowsVisibleTrajectory<T>(bool fire) where T : MutinyWeapon
+        {
+            GameObject weaponObject = new GameObject($"SmokePositionVerification_{typeof(T).Name}");
+            try
+            {
+                DestroySmokeTrails();
+                T weapon = weaponObject.AddComponent<T>();
+                weapon.Initialize(null);
+                weapon.PhysicsBody.SetTerrain(new string[32, 32], 32, 32);
+                PhysicsBodyState state = weapon.PhysicsBody.State;
+                state.X = 320f;
+                state.Y = 192f;
+                state.Weight = fire ? 0f : 2f;
+                weapon.PhysicsBody.State = state;
+                weapon.transform.position = MutinyPhysics.PixelToUnity(state.X, state.Y);
+                if (fire)
+                    weapon.Fire(new Vector2(12f, -20f));
+
+                weapon.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                weapon.PhysicsBody.ApplyPresentationPoseForVerification();
+                MutinyRumBottleSmokeTrail[] trails = Object.FindObjectsByType<MutinyRumBottleSmokeTrail>();
+                if (trails.Length != 1)
+                    return false;
+
+                Vector2 smoke = MutinyPhysics.UnityToPixel(trails[0].transform.position);
+                Vector2 initialVisible = MutinyPhysics.UnityToPixel(weapon.transform.position);
+                Vector2 authoritative = new Vector2(weapon.PhysicsBody.State.X, weapon.PhysicsBody.State.Y);
+                bool smokeAtVisibleStart = Vector2.Distance(smoke, initialVisible) < 0.001f &&
+                    Vector2.Distance(authoritative, smoke) > 1f;
+
+                weapon.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep * 0.5f);
+                weapon.PhysicsBody.ApplyPresentationPoseForVerification();
+                Vector2 halfwayVisible = MutinyPhysics.UnityToPixel(weapon.transform.position);
+                Vector2 expectedHalfway = Vector2.Lerp(smoke, authoritative, 0.5f);
+                return smokeAtVisibleStart &&
+                    Vector2.Distance(halfwayVisible, expectedHalfway) < 0.001f &&
+                    Vector2.Distance(smoke, MutinyPhysics.UnityToPixel(trails[0].transform.position)) < 0.001f;
+            }
+            finally
+            {
+                DestroyNow(weaponObject);
+                DestroySmokeTrails();
             }
         }
 
@@ -3557,6 +3989,9 @@ namespace Mutiny.Verification
                     RectApproximately(MutinyGameHUD.ResolveWeaponSlotInfiniteAmmoRect(0, 0), new Rect(115f, 52f, 18f, 9f)) &&
                     RectApproximately(MutinyGameHUD.ResolveWeaponSlotInfiniteAmmoRect(4, 2), new Rect(239f, 138f, 18f, 9f)),
                     "HUD-POS-05 weapon slot ammo text and infinite ammo symbol retain authentic Flash SWF 1831 twip offsets (540-80=460 twips -> y=23px)");
+                result.Assert(
+                    RectApproximately(MutinyGameHUD.ResolveOriginalWeaponsPanelRect(), new Rect(137.05f, 74.05f, 271f, 247f)),
+                    "HUD-POS-06 weapon select panel retains root timeline placement (2741, 1481) twips -> (137.05, 74.05) px, centered at (275, 200)");
             }
             finally
             {
@@ -4555,7 +4990,7 @@ namespace Mutiny.Verification
                 result.Assert(!seagull.IsFinished,
                     "SEA-END-02 production turn watchdog does not expire a normally flying Seagull after 150 ticks");
 
-                seagull.SpriteRenderer.sortingOrder = MutinyWeapon.WeaponSortingOrder + 5;
+                seagull.SpriteRenderer.sortingOrder = MutinyLevelBuilder.SeagullSortingOrder;
                 bool acceptedShot = MutinySeagull.TryRequestPlayerShot(team);
                 MutinySeagullFire[] shots = Object.FindObjectsByType<MutinySeagullFire>();
                 result.Assert(acceptedShot && shots.Length == 0 && seagull.ActiveShotCount == 0,
@@ -4707,6 +5142,7 @@ namespace Mutiny.Verification
                 wave.StartWave(200f, 400f, -1f);
                 bool visibleAfterStart = wave.SpriteRenderer != null && wave.SpriteRenderer.enabled;
                 result.Assert(hiddenBeforeStart && visibleAfterStart && wave.IsFired &&
+                              wave.SpriteRenderer != null && wave.SpriteRenderer.sortingOrder == MutinyLevelBuilder.TidalWaveSortingOrder &&
                               Mathf.Approximately(wave.PhysicsBody.State.X, -550f) &&
                               Mathf.Approximately(wave.PhysicsBody.State.Y, 400f) &&
                               Mathf.Approximately(wave.PhysicsBody.State.VelocityX, 20f),

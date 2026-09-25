@@ -33,7 +33,7 @@ namespace Mutiny.Simulation
         private void Awake()
         {
             SpriteRenderer renderer = GetComponent<SpriteRenderer>();
-            renderer.sortingOrder = MutinyWeapon.WeaponSortingOrder - 1;
+            renderer.sortingOrder = Mutiny.Levels.MutinyLevelBuilder.SeagullSortingOrder - 1;
             Texture2D texture = Resources.Load<Texture2D>("Art/Weapons/SeagullFire/1");
             if (texture != null)
             {

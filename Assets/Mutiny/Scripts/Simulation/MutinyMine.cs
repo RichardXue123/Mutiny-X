@@ -47,7 +47,7 @@ namespace Mutiny.Simulation
         // Controller.unloadLevel destroys the stored mines separately from the
         // level tiles. Unity weapon instances are also spawned outside the level
         // root, so remove them before a rebuilt level can observe the old map.
-        public static int ClearForLevelEnd()
+        public static int ClearForLevelUnload()
         {
             MutinyMine[] mines = FindObjectsByType<MutinyMine>(
                 FindObjectsInactive.Include, FindObjectsSortMode.None);

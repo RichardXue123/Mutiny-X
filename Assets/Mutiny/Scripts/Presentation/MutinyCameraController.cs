@@ -518,12 +518,11 @@ namespace Mutiny.Presentation
             ref bool scrollDown,
             ref bool scrollUp)
         {
+            // The 40 px zone starts at the fixed-aspect viewport edge, but
+            // its outward side extends through any letterbox/pillarbox bar.
+            // Only positions outside the actual game window are ineligible.
             if (mousePosition.x < 0f || mousePosition.x > screenWidth ||
-                mousePosition.y < 0f || mousePosition.y > screenHeight ||
-                mousePosition.x < viewportPixelRect.xMin ||
-                mousePosition.x > viewportPixelRect.xMax ||
-                mousePosition.y < viewportPixelRect.yMin ||
-                mousePosition.y > viewportPixelRect.yMax)
+                mousePosition.y < 0f || mousePosition.y > screenHeight)
                 return;
 
             scrollLeft |= mousePosition.x < viewportPixelRect.xMin + edgePixels;

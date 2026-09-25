@@ -101,6 +101,10 @@ AdvanceGameEndPopupAnimationTick()  → 结算弹窗淡入 + 分数滚动
 ### 4. 行动面板 / 武器选择 (`DrawBottomBar`)
 
 - **打开条件**：`PlayerInput.IsActionMenuOpen && 当前队伍非 AI && 选中角色存活`
+- **原版位置与居中规范**：
+  - 原版 SWF 根时间轴 Frame 285 中 `weapons`（symbol 1855）位于 **Depth 39**，放置坐标为 `(translateX=2741, translateY=1481)` twips，换算为 **`(137.05, 74.05)` 像素**。
+  - 面板主体贴图尺寸为 `271×247`，右上角取消按钮位于 `(256, 0)` 且大小为 `20×20`，整套元件的合成边界为 `276×252` 像素。
+  - 放置于 `(137.05, 74.05)` 使得复合面板的中心点为 $(137.05 + 138, 74.05 + 126) \approx (275, 200)$，即**完美垂直与水平居中于 550×400 舞台**（上下边距各留出约 74 px，不再与顶部血条和小地图发生重叠遮挡）。
 - **淡入**：每 tick alpha += 0.25，到 1.0 后 `contentsActive = true`
 - **淡出**：每 tick alpha -= 0.25，到 ≤0 时重置为 `-0.25`（防止立即重开）
 - **面板贴图**：红队用 `weapon_select_red`，蓝队用 `weapon_select_blue`
@@ -130,6 +134,11 @@ mine        cannon       anchor       voodooDoll      tidalWave
 ### 6. 退出确认弹窗 (`DrawQuitPrompt`)
 
 - **触发**：点击右上角退出按钮 → `OpenQuitPrompt()`
+- **原版层级深度**：原版 SWF 中武器选择面板 `weapons`（symbol 1855）位于 **Depth 39**，而弹窗组件 `popup`（symbol 342）位于 **Depth 182**。因为 Depth 182 > Depth 39，原版中退出弹窗始终覆盖在武器选择面板上方。Unity IMGUI 的 `OnGUI` 严格遵循该绘制顺序（先 `DrawBottomBar` 后 `DrawQuitPrompt`）。
+- **交互与穿透隔离**：
+  - 弹窗激活期间（`m_QuitPromptAlpha > 0f`），武器面板的 `contentsActive` 置为 `false`，禁用底层武器按钮与投掷按钮的点击（`GUI.enabled = false`）和悬停高亮；
+  - 弹窗面板背景绘制隐形判定区域（`GUI.Button`），彻底拦截点击事件向底层穿透；
+  - 右上角角标按钮（Quit/Music/SFX）在弹窗打开时禁止重复触发和悬停气泡。
 - **面板**：`(100, 70)` 大小 `350×260`，带 2px 黑色阴影
 - **边框**：外层 `rgba(239,49,28)` 红色，内层黑色（内缩 3px）
 - **标题**：PirateFont 渲染 "quit level"

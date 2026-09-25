@@ -207,7 +207,7 @@ namespace Mutiny.Simulation
             // opening threshold changes chuteOpen. Keep this separate from the
             // fired-only motion callback so the stopped outer frame still smokes.
             if (!IsFinished && !ChuteOpen && PhysicsBody != null)
-                MutinyRumBottleSmokeTrail.Spawn(new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y));
+                MutinyRumBottleSmokeTrail.Spawn(PhysicsBody.CurrentStepStartPositionPixels);
         }
 
         private void ApplyFanInput()

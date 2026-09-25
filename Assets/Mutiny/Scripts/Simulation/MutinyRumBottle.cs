@@ -150,7 +150,7 @@ namespace Mutiny.Simulation
             // non-simulation advance. The source has no fired condition, so the
             // equipped/ready bottle also emits its fuse trail.
             if (!IsFinished)
-                MutinyRumBottleSmokeTrail.Spawn(new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y));
+                MutinyRumBottleSmokeTrail.Spawn(PhysicsBody.CurrentStepStartPositionPixels);
         }
 
         private static Vector2 FindOriginalFlameOrigin(

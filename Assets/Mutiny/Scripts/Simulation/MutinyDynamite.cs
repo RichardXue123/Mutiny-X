@@ -144,7 +144,7 @@ namespace Mutiny.Simulation
             // Dynamite.advance has no fired/isLit condition around the trail.
             // The unlit water frame still follows the same !finished gate.
             if (!IsFinished && PhysicsBody != null)
-                MutinyRumBottleSmokeTrail.Spawn(new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y));
+                MutinyRumBottleSmokeTrail.Spawn(PhysicsBody.CurrentStepStartPositionPixels);
         }
 
         private void AdvanceOriginalPresentationTick()

@@ -47,6 +47,7 @@
 | CAM-ASPECT-02 | 屏幕比例宽于 11:8 时（如 16:9 1920×1080），相机视口横向居中收缩并保持 11:8，左右两侧产生纯黑 Pillarbox 遮罩；游戏世界与 HUD 100% 对齐 | 保持 550×400 原始关卡视野 | `CalculateViewportRect`、`DrawLetterboxBars` | `widescreen16x9Rect == (0.11328, 0, 0.77344, 1)` | 已实现；编译与测试通过 |
 | CAM-ASPECT-03 | 屏幕比例高于 11:8 时（如 4:3 1024×768），相机视口纵向居中收缩并保持 11:8，上下两侧产生纯黑 Letterbox 遮罩 | 保持 550×400 原始关卡视野 | `CalculateViewportRect`、`DrawLetterboxBars` | `taller4x3Rect == (0, 0.01515, 1, 0.96970)` | 已实现；编译与测试通过 |
 | CAM-EDGE-01 | 鼠标边缘滚屏的 40px 触发边界绑定于相机的实际像素视口 `pixelRect`，在宽屏有黑边时鼠标移动至游戏画面边缘即可触发滚屏，无需移到整个显示器窗口边缘 | 原版边缘滚屏 40px 区域 | `MutinyCameraController.CalculateMouseEdgeScroll` | `CAM-EDGE-01` ~ `CAM-EDGE-04` 断言视口边界与窗口边界过滤 | 已实现；编译与测试通过 |
+| CAM-EDGE-05 | 鼠标进入游戏窗口内、视口外的左右或上下黑边时，继续按最近的视口边缘方向滚屏并显示箭头；角落可组合两个方向，窗口外不触发。40px 内侧热区与自动跟随/AI/移动端门禁不变 | 用户授权的固定 11:8 画布适配扩展；原版 `TileSystem.as::advanceScrolling` 的四边方向规则 | `MutinyCameraController.CalculateMouseEdgeScroll`、`AdvanceEdgeScrolling` | 生产边缘计算检查左右黑边、上下黑边、角落、视口中心、窗口外；专项 Play Mode 10/10 断言通过 | 已实现；编译与隔离 Unity Play Mode 通过；主工程 PIE 画面待验收 |
 | CAM-BARS-01 | 在 `OnGUI()` 的 `Repaint` 事件中精确绘制视口外侧纯黑矩形（`GUI.DrawTexture`），杜绝黑边区域任何残影或未清屏像素 | 原版全屏/黑边表现 | `MutinyCameraController.DrawLetterboxBars` | 视口外边距覆盖率 100% | 已实现；编译通过 |
 
 ## Android 授权适配

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Mutiny.Diagnostics;
 using Mutiny.Presentation;
+using Mutiny.Levels;
 using UnityEngine;
 
 namespace Mutiny.Simulation
@@ -43,6 +44,8 @@ namespace Mutiny.Simulation
             Extent = 10f;
             IsDraggable = false;
             base.Awake();
+            if (SpriteRenderer != null)
+                SpriteRenderer.sortingOrder = MutinyLevelBuilder.SeagullSortingOrder;
             LoadSprites();
         }
 

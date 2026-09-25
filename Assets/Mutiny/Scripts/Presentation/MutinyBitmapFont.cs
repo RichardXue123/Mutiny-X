@@ -164,6 +164,8 @@ namespace Mutiny.Presentation
             ['!'] = new Glyph(220, 17, 4, 11),
             ['-'] = new Glyph(228, 17, 8, 11),
             ['\''] = new Glyph(240, 17, 4, 11),
+            ['/'] = new Glyph(2, 32, 6, 11),
+            [':'] = new Glyph(10, 32, 4, 11),
         };
 
         private static void EnsureTextures()

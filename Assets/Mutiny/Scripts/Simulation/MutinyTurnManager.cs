@@ -400,10 +400,8 @@ namespace Mutiny.Simulation
 
                 controller?.RecordGameResult(GameResult);
 
-                int clearedBoxes = MutinyBoxRegistry.ClearForLevelEnd();
-
                 MutinyDebugLog.Info("Turn",
-                    $"END-POP result={GameResult} team1Alive={Team1.AliveCount} team2Alive={Team2.AliveCount} level={controller?.CurrentLevelIndex} boxesCleared={clearedBoxes}", this);
+                    $"END-POP result={GameResult} team1Alive={Team1.AliveCount} team2Alive={Team2.AliveCount} level={controller?.CurrentLevelIndex} persistentObjectsRetained=true", this);
                 OnGameOver?.Invoke(GameResult);
                 return;
             }

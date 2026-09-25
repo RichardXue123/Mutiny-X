@@ -18,7 +18,7 @@ python Tools/ReverseEngineering/decompile_swf.py
 
 脚本要求工作区父目录 Tools 下各有一份 FFDec 与 Java，并读取同级 `Mutiny Source/mutiny-flash-game/mutiny.swf`。重新运行会覆盖同名导出。更换 SWF 或工具版本时建议使用新的产物目录，以免旧文件残留。
 
-实际命令、返回码见 [commands.json](commands.json)，本机工具和输入指纹见 [metadata.json](metadata.json)。全部 9 项命令返回码为 0。FFDec CLI 导出格式与自动去混淆配置参考 [官方命令行说明](https://github.com/jindrapetrik/jpexs-decompiler/wiki/Commandline-arguments)。
+实际命令、返回码见 [commands.json](commands.json)，工具和输入指纹见 [metadata.json](metadata.json)。其中路径以 Unity 工程父目录（工作区根目录）为基准记录为相对路径；旧命令中的 `Mutiny X/Docs/ReverseEngineering/Swf/` 是当时的输出位置，产物后来归档到本目录。重新导出请运行脚本。全部 9 项命令返回码为 0。FFDec CLI 导出格式与自动去混淆配置参考 [官方命令行说明](https://github.com/jindrapetrik/jpexs-decompiler/wiki/Commandline-arguments)。
 
 ## 产物
 

@@ -125,7 +125,7 @@ namespace Mutiny.Simulation
             // CherryBomb.advance emits one trail every non-simulation tick while
             // the clip exists, including its equipped/ready state.
             if (!IsFinished && PhysicsBody != null)
-                MutinyRumBottleSmokeTrail.Spawn(new Vector2(PhysicsBody.State.X, PhysicsBody.State.Y));
+                MutinyRumBottleSmokeTrail.Spawn(PhysicsBody.CurrentStepStartPositionPixels);
         }
 
         private void OnDestroy()

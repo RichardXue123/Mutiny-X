@@ -14,6 +14,12 @@ TOOLS = WORKSPACE / 'Tools'
 OUTPUT = PROJECT / 'Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Swf'
 
 
+def recorded_arg(argument):
+    """Store paths relative to the workspace while running with absolute paths."""
+    path = pathlib.Path(argument)
+    return path.relative_to(WORKSPACE).as_posix() if path.is_absolute() else argument
+
+
 def audit():
     expected = {line.lstrip('\\').replace('\\', '/') + '.as'
                 for line in (OUTPUT / 'logs/scripts-index.stdout.log').read_text(encoding='utf8').splitlines()
@@ -75,7 +81,8 @@ def main():
         completed = subprocess.run(base + arguments, capture_output=True, timeout=1500)
         (logs / (name + '.stdout.log')).write_bytes(completed.stdout)
         (logs / (name + '.stderr.log')).write_bytes(completed.stderr)
-        commands.append(dict(job=name, argv=base + arguments, exit_code=completed.returncode))
+        commands.append(dict(job=name, argv=[recorded_arg(arg) for arg in base + arguments],
+                             exit_code=completed.returncode))
         (OUTPUT / 'commands.json').write_text(json.dumps(commands, indent=2), encoding='utf8')
         if completed.returncode:
             raise RuntimeError(f'{name} failed ({completed.returncode}); inspect logs.')
@@ -111,9 +118,9 @@ def main():
         writer = csv.writer(stream)
         writer.writerow(['file', 'line', 'text'])
         writer.writerows(findings)
-    metadata = dict(swf=str(SWF), swf_sha256=before,
-                    ffdec=str(jars[0]), ffdec_sha256=hashlib.sha256(jars[0].read_bytes()).hexdigest(),
-                    java=str(java_paths[0]), source_files=sum(r[0] == 'source' for r in inventory),
+    metadata = dict(swf=recorded_arg(str(SWF)), swf_sha256=before,
+                    ffdec=recorded_arg(str(jars[0])), ffdec_sha256=hashlib.sha256(jars[0].read_bytes()).hexdigest(),
+                    java=recorded_arg(str(java_paths[0])), source_files=sum(r[0] == 'source' for r in inventory),
                     pcode_files=sum(r[0] == 'pcode' for r in inventory),
                     deobfuscated_files=sum(r[0] == 'deobfuscated' for r in inventory),
                     diagnostic_candidates=len(findings))

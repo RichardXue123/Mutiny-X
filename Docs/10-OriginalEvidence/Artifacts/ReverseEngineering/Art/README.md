@@ -10,7 +10,7 @@
 python Tools/ReverseEngineering/export_art.py
 ```
 
-依赖工作区父目录 Tools 下的 FFDec 与 Java，符号索引读取先前导出的 Swf/mutiny.swf.xml。导出使用 zoom=1、透明背景和 onerror=abort。实际参数、返回码与日志保存在 commands.json 和 logs/。重新运行覆盖同名产物；改变来源或工具版本时应使用新的目录避免旧文件混入。
+依赖工作区父目录 Tools 下的 FFDec 与 Java，符号索引读取先前导出的 Swf/mutiny.swf.xml。导出使用 zoom=1、透明背景和 onerror=abort。实际参数、返回码与日志保存在 commands.json 和 logs/；命令中的路径以 Unity 工程父目录（工作区根目录）为基准记录为相对路径。旧命令中的 `Mutiny X/Docs/ReverseEngineering/Art/` 是当时的输出位置，产物后来归档到本目录。重新运行会覆盖同名产物；改变来源或工具版本时应使用新的目录避免旧文件混入。
 
 ## 目录与清单
 

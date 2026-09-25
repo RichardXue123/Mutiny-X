@@ -9,6 +9,7 @@
 2. **模式选择页（Game Select Page）**：1 Player / 2 Player 选项及 Back 按钮。
 3. **关卡选择页（Level Select Page）**：15 个单人关卡缩略图槽位、解锁/未解锁状态及 Back 按钮。
 4. **右上角音频控制（Corner Audio Controls）**：主菜单阶段显示并响应音乐（Music）和音效（SFX）开关，Quit 按钮仅在进入关卡后显示。
+5. **Credits 页面**：原版深灰红框、Nitrome 标志、署名与版权页脚；从标题页进入并由 Back 返回。[行为规格与验证状态](../../01-GameFlowAndProgression/01-FrontendNavigation/CREDITS_BEHAVIOR_SPEC.md)。
 
 ## 原版 Flash 对应
 

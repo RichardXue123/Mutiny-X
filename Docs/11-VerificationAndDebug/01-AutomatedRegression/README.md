@@ -21,14 +21,16 @@
 - `BOX-WAIT-01`：第一只木箱提交后，连续驱动生产 `MutinyTurnManager.AdvanceSimulationTick()` 超过安全阈值 150 tick；断言根箱未被强制 `Finish/Destroy`、pending 链仍存在，并可继续完成第二、第三箱。火药桶共享同一无超时规则。
 - `BOX-CAM-01`：第一箱提交并进入 `ActionExecuting` 后，经生产镜头目标解析断言没有箱体跟随目标、没有角色回移门；`CanAcceptManualScrollingForVerification()` 必须为真，覆盖鼠标边缘、方向键和 WASD 共用的滚屏资格。
 - `CRT-EXP-01/02`：让角色与第一只木箱同时落入生产 `MutinyExplosion.ApplyHit` 范围；断言同次命中已给角色向上速度、只移除命中箱的共享碰撞注册、木箱立即位于原版 frame 11。随后各推进一个角色物理 tick 和箱子时间轴 tick，断言角色已经飞离且箱子进入 frame 12；推进至 frame 18 时箱子隐藏。
-- `BOX-END-01`：在生产 `MutinyTurnManager` 中分别击败敌方和玩家方；每次都同时创建已注册箱体与未注册待放置 BoxWeapon，断言进入 `GameOver` 时 WoodenCrate、GunpowderBarrel 均同步失活且共享注册数归零。
-- 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`，尚未在 Unity Play Mode 实际执行，不能登记为通过。
+- `LVL-PERSIST-01`：先经生产 `TryPlaceAt` 完成三只木箱、两只火药桶的放置链，并将地雷实际发射至 `IsStored`；再经生产 `MutinyTurnManager` 分别击败敌方和玩家方，断言 `GameOver`/结果弹窗时对象仍有效、箱体碰撞注册仍在。另保留未放置的箱体实例，检查结算不会误删它。
+- `LVL-RESET-01`：上述旧物体仍存在时经 `MutinyLevelController.TryLoadLevel()` 初始化新关，断言旧箱体/地雷失活、共享箱体注册清空。
+- 本轮 `LVL-PERSIST-01/LVL-RESET-01` 已加入 `MutinyTurnActionUiVerificationTest.RunLevelLifecycle()`；2026-09-26 在 Unity 6000.6.0f1 隔离工程 Play Mode 跑通最终 8/8 断言，含显式 `ClearLevel()` 卸载。其余 BoxWeapon 用例仍以各自的实际运行记录为准。
 
 ## Cannon 范围锚点回归
 
 - `CAN-SMOKE-02`：发射正式炮弹、推进 25 Hz 物理 tick 与半 tick 表现采样；确认首团烟与炮弹显示起点重合，随后炮弹向前移动且烟保持在身后，权威位置仍独立推进。
 - `CAN-AUD-02`：以正式物理地形接触和角色包围盒重叠分别触发炮弹爆炸，监听 `SfxPlayed`，再执行正式爆炸命中入口；地形接触 `pop` 总计一次，直接命中角色零次。
 - 实际结果：2026-09-25，Unity 6000.6.0f1 隔离临时工程 Play Mode 执行 `Validate Cannon Effects Play Mode`，连同原有烟迹检查共 15/15 断言通过；主工程实机画面与听感仍待验收。
+- `VIS-SMOKE-02`：2026-09-26 将 Cherry Bomb、Dynamite、Rum Bottle、Parachute Bomb 的生产出烟回调对齐当前物理 tick 的可见起点。使用正式 `MutinyPhysicsBody.AdvanceSimulationFrameForVerification`，分别在飞行和 ready 状态核对新烟团与首个可见弹体位置一致、半 tick 后弹体前进而烟团静止；复跑 `Validate Cannon Effects Play Mode`，Unity 6000.6.0f1 隔离工程 19/19 断言通过。主工程 PIE 逐武器画面验收尚未运行。
 - `CAN-AI-TURN-01`：经 `MutinyAIController.ExecuteMove` 同源执行入口提交大炮，并交替推进正式 `MutinyTurnManager.AdvanceSimulationTick` 与大炮 25 Hz tick；前 24 tick 不得换回合或积累静止计数，第 25 tick 生成炮弹且镜头目标为该炮弹；炮弹未结束时再等待 151 tick 不得被通用安全超时强制结束，然后驱动正式炮弹物理跨出原版边界、炮身结束，最后才通过通常 11 tick 静止门。用例已添加，待 Unity 运行验证。
 - `CAN-PLACE-01`：角色位于 `(100,200)` 时，通过生产 `MutinyCannon.PlacementCenterPixels` 与独立 `RangeCircle` Transform 断言范围中心均为 `(100,100)`，即原始 100 px 圆的底部落在角色坐标。
 - `CAN-PLACE-03`：从炮身初始 `(100,190)` 按住并把指针快速移到 `(100,400)`，驱动生产 25 Hz tick；以 `(100,100)` 为中心的 120 px 约束应先把目标裁到 `(100,220)`，再按原版半距离移动至 `(100,205)`，并保持拖动资格。
@@ -135,6 +137,7 @@
 ## Android 镜头缺陷回归
 
 - `CUR-SCROLL-01/AND-CUR-SCROLL-01`：通过正式镜头箭头资源解码、八方向映射、视口边缘定位和移动平移核心，核对 31×22 原版帧、方向角、宽屏黑边输入门、实际位移方向及边界阻挡时隐藏。2026-09-25 Unity 6000.6.0f1 隔离临时工程 Play Mode 专项 `Validate Scroll Arrows Play Mode` 通过 5/5 断言；桌面实际鼠标画面与 Android 单指/第二触点真机绘制尚未运行。
+- `CAM-EDGE-05`：固定 11:8 画布的用户授权黑边扩展；生产 `CalculateMouseEdgeScroll` 回归覆盖左右 Pillarbox、上下 Letterbox、黑色角落组合方向和游戏窗口外抑制。2026-09-26 Unity 6000.6.0f1 隔离临时工程 `Validate Scroll Arrows Play Mode` 通过 10/10 断言（含既有资源、方向及移动端用例）；`dotnet build Assembly-CSharp-Editor.csproj --no-restore -v:q` 通过。主工程 PIE 实际鼠标画面尚未目视验收。
 - `CUR-SCROLL-02`：原版 `CustomCursor` 同类型早退；Unity 武器特殊光标经生产 `SetMode(None)`、`Clear()` 重复调用时，镜头已经隐藏的系统鼠标保持隐藏，切换到武器特殊光标及真正退出时才改变可见性。2026-09-25 隔离 Unity 6000.6.0f1 Play Mode `Validate Scroll Arrows Play Mode` 复跑共 6/6 断言通过；主工程 PIE 连续滚屏无闪烁待目视复验。
 - `AND-CAM-01`：调用生产镜头的移动平台指针资格判定，断言 Android/移动平台即使暴露 mouse/pointer 状态也不得进入桌面悬停边缘滚屏；同时断言桌面真实鼠标仍保留原版边缘滚屏资格。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`；`Assembly-CSharp` 与 `Assembly-CSharp-Editor` 编译通过；尚未在 Android 真机实际执行，不能登记为通过。

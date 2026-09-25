@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Mutiny.Diagnostics;
 using Mutiny.Simulation;
 using UnityEngine;
@@ -24,6 +24,8 @@ namespace Mutiny.Presentation
         private SpriteRenderer m_IndicatorRenderer;
         private Transform m_HealthFill;
         private SpriteRenderer m_HealthFillRenderer;
+        private SpriteRenderer m_HealthBarBackgroundRenderer;
+        private int m_LastCharacterSortingOrder = -1;
         private GameObject m_HealthBar;
         private GameObject m_SelectionCorners;
         private GameObject m_VoodooTarget;
@@ -83,6 +85,14 @@ namespace Mutiny.Presentation
         private void LateUpdate()
         {
             KeepOverlayUpright();
+
+            SpriteRenderer characterRenderer = m_Character != null ? m_Character.GetComponent<SpriteRenderer>() : null;
+            int currentCharacterSortingOrder = characterRenderer != null ? characterRenderer.sortingOrder : -1;
+            if (currentCharacterSortingOrder != m_LastCharacterSortingOrder)
+            {
+                m_LastCharacterSortingOrder = currentCharacterSortingOrder;
+                ApplyHealthBarSortingOrder();
+            }
 
             if (m_Character == null || !m_Character.IsAlive)
             {
@@ -208,9 +218,8 @@ namespace Mutiny.Presentation
             m_HealthBar.transform.localPosition = new Vector3(0f, -OriginalHealthCenterY / PixelsPerUnit, 0f);
             var barBackground = new GameObject("OriginalFrame");
             barBackground.transform.SetParent(m_HealthBar.transform, false);
-            SpriteRenderer backgroundRenderer = barBackground.AddComponent<SpriteRenderer>();
-            backgroundRenderer.sprite = LoadSprite("UI/CharacterOverlay/health_background", new Vector2(0.5f, 0.5f));
-            backgroundRenderer.sortingOrder = overlaySortingOrder;
+            m_HealthBarBackgroundRenderer = barBackground.AddComponent<SpriteRenderer>();
+            m_HealthBarBackgroundRenderer.sprite = LoadSprite("UI/CharacterOverlay/health_background", new Vector2(0.5f, 0.5f));
 
             var fill = new GameObject("DiscreteFill");
             fill.transform.SetParent(m_HealthBar.transform, false);
@@ -218,7 +227,7 @@ namespace Mutiny.Presentation
             m_HealthFill = fill.transform;
             m_HealthFillRenderer = fill.AddComponent<SpriteRenderer>();
             m_HealthFillRenderer.sprite = WhitePixel;
-            m_HealthFillRenderer.sortingOrder = overlaySortingOrder + 1;
+            ApplyHealthBarSortingOrder();
 
             m_VoodooTarget = new GameObject("VoodooTarget");
             m_VoodooTarget.transform.SetParent(m_OverlayRoot.transform, false);
@@ -362,6 +371,28 @@ namespace Mutiny.Presentation
                 ? characterRenderer.sortingOrder
                 : Mutiny.Levels.MutinyLevelBuilder.CharacterSortingOrder;
             return characterOrder + Mutiny.Levels.MutinyLevelBuilder.CharacterOverlaySortingOffset;
+        }
+
+        private void ApplyHealthBarSortingOrder()
+        {
+            int baseOrder = ResolveHealthBarSortingOrder();
+            if (m_HealthBarBackgroundRenderer != null)
+                m_HealthBarBackgroundRenderer.sortingOrder = baseOrder;
+            if (m_HealthFillRenderer != null)
+                m_HealthFillRenderer.sortingOrder = baseOrder + 1;
+        }
+
+        private int ResolveHealthBarSortingOrder()
+        {
+            SpriteRenderer characterRenderer = m_Character != null
+                ? m_Character.GetComponent<SpriteRenderer>()
+                : null;
+            int charIndex = 0;
+            if (characterRenderer != null && characterRenderer.sortingOrder >= Mutiny.Levels.MutinyLevelBuilder.CharacterSortingOrder)
+            {
+                charIndex = (characterRenderer.sortingOrder - Mutiny.Levels.MutinyLevelBuilder.CharacterSortingOrder) / Mutiny.Levels.MutinyLevelBuilder.CharacterSortingStride;
+            }
+            return Mutiny.Levels.MutinyLevelBuilder.GetCharacterHealthBarSortingOrder(charIndex);
         }
 
         private void SetActive(GameObject target, bool active, ref bool previous, string label)

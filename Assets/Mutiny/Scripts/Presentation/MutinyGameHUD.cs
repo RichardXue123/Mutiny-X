@@ -56,6 +56,14 @@ namespace Mutiny.Presentation
         private const float OriginalTeam1OriginX = 1439f / 20f;
         private const float OriginalTeam2OriginX = 9557f / 20f;
         private const float OriginalTeamOriginY = 380f;
+        // Root-timeline frame 285 places weapons (Symbol 1855) at (2741, 1481) twips.
+        // On the 550x400 canvas, this is (137.05, 74.05) px, centering the 276x252
+        // composite bounds (with cancel button) at (275, 200).
+        private const float OriginalWeaponsOriginX = 2741f / 20f;
+        private const float OriginalWeaponsOriginY = 1481f / 20f;
+        private const float OriginalWeaponsWidth = 271f;
+        private const float OriginalWeaponsHeight = 247f;
+        private static readonly Rect OriginalWeaponsPanelRect = new Rect(OriginalWeaponsOriginX, OriginalWeaponsOriginY, OriginalWeaponsWidth, OriginalWeaponsHeight);
         // DefineShape_326 bounds are (-3500,-2600)..(3499,2599) twips,
         // under IngamePopup's x=275 / y=200 stage registration point.
         private static readonly Rect OriginalPopupPanelRect = new Rect(100f, 70f, 350f, 260f);
@@ -64,6 +72,8 @@ namespace Mutiny.Presentation
         // y=900 and y=1600 twips respectively.
         private static readonly Rect OriginalPopupPrimaryButtonRect = new Rect(135f, 245f, 280f, 24f);
         private static readonly Rect OriginalPopupSecondaryButtonRect = new Rect(135f, 280f, 280f, 24f);
+        // IngamePopup frame 21 places submitScoreButton at y=180 twips (9 px -> stage 209 px).
+        private static readonly Rect OriginalPopupSubmitScoreButtonRect = new Rect(135f, 209f, 280f, 24f);
         // Root-timeline placements are: quit (9818,359), music (10239,359),
         // sfx (10658,359) twips.  The exported frames retain the negative
         // shape bounds used by the original tooltip bubbles, so these visual
@@ -83,6 +93,7 @@ namespace Mutiny.Presentation
         public MutinyLevelController LevelController;
         public MutinySpeechController Speech;
         public MutinyIngameTextArea IngameText;
+        public MutinyFrontendController FrontendController;
 
         private bool m_ShowLevelSelect = false;
         private GUIStyle m_TitleStyle;
@@ -168,6 +179,8 @@ namespace Mutiny.Presentation
         public static Rect ResolveOriginalPopupPanelRect() => OriginalPopupPanelRect;
         public static Rect ResolveOriginalPopupPrimaryButtonRect() => OriginalPopupPrimaryButtonRect;
         public static Rect ResolveOriginalPopupSecondaryButtonRect() => OriginalPopupSecondaryButtonRect;
+        public static Rect ResolveOriginalPopupSubmitScoreButtonRect() => OriginalPopupSubmitScoreButtonRect;
+        public static Rect ResolveOriginalWeaponsPanelRect() => OriginalWeaponsPanelRect;
 
         public static Rect ResolveWeaponSlotAmmoNumberRect(int column, int row)
         {
@@ -650,8 +663,10 @@ namespace Mutiny.Presentation
 
             DrawSpeechBubble();
             DrawOriginalBattleHud();
-            DrawOriginalCornerControls();
             DrawBottomBar();
+            DrawOriginalCornerControls();
+            if (m_QuitPromptAlpha > 0f)
+                DrawQuitPrompt();
             DrawIngameText();
 
             if (TurnManager != null && TurnManager.CurrentPhase == TurnPhase.GameOver)
@@ -754,12 +769,15 @@ namespace Mutiny.Presentation
             MutinyAudioManager audio = MutinyAudioManager.Instance;
 
             Vector2 mousePosition = GetOriginalCanvasMousePosition();
-            bool sfxHovered = IsCornerHovered(MutinyCornerControl.Sfx, mousePosition, m_SfxHovered);
-            bool musicHovered = IsCornerHovered(MutinyCornerControl.Music, mousePosition, m_MusicHovered);
-            bool quitHovered = IsCornerHovered(MutinyCornerControl.Quit, mousePosition, m_QuitHovered);
+            bool sfxHovered = m_QuitPromptAlpha <= 0f && IsCornerHovered(MutinyCornerControl.Sfx, mousePosition, m_SfxHovered);
+            bool musicHovered = m_QuitPromptAlpha <= 0f && IsCornerHovered(MutinyCornerControl.Music, mousePosition, m_MusicHovered);
+            bool quitHovered = m_QuitPromptAlpha <= 0f && IsCornerHovered(MutinyCornerControl.Quit, mousePosition, m_QuitHovered);
             UpdateCornerHover(ref m_SfxHovered, sfxHovered);
             UpdateCornerHover(ref m_MusicHovered, musicHovered);
             UpdateCornerHover(ref m_QuitHovered, quitHovered);
+
+            if (!MutinyTransitionManager.IsTransitionActive && (sfxHovered || musicHovered || quitHovered))
+                MutinyCursorManager.NotifyHoverInteractable();
 
             // Draw unhovered controls first, then hovered control on top so its speech bubble is never overlapped
             if (!quitHovered)
@@ -785,7 +803,7 @@ namespace Mutiny.Presentation
             Rect musicBubbleRect = ResolveOriginalCornerBubbleRect(MutinyCornerControl.Music);
             Rect quitBubbleRect = ResolveOriginalCornerBubbleRect(MutinyCornerControl.Quit);
 
-            if (!MutinyTransitionManager.IsTransitionActive)
+            if (!MutinyTransitionManager.IsTransitionActive && m_QuitPromptAlpha <= 0f)
             {
                 if (GUI.Button(sfxHitRect, GUIContent.none, GUIStyle.none) ||
                     (sfxHovered && GUI.Button(sfxBubbleRect, GUIContent.none, GUIStyle.none)))
@@ -798,8 +816,8 @@ namespace Mutiny.Presentation
                     OpenQuitPrompt();
             }
 
-            if (m_QuitPromptAlpha > 0f)
-                DrawQuitPrompt();
+
+
 
             GUI.color = oldColor;
             GUI.matrix = oldMatrix;
@@ -860,7 +878,13 @@ namespace Mutiny.Presentation
 
         private void DrawQuitPrompt()
         {
-            Color prior = GUI.color;
+            float scale = Mathf.Min(Screen.width / OriginalCanvasWidth, Screen.height / OriginalCanvasHeight);
+            float left = (Screen.width - OriginalCanvasWidth * scale) * 0.5f;
+            float top = (Screen.height - OriginalCanvasHeight * scale) * 0.5f;
+            Matrix4x4 previousMatrix = GUI.matrix;
+            Color previousColor = GUI.color;
+            GUI.matrix = Matrix4x4.TRS(new Vector3(left, top, 0f), Quaternion.identity,
+                new Vector3(scale, scale, 1f));
             GUI.color = new Color(1f, 1f, 1f, Mathf.Clamp01(m_QuitPromptAlpha));
 
             // DefineShape_326 is 350x260 px, centered at (275,200).  The old
@@ -870,7 +894,7 @@ namespace Mutiny.Presentation
             DrawPopupSolid(panel, new Color32(51, 51, 51, 255));
             DrawPopupOutline(panel, new Color32(239, 49, 28, 255));
             DrawPopupOutline(new Rect(panel.x + 3f, panel.y + 3f, panel.width - 6f, panel.height - 6f), Color.black);
-            MutinyBitmapFont.DrawPirateText(new Rect(panel.x, 84f, panel.width, 28f),
+            MutinyBitmapFont.DrawPirateText(new Rect(panel.x, 95f, panel.width, 23f),
                 "quit level", false, true, -3);
 
             // The original continue_game MovieClip is a 280x24 button placed at
@@ -880,6 +904,8 @@ namespace Mutiny.Presentation
             Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
             bool continueHovered = continueRect.Contains(GetOriginalCanvasMousePosition());
             bool backHovered = backRect.Contains(GetOriginalCanvasMousePosition());
+            if (!MutinyTransitionManager.IsTransitionActive && (continueHovered || backHovered))
+                MutinyCursorManager.NotifyHoverInteractable();
             DrawPopupButton(continueRect, "continue", continueHovered);
             DrawPopupButton(backRect, "back to menu", backHovered);
 
@@ -890,7 +916,11 @@ namespace Mutiny.Presentation
                 MutinyTransitionManager.RequestTransition(() => BackToModeLevelSelect(), showLoading: false);
             }
 
-            GUI.color = prior;
+            if (!continueHovered && !backHovered)
+                GUI.Button(panel, GUIContent.none, GUIStyle.none);
+
+            GUI.color = previousColor;
+            GUI.matrix = previousMatrix;
         }
 
         private void DrawPopupButton(Rect rect, string label, bool hovered)
@@ -1286,16 +1316,17 @@ namespace Mutiny.Presentation
             if (selectedChar == null || !selectedChar.IsAlive)
                 return;
 
-            float scale = Mathf.Min(Screen.width / 550f, Screen.height / 400f);
+            float scale = Mathf.Min(Screen.width / OriginalCanvasWidth, Screen.height / OriginalCanvasHeight);
             m_OriginalSlotStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(9f * scale));
             // Panel-space matrix for DangleFont bitmap text rendering.
             // Origin (0,0) is at the top-left of the weapon panel texture (left, top),
             // matching pixel coordinates directly against the 271x247 panel artwork.
-            float panelWidth = 271f * scale;
-            float panelHeight = 247f * scale;
-            float canvasTop = (Screen.height - 400f * scale) * 0.5f;
-            float left = (Screen.width - panelWidth) * 0.5f;
-            float top = canvasTop + 23f * scale;
+            float panelWidth = OriginalWeaponsWidth * scale;
+            float panelHeight = OriginalWeaponsHeight * scale;
+            float canvasLeft = (Screen.width - OriginalCanvasWidth * scale) * 0.5f;
+            float canvasTop = (Screen.height - OriginalCanvasHeight * scale) * 0.5f;
+            float left = canvasLeft + OriginalWeaponsOriginX * scale;
+            float top = canvasTop + OriginalWeaponsOriginY * scale;
             Rect panelRect = new Rect(left, top, panelWidth, panelHeight);
             Matrix4x4 panelMatrix = Matrix4x4.TRS(
                 new Vector3(left, top, 0f), Quaternion.identity,
@@ -1304,7 +1335,10 @@ namespace Mutiny.Presentation
             bool previousEnabled = GUI.enabled;
             GUI.color = new Color(previousColor.r, previousColor.g, previousColor.b,
                 previousColor.a * Mathf.Clamp01(m_ActionPanelAlpha));
-            bool contentsActive = m_ActionPanelContentsActive && PlayerInput.IsActionMenuOpen;
+            bool contentsActive = m_ActionPanelContentsActive &&
+                                  PlayerInput.IsActionMenuOpen &&
+                                  m_QuitPromptAlpha <= 0f &&
+                                  (TurnManager == null || TurnManager.CurrentPhase != TurnPhase.GameOver);
             string hoveredAction = null;
 
             Texture2D panelTexture = TurnManager.CurrentTeam.TeamNumber == 2
@@ -1316,7 +1350,7 @@ namespace Mutiny.Presentation
                 GUI.Box(panelRect, GUIContent.none, m_PanelStyle);
 
             Rect throwRect = ScaledRect(left, top, scale, 11f, 29f, 86f, 57f);
-            bool throwHovered = throwRect.Contains(Event.current.mousePosition);
+            bool throwHovered = contentsActive && throwRect.Contains(Event.current.mousePosition);
             MutinyThrowButtonVisualState throwState = ResolveThrowButtonVisualState(
                 TurnManager.CurrentTeam.TeamNumber, selectedChar.CanThrow, throwHovered);
             Texture2D throwTexture = GetThrowButtonTexture(throwState);
@@ -1326,7 +1360,10 @@ namespace Mutiny.Presentation
             if (selectedChar.CanThrow)
             {
                 if (throwHovered)
+                {
                     hoveredAction = "throw character";
+                    MutinyCursorManager.NotifyHoverInteractable();
+                }
                 GUI.enabled = previousEnabled && contentsActive;
                 if (GUI.Button(throwRect, new GUIContent(string.Empty, "throw character"), m_OriginalSlotStyle))
                     PlayerInput.SelectCharacterThrow();
@@ -1346,9 +1383,12 @@ namespace Mutiny.Presentation
             }
 
             Rect endTurnRect = ScaledRect(left, top, scale, 11f, 93.95f, 86f, 57f);
-            bool endTurnHovered = endTurnRect.Contains(Event.current.mousePosition);
+            bool endTurnHovered = contentsActive && endTurnRect.Contains(Event.current.mousePosition);
             if (endTurnHovered)
+            {
                 hoveredAction = "end turn";
+                MutinyCursorManager.NotifyHoverInteractable();
+            }
             Texture2D endTurnTexture = GetEndTurnButtonTexture(
                 TurnManager.CurrentTeam.TeamNumber, endTurnHovered);
             if (endTurnTexture != null)
@@ -1369,8 +1409,11 @@ namespace Mutiny.Presentation
                     GUI.DrawTexture(cancelRect, cancelTex, ScaleMode.StretchToFill, true);
                 }
 
-                if (cancelRect.Contains(Event.current.mousePosition))
+                if (contentsActive && cancelRect.Contains(Event.current.mousePosition))
+                {
                     hoveredAction = "cancel character";
+                    MutinyCursorManager.NotifyHoverInteractable();
+                }
                 GUI.enabled = previousEnabled && contentsActive;
                 if (GUI.Button(cancelRect, new GUIContent(string.Empty, "cancel character"), m_OriginalSlotStyle))
                     PlayerInput.ReturnToCharacterSelection();
@@ -1386,7 +1429,7 @@ namespace Mutiny.Presentation
                 bool available = selectedChar.CanShoot && selectedChar.HasWeapon(weaponType);
                 int ammo = selectedChar.GetAmmunition(weaponType);
                 m_WeaponIcons.TryGetValue(weaponType, out Texture2D icon);
-                bool slotHovered = available && slot.Contains(Event.current.mousePosition);
+                bool slotHovered = contentsActive && available && slot.Contains(Event.current.mousePosition);
 
                 Texture2D slotTexture = available
                     ? (TurnManager.CurrentTeam.TeamNumber == 2
@@ -1429,7 +1472,10 @@ namespace Mutiny.Presentation
                     GUI.DrawTexture(slot, m_WeaponSlotOverTexture, ScaleMode.StretchToFill, true);
 
                 if (slotHovered)
+                {
                     hoveredAction = weaponType;
+                    MutinyCursorManager.NotifyHoverInteractable();
+                }
                 GUI.enabled = previousEnabled && contentsActive && available;
                 if (GUI.Button(slot, new GUIContent(string.Empty, weaponType), m_OriginalSlotStyle))
                     PlayerInput.SelectWeapon(weaponType);
@@ -1605,14 +1651,14 @@ namespace Mutiny.Presentation
             // Title is at popup y=-105 (= -2100 twips); score labels are at
             // y=-40/-10 for complete and y=-44 for failed.  These are stage
             // coordinates after the popup's (275,200) registration point.
-            MutinyBitmapFont.DrawPirateText(new Rect(panel.x, 84f, panel.width, 28f), title, false, true, -3);
+            MutinyBitmapFont.DrawPirateText(new Rect(panel.x, 95f, panel.width, 23f), title, false, true, -3);
 
             if (versus)
             {
                 Rect restartRect = ResolveOriginalPopupPrimaryButtonRect();
                 Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
                 DrawGameEndButton(restartRect, "restart level", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
-                DrawGameEndButton(backRect, "back to title", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
+                DrawGameEndButton(backRect, "back to menu", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
                 if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(restartRect, GUIContent.none, GUIStyle.none))
                     MutinyTransitionManager.RequestTransition(() => RestartFromGameEndPopup(), showLoading: true);
                 if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
@@ -1626,7 +1672,7 @@ namespace Mutiny.Presentation
                 Rect nextRect = ResolveOriginalPopupPrimaryButtonRect();
                 Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
                 DrawGameEndButton(nextRect, "next level", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
-                DrawGameEndButton(backRect, "back to title", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
+                DrawGameEndButton(backRect, "back to menu", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
                 if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(nextRect, GUIContent.none, GUIStyle.none))
                 {
                     MutinyTransitionManager.RequestTransition(() => AdvanceToNextLevel(), showLoading: true);
@@ -1638,21 +1684,29 @@ namespace Mutiny.Presentation
             }
             else if (finalComplete)
             {
-                DrawGameEndScoreRow(175f, 155f, "final score", m_GameEndDisplayedTotalScore, alpha);
+                DrawGameEndScoreRow(175f, 190f, "final score", m_GameEndDisplayedTotalScore, alpha);
                 Rect congratsRect = ResolveOriginalPopupPrimaryButtonRect();
-                DrawGameEndButton(congratsRect, "congratulations", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
+                DrawGameEndButton(congratsRect, "continue", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
                 if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(congratsRect, GUIContent.none, GUIStyle.none))
                 {
-                    MutinyTransitionManager.RequestTransition(() => CompleteCampaignAndReturnToLevelSelect(), showLoading: false);
+                    MutinyTransitionManager.RequestTransition(() => CompleteCampaignAndShowEnding(), showLoading: false);
+                }
+                Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
+                DrawGameEndButton(backRect, "back to menu", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+                {
+                    MutinyTransitionManager.RequestTransition(() => BackToSinglePlayerMenu(), showLoading: false);
                 }
             }
             else
             {
                 DrawGameEndScoreRow(175f, 156f, "final score", m_GameEndDisplayedTotalScore, alpha);
+                Rect submitRect = ResolveOriginalPopupSubmitScoreButtonRect();
                 Rect restartRect = ResolveOriginalPopupPrimaryButtonRect();
                 Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
+                DrawGameEndButton(submitRect, "submit score", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
                 DrawGameEndButton(restartRect, "restart level", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
-                DrawGameEndButton(backRect, "back to title", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
+                DrawGameEndButton(backRect, "back to menu", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
                 if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(restartRect, GUIContent.none, GUIStyle.none))
                 {
                     MutinyTransitionManager.RequestTransition(() => RestartFromGameEndPopup(), showLoading: true);
@@ -1680,6 +1734,8 @@ namespace Mutiny.Presentation
         private void DrawGameEndButton(Rect rect, string label, Texture2D texture, Texture2D hoverTexture, float alpha)
         {
             bool hovered = rect.Contains(GetOriginalCanvasMousePosition());
+            if (!MutinyTransitionManager.IsTransitionActive && hovered && alpha > 0f)
+                MutinyCursorManager.NotifyHoverInteractable();
             Color previous = GUI.color;
             GUI.color = new Color(1f, 1f, 1f, alpha);
             Texture2D tex = (hovered && hoverTexture != null) ? hoverTexture : texture;
@@ -1736,11 +1792,21 @@ namespace Mutiny.Presentation
             return true;
         }
 
-        private bool CompleteCampaignAndReturnToLevelSelect()
+        public bool CompleteCampaignAndShowEnding()
         {
             if (!m_GameEndPopupShow || m_GameEndPopupKind != MutinyGameEndPopupKind.GameComplete)
                 return false;
-            return BackToSinglePlayerMenu();
+            if (LevelController == null || LevelController.CurrentLevelIndex !=
+                MutinyFrontendController.SinglePlayerLevelCount ||
+                LevelController.ActiveGameMode != MutinyGameMode.SinglePlayer)
+                return false;
+            MutinyFrontendController frontend = FrontendController != null
+                ? FrontendController : FindAnyObjectByType<MutinyFrontendController>();
+            if (frontend == null || !frontend.ShowEnding(LevelController.SinglePlayerScore, LevelController))
+                return false;
+            m_GameEndPopupShow = false;
+            m_GameEndPopupAlpha = 0f;
+            return true;
         }
 
         private void DrawLevelSelectModal()

@@ -21,7 +21,8 @@ Unity 主要用 PNG 序列 + `SpriteRenderer` 复现这些时间轴，以 `Mutin
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
 | --- | --- | --- | --- | --- | --- |
 | VIS-EXP-01 | explosion 按 `size/100` 等比缩放；frame 3 命中，frame 8 停止并销毁 | `Explosion.as`；symbol 1785 frame 3/8 | `MutinyExplosion.Spawn`、`Update`、`ApplyHit` | 从真实武器碰撞生成，断言缩放、帧号、一次命中与销毁 tick | 已实现；局部回归已写，本轮未运行 |
-| VIS-SMOKE-01 | Cannonball、CherryBomb、Dynamite、ParachuteBomb（未开伞）、RumBottle 的 `advance` 路径每 tick 创建 `cannonSmokeTrail`；烟迹 frame 19 销毁。Cannonball 的高刷新率可见轨迹另按 `CAN-SMOKE-02` 对齐 | 五个武器 AS2；symbol 866 frame 19 | `MutinyRumBottleSmokeTrail`；五种武器已调用 | 核对 19 帧原版资源、五种武器逐 tick 出烟、装备阶段出烟及开伞后停烟 | 已接入；隔离工程 Unity Play Mode 15/15 大炮特效专项断言通过，主工程画面待验收 |
+| VIS-SMOKE-01 | Cannonball、CherryBomb、Dynamite、ParachuteBomb（未开伞）、RumBottle 的 `advance` 路径每 tick 创建 `cannonSmokeTrail`；烟迹 frame 19 销毁。Cannonball 的高刷新率可见轨迹另按 `CAN-SMOKE-02` 对齐 | 五个武器 AS2；symbol 866 frame 19 | `MutinyRumBottleSmokeTrail`；五种武器已调用 | 核对 19 帧原版资源、五种武器逐 tick 出烟、装备阶段出烟及开伞后停烟 | 已接入；隔离工程 Unity Play Mode 19/19 大炮与共享烟迹专项断言通过，主工程画面待验收 |
+| VIS-SMOKE-02 | Cherry Bomb、Dynamite、Rum Bottle、Parachute Bomb 的新烟团与该 tick 开始时的可见弹体重合；弹体在后续渲染帧向前移动而烟留在身后。ready 阶段也使用同一位置规则；开伞后仍不出烟 | 四个武器 AS2 的 `advanceMotion` 后 `advance` 出烟；用户授权的高刷新率弹体显示插值，参照 `CAN-SMOKE-02` | `MutinyPhysicsBody.CurrentStepStartPositionPixels`、四种武器的生产出烟回调 | 正式武器物理 tick 后检查烟团与可见弹体同位，半 tick 表现采样后检查烟仍在轨迹后方；分别覆盖四种武器及 ready 态 | 已实现；2026-09-26 隔离 Unity Play Mode 19/19 专项断言通过；主工程画面待验收 |
 | VIS-FLAME-01 | sweepingFlame 创建即命中附近角色，frame 4 沿地表传播 8 px，frame 11 销毁 | `SweepingFlame.as`；symbol 905 frame 4/11 | `MutinySweepingFlame` | RumBottle 地面碰撞生成左右两条，逐 tick 核对命中/传播/销毁 | 已实现；待 Unity 运行验证 |
 | VIS-SPLASH-02 | 已发射且未完成的普通武器在注册点跨水线时生成 splash；水线穿越不调用 `contact`，CherryBomb 不因入水而爆炸；Boulder/Parachute Bomb/金币按各自原版 `advance` 保留专用调用，Cannonball 不走继承的 `Weapon.advance` | `Weapon.as::advance`、`Solid.as::splashCheck`、`CherryBomb.as::advance`、`Cannonball.as::advance` | `MutinyWeapon.AdvanceInheritedSplashCheck`、各武器 `AdvanceSplashCheck` | 对投射物分别测试相等水线、入水、出水、地形碰撞 | 已接入；待 Unity Play Mode 验证 |
 | VIS-WPN-IDLE-01 | 可见武器在 ready/idle 阶段仍按原版时间轴播放：Cherry Bomb 1..4、Dynamite `lit` 1..4、Rum Bottle 1..12、Parachute Bomb 闭伞引信 1..4；动作帧不作为额外可见帧 | symbols 844/881/918/939；`Dynamite.as` 构造函数；symbol 881 frame 5/6 actions；symbol 939/930 | `MutinyCherryBomb`、`MutinyDynamite.AdvanceOriginalPresentationTick`、`MutinyRumBottle`、`MutinyParachuteBomb` | 武器保持 `IsFired=false`，推进生产 tick，核对帧循环；Dynamite 入水后固定 frame 6 | 已实现；Dynamite 定向 Unity 回归 2/2 通过 |
@@ -69,5 +70,5 @@ Unity 主要用 PNG 序列 + `SpriteRenderer` 复现这些时间轴，以 `Mutin
 
 - 静态确认：爆炸、扫火、烟迹、Mine、Parachute Bomb、Seagull、Tidal Wave、箱体与 Anchor 的关键帧脚本。
 - 已实现：主要帧播放器与生产事件连接；本轮修正水花帧长和跨线调用。
-- 实际测试通过：`VIS-WPN-IDLE-01/DYN-ANI-01/02` 定向 Unity batchmode 回归 2/2 通过。
+- 实际测试通过：`VIS-WPN-IDLE-01/DYN-ANI-01/02` 定向 Unity batchmode 回归 2/2 通过；`VIS-SMOKE-01/02` 与 `CAN-SMOKE-02` 隔离 Unity Play Mode 共享烟迹专项 19/19 断言通过。
 - 待运行验证：通用效果与上表所有时间轴的生产入口逐帧对照。
