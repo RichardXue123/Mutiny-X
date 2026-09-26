@@ -46,6 +46,11 @@ namespace Mutiny.Simulation
         // discontinuity; all other bodies keep the normal tick interpolation.
         internal Func<Vector3?> PresentationPositionOverride { get; set; }
 
+        // Parent-driven projectiles must not run a second autonomous simulation,
+        // but may still render the completed tick using their parent's clock.
+        internal MutinyPhysicsBody PresentationClockSource { get; set; }
+        private bool CanInterpolatePresentation => IsActive || PresentationClockSource != null;
+
         public bool IsAtRest => State.IsAtRest;
         public long SimulationTickCount { get; private set; }
         // During OnSimulationStep this is the first pose the renderer presents
@@ -53,7 +58,9 @@ namespace Mutiny.Simulation
         // origin instead of the ahead-of-render authoritative State position.
         public Vector2 CurrentStepStartPositionPixels { get; private set; }
         public float SimulationInterpolationAlpha =>
-            Mathf.Clamp01(m_TimeAccumulator / MutinyPhysics.TimeStep);
+            PresentationClockSource != null
+                ? PresentationClockSource.SimulationInterpolationAlpha
+                : Mathf.Clamp01(m_TimeAccumulator / MutinyPhysics.TimeStep);
 
         // The simulation stays at 25 Hz. Both the visible object and its camera
         // target sample the same completed tick, one tick behind authority.
@@ -69,7 +76,7 @@ namespace Mutiny.Simulation
                 return overriddenPosition.Value;
 
             Vector2 current = new Vector2(State.X, State.Y);
-            if (!IsActive || !m_HasPresentationTick ||
+            if (!CanInterpolatePresentation || !m_HasPresentationTick ||
                 (current - m_CurrentTickPositionPixels).sqrMagnitude > 0.0001f)
                 return MutinyPhysics.PixelToUnity(current.x, current.y);
 
@@ -97,9 +104,17 @@ namespace Mutiny.Simulation
         private void Start()
         {
             EnsureInitializedState();
-            Vector2 px = MutinyPhysics.UnityToPixel(transform.position);
-            State.X = px.x;
-            State.Y = px.y;
+            // A child spawned in another body's Update may already have stepped
+            // and rendered before its first Start. Never seed State from that
+            // one-tick-delayed display pose or rewind its authoritative motion.
+            if (!m_HasPresentationTick)
+            {
+                Vector2 px = MutinyPhysics.UnityToPixel(transform.position);
+                State.X = px.x;
+                State.Y = px.y;
+            }
+            else
+                RestoreAuthoritativePose();
 
             CacheLevelTerrain();
         }
@@ -213,7 +228,7 @@ namespace Mutiny.Simulation
 
         private void ApplyPresentationPose(float alpha)
         {
-            if (!IsActive || !SyncTransform)
+            if (!CanInterpolatePresentation || !SyncTransform)
                 return;
 
             Vector3 presentation = SamplePresentationPosition(alpha);

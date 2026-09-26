@@ -87,6 +87,7 @@ namespace Mutiny.Verification
             VerifyRumBottle(result);
             VerifyMineCameraAndLevelCleanup(result);
             VerifySeagull(result);
+            VerifySeagullPresentation(result);
             VerifyTidalWave(result);
             VerifyLongRunningWaveTurn(result);
             VerifyVoodooDoll(result);
@@ -165,6 +166,24 @@ namespace Mutiny.Verification
         {
             var result = new MutinyLevel1VerificationResult();
             VerifyCameraMovement(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunSeagullPresentation()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifySeagull(result);
+            VerifySeagullPresentation(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunCannon()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyCannon(result);
+            VerifyAiCannonTurnSettlement(result);
+            VerifyCannonSmokeTrail(result);
+            VerifyCannonImpactEffects(result);
             return result;
         }
 
@@ -1740,7 +1759,11 @@ namespace Mutiny.Verification
 
                 opposingCharacterObject = new GameObject("AiCannonTurnVerification_Opponent");
                 MutinyCharacter opponent = opposingCharacterObject.AddComponent<MutinyCharacter>();
-                PhysicsBodyState opponentState = PhysicsBodyState.CreateDefault(500f, 200f);
+                // This synchronous fixture verifies original boundary completion.
+                // Keep its opponent outside the horizontal shot, since impact
+                // explosions and health presentation require rendered Updates.
+                // Those contact paths are covered by VerifyCannonImpactEffects.
+                PhysicsBodyState opponentState = PhysicsBodyState.CreateDefault(500f, 300f);
                 opponentState.Weight = 0f;
                 opponent.PhysicsBody.State = opponentState;
                 opposingTeam.RegisterCharacter(opponent);
@@ -5529,6 +5552,166 @@ namespace Mutiny.Verification
                 DestroyNow(teamObject);
                 DestroyNow(inputObject);
                 DestroyNow(turnObject);
+            }
+        }
+
+        private static void VerifySeagullPresentation(MutinyLevel1VerificationResult result)
+        {
+            long referenceImpactTick = -1;
+            long referenceWaterTick = -1;
+            var existingShots = new HashSet<MutinySeagullFire>(Object.FindObjectsByType<MutinySeagullFire>());
+            var existingExplosions = new HashSet<MutinyExplosion>(Object.FindObjectsByType<MutinyExplosion>());
+            foreach (int fps in new[] { 25, 60, 120 })
+            {
+                GameObject birdObject = null;
+                try
+                {
+                    birdObject = new GameObject($"SeagullPresentation_{fps}FPS");
+                    MutinySeagull bird = birdObject.AddComponent<MutinySeagull>();
+                    bird.Initialize(null);
+                    bird.PhysicsBody.SetTerrain(new string[100, 100], 100, 100);
+                    bird.PhysicsBody.WaterPixelY = 2000f;
+                    bird.CallAirstrike(400f, 100f, 0f);
+                    bool accepted = bird.RequestShotForVerification();
+                    bird.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                    MutinySeagullFire first = null;
+                    foreach (MutinySeagullFire shot in Object.FindObjectsByType<MutinySeagullFire>())
+                    {
+                        if (!existingShots.Contains(shot))
+                            first = shot;
+                    }
+                    result.Assert(accepted && first != null && first.PhysicsBody.SimulationTickCount == 1 &&
+                                  !first.PhysicsBody.IsActive,
+                        $"SEA-PRES-01 {fps}FPS birth tick advances the parent-owned child exactly once");
+                    if (first == null)
+                        continue;
+
+                    first.PhysicsBody.ApplyPresentationPoseForVerification();
+                    bird.PhysicsBody.ApplyPresentationPoseForVerification();
+                    Vector2 birthPose = MutinyPhysics.UnityToPixel(first.transform.position);
+                    result.Assert(Vector2.Distance(birthPose, new Vector2(400f, 100f)) < 0.001f &&
+                                  Vector2.Distance(new Vector2(first.PhysicsBody.State.X, first.PhysicsBody.State.Y),
+                                      new Vector2(410f, 101f)) < 0.001f,
+                        $"SEA-PRES-01 {fps}FPS first visible child starts at the birth tick origin, not ahead of the displayed bird");
+                    typeof(MutinyPhysicsBody).GetMethod("Start",
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                        .Invoke(first.PhysicsBody, null);
+                    result.Assert(first.PhysicsBody.State.X == 410f && first.PhysicsBody.State.Y == 101f &&
+                                  first.PhysicsBody.SimulationTickCount == 1,
+                        $"SEA-PRES-02 {fps}FPS delayed Start cannot write the displayed birth pose back into authority");
+                    first.PhysicsBody.SetTerrain(new string[100, 100], 100, 100);
+                    first.PhysicsBody.WaterPixelY = 2000f;
+
+                    bird.PhysicsBody.AdvanceSimulationFrameForVerification(0.02f);
+                    first.PhysicsBody.AdvanceSimulationFrameForVerification(0.02f);
+                    first.PhysicsBody.ApplyPresentationPoseForVerification();
+                    bird.PhysicsBody.ApplyPresentationPoseForVerification();
+                    Vector2 halfPose = MutinyPhysics.UnityToPixel(first.transform.position);
+                    result.Assert(Vector2.Distance(halfPose, new Vector2(405f, 100.5f)) < 0.001f &&
+                                  Mathf.Abs(first.PhysicsBody.SimulationInterpolationAlpha -
+                                      bird.PhysicsBody.SimulationInterpolationAlpha) < 0.0001f &&
+                                  Mathf.Abs(first.transform.position.x - bird.transform.position.x) < 0.0001f &&
+                                  first.PhysicsBody.SimulationTickCount == 1 && first.PhysicsBody.State.Y == 101f,
+                        $"SEA-PRES-01 {fps}FPS mid-tick child Transform interpolates gravity and shares bird phase without stepping State");
+
+                    bool frameChecksPassed = true;
+                    bool interTickMoved = fps == 25;
+                    MutinySeagullFire second = null;
+                    bool secondRequested = false;
+                    long secondBirthParentTick = -1;
+                    for (int frame = 0; frame < fps && bird.PhysicsBody.SimulationTickCount < 15; frame++)
+                    {
+                        if (!secondRequested && bird.PhysicsBody.SimulationTickCount >= 5)
+                            secondRequested = bird.RequestShotForVerification();
+                        long oldCount = first.PhysicsBody.SimulationTickCount;
+                        Vector3 oldPose = first.transform.position;
+                        // This is the child's real autonomous-frame entry: it must
+                        // remain inert even though presentation is enabled.
+                        first.PhysicsBody.AdvanceSimulationFrameForVerification(1f / fps);
+                        if (second != null)
+                            second.PhysicsBody.AdvanceSimulationFrameForVerification(1f / fps);
+                        frameChecksPassed &= first.PhysicsBody.SimulationTickCount == oldCount;
+                        bird.PhysicsBody.AdvanceSimulationFrameForVerification(1f / fps);
+                        if (secondRequested && second == null)
+                        {
+                            foreach (MutinySeagullFire shot in Object.FindObjectsByType<MutinySeagullFire>())
+                            {
+                                if (shot != first && !existingShots.Contains(shot))
+                                    second = shot;
+                            }
+                            if (second != null)
+                                secondBirthParentTick = bird.PhysicsBody.SimulationTickCount;
+                        }
+                        first.PhysicsBody.ApplyPresentationPoseForVerification();
+                        bird.PhysicsBody.ApplyPresentationPoseForVerification();
+                        frameChecksPassed &= first.PhysicsBody.SimulationTickCount == bird.PhysicsBody.SimulationTickCount &&
+                            Mathf.Abs(first.transform.position.x - bird.transform.position.x) < 0.0001f &&
+                            Mathf.Abs(first.PhysicsBody.State.X - bird.PhysicsBody.State.X) < 0.001f;
+                        if (first.PhysicsBody.SimulationTickCount == oldCount && first.transform.position != oldPose)
+                            interTickMoved = true;
+                        if (second != null)
+                        {
+                            second.PhysicsBody.ApplyPresentationPoseForVerification();
+                            frameChecksPassed &= second.PhysicsBody.SimulationTickCount ==
+                                bird.PhysicsBody.SimulationTickCount - secondBirthParentTick + 1 &&
+                                Mathf.Abs(second.transform.position.x - bird.transform.position.x) < 0.0001f;
+                        }
+                    }
+                    result.Assert(frameChecksPassed && interTickMoved && second != null && bird.ActiveShotCount == 2,
+                        $"SEA-PRES-01 {fps}FPS successive rendered frames and repeated drops share phase, never double-step, and retain sub-tick motion");
+
+                    // Use real contact and water-entry paths, not a test-only finish.
+                    if (second != null)
+                    {
+                        second.PhysicsBody.WaterPixelY = second.PhysicsBody.State.Y + 20f;
+                        long waterStart = second.PhysicsBody.SimulationTickCount;
+                        for (int frame = 0; frame < fps * 2 && bird.ActiveShotCount == 2; frame++)
+                            bird.PhysicsBody.AdvanceSimulationFrameForVerification(1f / fps);
+                        long waterTicks = second.PhysicsBody.SimulationTickCount - waterStart;
+                        if (referenceWaterTick < 0)
+                            referenceWaterTick = waterTicks;
+                        int waterExplosionCount = 0;
+                        foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>())
+                            if (!existingExplosions.Contains(explosion))
+                                waterExplosionCount++;
+                        result.Assert(bird.ActiveShotCount == 1 && waterTicks == referenceWaterTick && waterExplosionCount == 0,
+                            $"SEA-PRES-02 {fps}FPS real water entry ends on the same child tick without explosion");
+                        DestroyNow(second.gameObject);
+                    }
+
+                    string[,] impactTerrain = new string[100, 100];
+                    for (int x = 0; x < 100; x++)
+                        impactTerrain[12, x] = "solid";
+                    first.PhysicsBody.SetTerrain(impactTerrain, 100, 100);
+                    for (int frame = 0; frame < fps * 2 && bird.ActiveShotCount > 0; frame++)
+                        bird.PhysicsBody.AdvanceSimulationFrameForVerification(1f / fps);
+                    long impactTick = first.PhysicsBody.SimulationTickCount;
+                    if (referenceImpactTick < 0)
+                        referenceImpactTick = impactTick;
+                    int explosionCount = 0;
+                    bool explosionMatches = false;
+                    foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>())
+                    {
+                        if (!existingExplosions.Contains(explosion))
+                        {
+                            explosionCount++;
+                            explosionMatches = explosion.Size == 50f && explosion.MaxDamage == 50f;
+                        }
+                    }
+                    result.Assert(bird.ActiveShotCount == 0 && impactTick == referenceImpactTick &&
+                                  explosionCount == 1 && explosionMatches,
+                        $"SEA-PRES-02 {fps}FPS real terrain contact ends on the same physics tick with exactly one 50/50 explosion");
+                }
+                finally
+                {
+                    foreach (MutinySeagullFire shot in Object.FindObjectsByType<MutinySeagullFire>())
+                        if (!existingShots.Contains(shot))
+                            DestroyNow(shot.gameObject);
+                    foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>())
+                        if (!existingExplosions.Contains(explosion))
+                            DestroyNow(explosion.gameObject);
+                    DestroyNow(birdObject);
+                }
             }
         }
 

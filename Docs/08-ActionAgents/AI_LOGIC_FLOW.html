@@ -585,6 +585,7 @@ force = NextFloat(5, twangMaxForce)</span>
         </div>
         <p>日志 <code>AI-Decision</code> 记录阶段、候选数、胜出者、分数、速度与目标。默认 <code>SaveDecisionTrace=true</code> 时，还会在 <code>Application.persistentDataPath/ai-decisions</code> 保存 JSON，含 seed、每次随机抽样、所有候选及胜者；<code>ReplayDecisionTracePath</code> 对下一次同队同阶段决策生效一次，随机类型/边界或候选参数不一致会报错。<code>UseFixedDecisionSeed</code> 与 <code>FixedDecisionSeed</code> 可用于固定实验。可重放的是<strong>相同 Unity 棋盘上的当前实现</strong>，不是原版 Flash <code>Math.random()</code> 的内部状态。</p>
         <div class="callout"><strong>GM 测试开关：</strong><code>aiforceusewaepon 1..15</code> 把所有 AI 的有效武器候选限制为该编号，并视为无限供应；跳跃仍参加竞争，续行动仍受正分门限制，因此并不保证一定开火。<code>aiforceusewaepon 0</code> 恢复真实库存。该开关是项目授权扩展，不是原版规则。</div>
+        <div class="callout"><strong>单回合接管：</strong><code>aitakeover 1</code> 让 AI 接管当前人类队伍这一回合的剩余行动。跳跃前使用走首次候选；跳跃飞行中使用先等稳定；落地后使用只评价原已选角色的武器，分数不大于 0 仍可 Pass。完整回合结束自动交还人类控制，不重置行动资格、不赠送武器；也服从当前强制武器设置。此项为 GM-08 项目扩展。</div>
       </section>
 
       <section id="timing">

@@ -79,6 +79,7 @@ namespace Mutiny.Simulation
             // bird tick and prevents Unity component order from adding a delay or
             // a second step in the spawn frame.
             m_PhysicsBody.IsActive = false;
+            m_PhysicsBody.PresentationClockSource = parent != null ? parent.PhysicsBody : null;
 
             if (parent != null && parent.PhysicsBody != null)
             {
