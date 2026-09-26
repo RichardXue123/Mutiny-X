@@ -51,7 +51,7 @@
 
 ### v1.0.2 下载文件替换候选（尚未发布）
 
-- 本节记录的是 `d39495e` 的旧候选，用户后续运行发现中英文表键查询均失效、切回中文没有译文；**该候选不得覆盖线上包**。修复规格及新候选状态见 [语言反复切换修复](LOCALIZATION_RESELECT_FIX.md)。
+- 本节记录的是 `d39495e` 的旧候选，用户后续运行发现中英文表键查询均失效、切回中文没有译文；**该候选不得覆盖线上包**。已另从 `68470c8` 构建新候选，规格、静态检查及待用户运行验收见 [语言反复切换修复](LOCALIZATION_RESELECT_FIX.md)。
 - 用户选择在亲自运行验收后覆盖现有 GitHub v1.0.2 下载文件。此操作是本次授权的发布例外；现有一键发布脚本按 `EXT-REL-05` 拒绝覆盖已发布 tag，不能把候选误报为已上线。
 - 以干净隔离 worktree 的 `d39495e` 构建正式产品名 `Mutiny X`，保留版本 `1.0.2+6`。Unity `6000.6.0f1` 的 Windows 和 Android `BuildReport` 均成功；Windows ZIP 为 223 个条目，无 PDB；Inno Setup 7 安装包版本为 `1.0.2`；APK 包名 `com.RichardXue.MutinyX`，versionCode `6`，versionName `1.0.2`，签名证书 SHA-256 与当前线上 APK 相同。
 - 本地四个候选资产的文件大小和 SHA-256 均与候选 manifest 一致；文件位于 `D:/My Project/Mutiny X/_localization_release_candidate/Builds/Candidate/assets/`，详细值见该目录的 `candidate-manifest.json` 和 `SHA256SUMS.txt`。
