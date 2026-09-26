@@ -13,6 +13,19 @@
 
 原版 `frame_51/PlaceObject2_149_DangleFont_134` 构造脚本写作 `chris burt  brown`（两个空格），用户提供的原版运行截图显示 `CHRIS BURT-BROWN`。以运行画面为显示目标，静态字符串与运行画面的差异保留为待核对项；不得通过修改原始证据消除冲突。
 
+## 用户授权扩展：Unity 移植者署名（2026-09-26）
+
+以下规则来源于用户要求保留 XingTong 头像和 Richard Xue 注解，独立于原版 Flash 一致性规则。
+
+| ID | 可观察行为与状态转换 | 来源 | Unity 入口 | 验收用例 | 实际结果 |
+| --- | --- | --- | --- | --- | --- |
+| EXT-CRED-01 | Credits 右侧显示 XingTong 头像及其下方的 Richard Xue；中央保留 Unity 移植者署名。编辑器和 Windows / Android / iOS Player 使用同一随包资源，不依赖工程源文件路径 | 用户授权扩展；原图 `XingTong.png` | `MutinyFrontendController.Initialize / LoadAvatarTexture / DrawCredits` | 用生产初始化加载头像，要求与 `Resources.Load("UI/Frontend/XingTong")` 同一资源、1254×1254；构建前自动检查；在没有 Assets 源目录的 Windows Player 打开实际 Credits 页并截图 | 已修复；回归用例修复前失败、修复后通过；Windows 构建包含原 GUID 头像，独立 Player 包内加载及生产 Credits 过渡通过；隐藏窗口截图为黑屏，视觉验收及 Android/iOS 真机仍待验证 |
+| EXT-CRED-02 | 头像及姓名保留共同链接区域；过渡完成后悬停提亮姓名，按下并在区域内释放打开项目 GitHub 页面 | 用户授权扩展；当前移植者链接设计 | `MutinyFrontendController.DrawCredits / HandleCreditsLink` | 检查头像、姓名、链接矩形与过渡门控；实际悬停及外链点击单独验收 | 本次不修改交互；实际悬停及外链点击待运行验证 |
+
+### 1.0.1 发布复验（2026-09-26）
+
+独立发布工作区在 Unity 6000.6.0f1 中再次通过生产初始化资源检查。Main 场景 Play Mode 调用 Credits 按钮共用的 `OpenCredits` 入口，经过生产过渡后从实际 Game View 截图：XingTong 头像、头像下方 `Richard Xue`、中央 `Ported to Unity by Richard Xue` 均可见。[截图及验证记录](../../11-VerificationAndDebug/02-PlayModeValidation/CREDITS_VERIFICATION.md#101-发布复验)。这次已验证编辑器画面；Player 包内加载见上表历史结果，外链点击及 Android 真机显示仍待运行验证。
+
 ## 验证记录（2026-09-25）
 
 - **静态确认**：SWF 根时间轴第 51 帧坐标与五个独立导出贴图一致；`CreditsButton.as`、`BackButton.as`、两处原版外链动作已核对。

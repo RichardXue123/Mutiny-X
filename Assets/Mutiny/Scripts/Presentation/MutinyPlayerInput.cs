@@ -950,6 +950,18 @@ namespace Mutiny.Presentation
             MutinyDebugLog.Info("Input", $"weapon selection cancelled nextState={InteractionState}", this);
         }
 
+        // ClearEquippedWeapon preserves committed objects; action qualifications
+        // and the selected character belong to the turn manager and are untouched.
+        public void ReleaseUncommittedInputForAiTakeover()
+        {
+            HandlePointerCancellation();
+            CancelWeaponSelection();
+            ResetMobileGestureOwnership();
+            ClearSpecialWeaponCursor();
+            ClearHoveredCharacter();
+            m_WasTurnActive = false;
+        }
+
         public bool ShouldShowCancelWeapon(MutinyCharacter character)
         {
             MutinyCharacter selected = GetHumanSelectedCharacter();

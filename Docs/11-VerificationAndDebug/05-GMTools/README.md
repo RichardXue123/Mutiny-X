@@ -10,7 +10,7 @@ GM 是当前 Unity 工程的调试扩展，不是 Flash 原版玩法规则。以
 
 1. `MutinyGMManager` 在场景加载后自动创建并 `DontDestroyOnLoad`，代码中没有开发构建或战斗场景开关。`OnGUI` 绘制以 550×400 游戏画布为基准的 30 px 按钮，实际尺寸随画布缩放；按钮切换面板开闭，面板 `X` 关闭。
 2. 面板通过 `Run` 或输入框聚焦时的 Enter 调用 `SubmitCommand()`。输入被 `Trim()`，空输入直接返回；随后交给公开的 `ExecuteCommand()`。`ExecuteCommand()` 再次去除首尾空格、转为小写匹配，并向 Unity 日志写一条执行记录。命令结果只显示在面板状态文字与颜色中。
-3. 命令解析依次检查关卡解锁、关卡重置、AI 强制武器、角色武器解锁、帮助，最后为未知命令。英文大小写不敏感；`Unlock All` 是精确匹配，`UnlockWeapon*` / `InfiniteWeapon*` 是前缀匹配，AI 命令要求恰好两个空白分隔的字段。除 AI 参数解析外，内部空格不会统一折叠。
+3. 命令解析依次检查关卡解锁、关卡重置、AI 单回合接管、AI 强制武器、角色武器解锁、帮助，最后为未知命令。英文大小写不敏感；`Unlock All` 是精确匹配，`UnlockWeapon*` / `InfiniteWeapon*` 是前缀匹配，AI 命令要求恰好两个空白分隔的字段。除 AI 参数解析外，内部空格不会统一折叠。
 4. 进度命令调用 `MutinySaveSystem`；角色武器命令调用 `MutinyCharacter.UnlockAllWeapons(true)`；AI 命令调用静态的 `MutinyAIController.TrySetForcedWeaponId()`，由生产 AI 决策和执行路径读取。各路径没有第二套 UI 专用实现。
 
 ## 可观察规则与状态转换
@@ -38,6 +38,7 @@ GM 是当前 Unity 工程的调试扩展，不是 Flash 原版玩法规则。以
 | `GM-04` | `ResetLevels` / `ResetProgress` / `LockAll`：删除最高已解锁关卡键，下次读取返回默认值 1；完成分数和音频设置不受影响。 | `ExecuteCommand` → `MutinySaveSystem.ResetProgress` | 当前没有独立 GM 命令回归，待验收。 |
 | `GM-05` | `Help` / `?`：状态文字变为命令简表，不修改战斗与存档。简表只列推荐命令，不覆盖所有别名。 | `MutinyGMManager.ExecuteCommand` | 当前没有独立面板文字回归，待验收。 |
 | `GM-07` | `aiforceusewaepon 1..15`：全局 AI 武器候选只含对应菜单武器，按无限弹药执行且不扣真实库存；跳跃、Pass 与通常 `CanShoot` 门仍有效。`0` 清除覆盖。非法输入保持原值。 | `ExecuteCommand` → `MutinyAIController.ForcedWeaponId` → 决策候选 → `AIMove.UsesForcedWeaponSupply` → `ExecuteMove` | 2026-09-25 当前工程 Play Mode 专项回归历史结果 7/7；本轮未重新运行。完整战斗画面与“有候选但收益非正”的续行动分支待验收。 |
+| `GM-08` | `aitakeover 1`：当前人类回合剩余行动交给 AI；允许真实跳跃飞行中/落地后接管，不重置资格；完整回合结束恢复人类控制。 | `ExecuteCommand` → `TryTakeOverCurrentPlayerTurn` → 通常 AI 流程；`RestorePlayerControl` | 2026-09-26 隔离 Play Mode 新增 12 条生产入口断言通过；专项详情见下文。 |
 
 ### 单目标选择顺序
 
@@ -52,6 +53,7 @@ GM 是当前 Unity 工程的调试扩展，不是 Flash 原版玩法规则。以
 | GM-01/02 武器库存与无限标记 | 当前 `MutinyCharacter` 对象 | 对象随场景销毁时消失；新关角色不继承 | 重置 |
 | GM-03/04 最高关卡进度 | `MutinySaveSystem` 的 `mutiny_highest_unlocked_level` | 保留 | 保留；除非再次重置 |
 | GM-07 强制武器编号 | `MutinyAIController` 静态字段 | 保留 | `SubsystemRegistration` 重置为 0 |
+| GM-08 当前人类回合接管 | `MutinyTurnManager.m_AiTakeoverTeam`，临时队伍 AI 标记 | 管理器销毁即恢复；不转移至新关 | 重置；同一场景完整回合结束、GameOver 或 StartGame 也恢复 |
 
 GM-07 在决策开始时把武器类型复制到工作对象；已选射击动作另存是否使用强制供给。因此在决策或执行途中改变命令，不追溯改写那次动作。GM-01/02 则直接修改角色的 `WeaponInventory`、`InfiniteWeapons` 和 `CanShoot`；`GetAmmunition()` 对无限武器返回 `-1`，底层库存值为 `int.MaxValue`。`cannonball` 是大炮内部库存别名，不占第 16 个菜单编号。
 
@@ -69,6 +71,16 @@ GM-07 在决策开始时把武器类型复制到工作对象；已选射击动�
 - `GM-07`：沿用专项生产解析与 AI 候选/执行回归；另在真实回合构造“有强制武器候选但评分非正”的续行动和跨场景情形，核对 Pass、库存不扣减、`0` 关闭及重新开始 Play 时清零。
 
 ## 验收状态与缺口
+
+### GM-08 · 单回合接管（2026-09-26）
+
+原版来源：不适用，用户授权扩展。规格与错误条件见 [命令说明](../GM_COMMANDS.md#gm-08--当前玩家单回合-ai-接管)。生产入口为 `ExecuteCommand` → `TryTakeOverCurrentPlayerTurn`；不调用 `StartTurn`，已跳跃者保留所选角色及剩余射击资格，飞行中等待正式结算；未提交的玩家瞄准、武器和光标经输入生产清理入口撤销。现有 AI 组件负责候选/评分/镜头与武器分支，回合管理器在完整回合结束、GameOver、重新初始化和销毁时恢复人类控制。错误输入及重复请求不入成功历史，不延长接管。
+
+- 静态确认与已实现：GM 解析、Help、输入清理、临时 AI 控制、自动恢复及通常两阶段流程已接入；`Assembly-CSharp-Editor` 连同运行时程序集编译通过，3 个原有警告、0 错误。
+- 实际测试通过：Unity 6000.6.0f1 隔离 Play Mode 执行 `RunGM()`，24/24 断言通过，其中新增 GM-08 12 条。覆盖错误参数、未提交武器清理、跳跃候选保留、重复拒绝、生产 Pass 后恢复、下一轮不继承、真实玩家跳跃空中接管、落地后仅原角色的武器候选、海啸正式生命周期期间维持接管及结束后恢复、重开和 GameOver。候选/执行使用生产测试入口，跳跃和换队没有在用例中手动重写行动布尔量。
+- 实际协程通过：同一隔离工程额外运行 `GmTakeoverLiveBatchRunner.Run`，自然驱动 AI `Start/Update` 协程、物理和回合 `Update`，2/2 场景通过：未跳跃接管自动开火并换队恢复；重开后真实玩家跳跃途中接管，落地后自动同角色射击并在 GameOver 恢复。该运行未直接调用 AI 求值/执行测试入口。日志与验证边界见 [GM-08 记录](Artifacts/GM-08-20260926.txt)。
+- 待运行验证：真实鼠标/触摸提交、双人模式玩家 2 的实际画面、拾取空投现场、15 种武器各自的接管画面；已实现不表示这些场景全部运行过。
+- 已知差异：此命令无 Flash 原版对应；仅接受参数 1，不接管未来多个回合，不在已经提交的武器序列中途转换操作者。复用/新增 AI 组件保持在队伍上，恢复后由通常 AI 资格门阻止求值。
 
 - **静态确认**：上述入口、匹配顺序、写入位置和状态存活期均已按当前 C# 核对；原版来源不适用。
 - **已实现**：GM-UI-01/02、GM-PARSE-01、GM-01 至 GM-05、GM-07 的对应生产路径存在；GM-UI-02 已在打开面板时绘制最多五项历史、由同一解析入口重放。GM-03 精确小写 `unlockalllevels` 已支持，帮助文案也显示该拼写。2026-09-26 当前 `Assembly-CSharp.csproj` C# 编译通过（3 个已有警告，0 错误）。

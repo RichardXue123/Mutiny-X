@@ -97,6 +97,7 @@ namespace Mutiny.Presentation
         private GUIStyle m_QuestionStyle;
 
         public MutinyFrontendPage CurrentPage => m_Flow.CurrentPage;
+        public Texture2D CreditsAvatar => m_CreditsAvatar;
         public int CurrentEndingFrame => m_EndingFrame;
         public int CurrentEndingShipTick => m_EndingShipTick;
         public bool HasAnimatedEndingShip => m_HasAnimatedEndingShip;
@@ -224,19 +225,8 @@ namespace Mutiny.Presentation
 
         private static Texture2D LoadAvatarTexture()
         {
-            Texture2D texture = Resources.Load<Texture2D>("UI/Frontend/XingTong");
-            if (texture != null)
-                return texture;
-
-            string directPath = System.IO.Path.Combine(Application.dataPath, "Mutiny/Art/Logo/XingTong.png");
-            if (System.IO.File.Exists(directPath))
-            {
-                byte[] data = System.IO.File.ReadAllBytes(directPath);
-                texture = new Texture2D(2, 2);
-                if (texture.LoadImage(data))
-                    return texture;
-            }
-            return null;
+            // Use the same bundled asset in the Editor and every Player platform.
+            return Resources.Load<Texture2D>("UI/Frontend/XingTong");
         }
 
         private static void DrawLinkUnderline(Rect textRect, Color color)
@@ -419,12 +409,17 @@ namespace Mutiny.Presentation
             }
             if (DrawOriginalButton(new Rect(193f, 274f, 163f, 24f), "credits", m_ButtonSmall, m_ButtonSmallOver))
             {
-                MutinyTransitionManager.RequestTransition(() =>
-                {
-                    m_Flow.PressCredits();
-                    LogPage("FRONT-CRED-01 credits", m_Flow.CurrentPage);
-                }, showLoading: false);
+                OpenCredits();
             }
+        }
+
+        private void OpenCredits()
+        {
+            MutinyTransitionManager.RequestTransition(() =>
+            {
+                m_Flow.PressCredits();
+                LogPage("FRONT-CRED-01 credits", m_Flow.CurrentPage);
+            }, showLoading: false);
         }
 
         private void DrawCredits()

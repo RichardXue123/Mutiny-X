@@ -48,8 +48,62 @@ namespace Mutiny.Simulation
         private bool m_ActionCommittedThisTurn;
         private string m_LastRestBlocker;
         private int m_RestBlockerTicks;
+        private MutinyTeam m_AiTakeoverTeam;
 
         public bool ActionCommittedThisTurn => m_ActionCommittedThisTurn;
+        public bool IsAiTakeoverActive => m_AiTakeoverTeam != null;
+
+        // GM-08: temporarily hand the current human turn to the normal AI.
+        // Do not StartTurn/ResetTurnActions: a player jump may already be committed.
+        public bool TryTakeOverCurrentPlayerTurn(out string error)
+        {
+            error = null;
+            if (IsAiTakeoverActive || CurrentTeam == null || CurrentTeam.IsAiControlled ||
+                CurrentTeam.IsDefeated || !HasPlayableTeams() ||
+                !isActiveAndEnabled || !CurrentTeam.gameObject.activeInHierarchy)
+            {
+                error = "Requires an active human turn that is not already taken over.";
+                return false;
+            }
+
+            MutinyCharacter selected = CurrentTeam.SelectedCharacter;
+            bool afterJump = selected != null && selected.IsAlive &&
+                             !selected.CanThrow && selected.CanShoot;
+            bool ready = CurrentPhase == TurnPhase.TurnActive &&
+                         (!m_ActionCommittedThisTurn || afterJump);
+            bool settlingJump = afterJump && selected.IsSelfThrown &&
+                                (CurrentPhase == TurnPhase.ActionExecuting || CurrentPhase == TurnPhase.Settling);
+            if (!ready && !settlingJump)
+            {
+                error = "Takeover is allowed before an action or after a jump, not during a committed weapon sequence.";
+                return false;
+            }
+
+            m_AiTakeoverTeam = CurrentTeam;
+            CurrentTeam.IsAiControlled = true;
+            foreach (var input in FindObjectsByType<Mutiny.Presentation.MutinyPlayerInput>())
+                if (input.TurnManager == this)
+                    input.ReleaseUncommittedInputForAiTakeover();
+
+            MutinyAIController ai = CurrentTeam.GetComponent<MutinyAIController>();
+            if (ai == null)
+                ai = CurrentTeam.gameObject.AddComponent<MutinyAIController>();
+            ai.enabled = true; // Start/Update use the usual turn gate, including jump settlement.
+            MutinyDebugLog.Info("Turn", $"GM-08 AI takeover team={TeamLabel(CurrentTeam)} phase={CurrentPhase} afterJump={afterJump}", this);
+            return true;
+        }
+
+        private void RestorePlayerControl()
+        {
+            if (m_AiTakeoverTeam != null)
+            {
+                m_AiTakeoverTeam.IsAiControlled = false;
+                MutinyDebugLog.Info("Turn", $"GM-08 player control restored team={TeamLabel(m_AiTakeoverTeam)}", this);
+            }
+            m_AiTakeoverTeam = null;
+        }
+
+        private void OnDestroy() => RestorePlayerControl();
 
         private void Start()
         {
@@ -78,6 +132,7 @@ namespace Mutiny.Simulation
 
         public void StartGame()
         {
+            RestorePlayerControl();
             if (!HasPlayableTeams())
             {
                 CurrentTeam = null;
@@ -154,6 +209,9 @@ namespace Mutiny.Simulation
 
         private void Update()
         {
+            if (IsAiTakeoverActive && (CurrentTeam != m_AiTakeoverTeam ||
+                CurrentPhase == TurnPhase.GameOver || CurrentPhase == TurnPhase.NotStarted))
+                RestorePlayerControl();
             if (CurrentPhase == TurnPhase.GameOver || CurrentPhase == TurnPhase.NotStarted)
                 return;
 
@@ -361,6 +419,7 @@ namespace Mutiny.Simulation
             // a stale manager from a level being replaced. Neither condition is a draw.
             if (!HasPlayableTeams())
             {
+                RestorePlayerControl();
                 CurrentTeam = null;
                 CurrentPhase = TurnPhase.NotStarted;
                 GameResult = GameOverResult.None;
@@ -374,6 +433,7 @@ namespace Mutiny.Simulation
 
             if (team1Defeated || team2Defeated)
             {
+                RestorePlayerControl();
                 MutinyLevelController controller = GetComponentInParent<MutinyLevelController>() ??
                     FindAnyObjectByType<MutinyLevelController>();
                 CurrentPhase = TurnPhase.GameOver;
@@ -425,6 +485,7 @@ namespace Mutiny.Simulation
             if (CurrentTeam != null && CurrentTeam.IsTurnComplete())
             {
                 MutinyTeam finishedTeam = CurrentTeam;
+                RestorePlayerControl();
                 OnTurnEnded?.Invoke(CurrentTeam);
                 CurrentTeam.FinishTurn();
 

@@ -6113,6 +6113,11 @@ namespace Mutiny.Verification
                               gm.RecentSuccessfulCommands[4] == "aiforceusewaepon 2" &&
                               !gm.RunRecentCommand(-1) && !gm.RunRecentCommand(5),
                     "GM-UI-02 recent button reruns the production command and moves that execution to the front");
+                // The forced-shot check intentionally leaves a live projectile.
+                // Remove only that fixture before exercising a separate real board.
+                foreach (MutinyCherryBomb bomb in Object.FindObjectsByType<MutinyCherryBomb>())
+                    if (bomb.Owner == aiCharacter) DestroyNow(bomb.gameObject);
+                VerifyGMAiTakeover(gm, result);
             }
             finally
             {
@@ -6126,6 +6131,157 @@ namespace Mutiny.Verification
                 DestroyNow(aiTeamObject);
                 DestroyNow(characterObject);
                 DestroyNow(gmObject);
+            }
+        }
+
+        private static void VerifyGMAiTakeover(MutinyGMManager gm, MutinyLevel1VerificationResult result)
+        {
+            GameObject rootObject = new GameObject("GM_Takeover_Level");
+            GameObject humanObject = new GameObject("GM_Takeover_HumanTeam");
+            GameObject opponentObject = new GameObject("GM_Takeover_OpponentTeam");
+            GameObject ownerObject = new GameObject("GM_Takeover_Owner");
+            GameObject targetObject = new GameObject("GM_Takeover_Target");
+            GameObject managerObject = new GameObject("GM_Takeover_Manager");
+            GameObject inputObject = new GameObject("GM_Takeover_Input");
+            MutinyWeapon wave = null;
+            int savedForce = MutinyAIController.ForcedWeaponId;
+            try
+            {
+                MutinyLevelRoot root = rootObject.AddComponent<MutinyLevelRoot>();
+                root.Width = 40;
+                root.Height = 40;
+                root.WaterLevelY = -1000f / MutinyPhysics.PixelsPerUnit;
+                MutinyTeam human = humanObject.AddComponent<MutinyTeam>();
+                human.TeamNumber = 1;
+                MutinyTeam opponent = opponentObject.AddComponent<MutinyTeam>();
+                opponent.TeamNumber = 2;
+                opponent.IsAiControlled = true;
+                MutinyCharacter owner = ownerObject.AddComponent<MutinyCharacter>();
+                owner.TeamIndex = 1;
+                owner.Luck = 3f;
+                owner.PhysicsBody.State = PhysicsBodyState.CreateDefault(64f, 96f);
+                owner.PhysicsBody.WaterPixelY = 1000f;
+                owner.AddWeapon("banana", 2);
+                human.RegisterCharacter(owner);
+                MutinyCharacter target = targetObject.AddComponent<MutinyCharacter>();
+                target.TeamIndex = 2;
+                target.PhysicsBody.State = PhysicsBodyState.CreateDefault(10000f, 800f);
+                opponent.RegisterCharacter(target);
+                MutinyTurnManager manager = managerObject.AddComponent<MutinyTurnManager>();
+                manager.Initialize(human, opponent);
+                MutinyPlayerInput input = inputObject.AddComponent<MutinyPlayerInput>();
+                input.TurnManager = manager;
+                human.SelectCharacter(owner);
+                input.SelectWeapon("banana");
+                MutinyWeapon readyWeapon = input.EquippedWeapon;
+                int historyCount = gm.RecentSuccessfulCommands.Count;
+                result.Assert(!gm.ExecuteCommand("aitakeover") && !gm.ExecuteCommand("aitakeover 0") &&
+                              !gm.ExecuteCommand("aitakeover 2") && !gm.ExecuteCommand("aitakeover x") &&
+                              !gm.ExecuteCommand("aitakeover 1 extra") && !human.IsAiControlled &&
+                              !manager.IsAiTakeoverActive && gm.RecentSuccessfulCommands.Count == historyCount,
+                    "GM-08 invalid takeover arguments do not change ownership or success history");
+
+                int turns = human.TotalTurnsTaken;
+                result.Assert(gm.ExecuteCommand("  AiTakeOver 1  ") && manager.IsAiTakeoverActive &&
+                              human.IsAiControlled && owner.CanThrow && owner.CanShoot &&
+                              human.TotalTurnsTaken == turns && input.EquippedWeapon == null &&
+                              input.ActiveWeapon == null && !input.SelectWeapon("banana") &&
+                              owner.GetAmmunition("banana") == 2,
+                    "GM-08 production command takes over only the current turn and clears unfired player input without resetting actions/inventory");
+                // Destroy is deferred in Play Mode; do not let the cancelled probe
+                // survive into subsequent independent checks in this synchronous suite.
+                if (readyWeapon != null) DestroyNow(readyWeapon.gameObject);
+                result.Assert(!gm.ExecuteCommand("aitakeover 1") && manager.IsAiTakeoverActive,
+                    "GM-08 repeated takeover is rejected instead of extending its lifetime");
+                MutinyAIController ai = human.GetComponent<MutinyAIController>();
+                ai.UseFixedDecisionSeed = true;
+                ai.FixedDecisionSeed = 731;
+                ai.SaveDecisionTrace = false;
+                MutinyAIController.TrySetForcedWeaponId(15);
+                ai.EvaluateBestMove();
+                bool hasJump = ai.LastDecisionTrace.Candidates.Exists(c => c.MoveType == nameof(AIMoveType.SelfThrow));
+                result.Assert(ai.LastDecisionTrace.Phase == "first-action" && hasJump &&
+                              MutinyAIController.ResolveTurnGate(manager, human) == MutinyAITurnGate.Execute,
+                    "GM-08 first-action takeover uses the normal AI candidate pool including jump");
+                manager.PassTurn();
+                for (int tick = 0; tick < 11; tick++) manager.AdvanceSimulationTick();
+                result.Assert(manager.CurrentTeam == opponent && !human.IsAiControlled &&
+                              !manager.IsAiTakeoverActive && opponent.IsAiControlled &&
+                              !gm.ExecuteCommand("aitakeover 1"),
+                    "GM-08 production pass/settlement restores the human team and rejects native AI turns");
+                manager.PassTurn();
+                for (int tick = 0; tick < 11; tick++) manager.AdvanceSimulationTick();
+                result.Assert(manager.CurrentTeam == human && !human.IsAiControlled &&
+                              MutinyAIController.ResolveTurnGate(manager, human) == MutinyAITurnGate.Cancel,
+                    "GM-08 takeover does not persist when the player receives the next turn");
+
+                string[,] terrain = new string[12, 12];
+                for (int y = 0; y < 12; y++)
+                    for (int x = 0; x < 12; x++) terrain[y, x] = y == 4 ? "ground" : "-";
+                owner.PhysicsBody.SetTerrain(terrain, 12, 12);
+                human.SelectCharacter(owner);
+                bool jumped = input.TryCommitCharacterThrow(owner, new Vector2(64f, 96f), new Vector2(64f, 146f));
+                Vector2 jumpVelocity = new Vector2(owner.PhysicsBody.State.VelocityX, owner.PhysicsBody.State.VelocityY);
+                result.Assert(jumped && gm.ExecuteCommand("aitakeover 1") && !owner.CanThrow && owner.CanShoot &&
+                              owner.IsSelfThrown && human.SelectedCharacter == owner &&
+                              jumpVelocity == new Vector2(owner.PhysicsBody.State.VelocityX, owner.PhysicsBody.State.VelocityY) &&
+                              MutinyAIController.ResolveTurnGate(manager, human) == MutinyAITurnGate.Wait,
+                    "GM-08 accepts a real player jump in flight without resetting it and waits for the board");
+                for (int tick = 0; tick < 400 && manager.CurrentPhase != TurnPhase.TurnActive; tick++)
+                {
+                    owner.PhysicsBody.AdvanceSimulationTick();
+                    manager.AdvanceSimulationTick();
+                }
+                AIMove shot = ai.EvaluateBestMove();
+                bool onlyOwnerShots = ai.LastDecisionTrace.Candidates.TrueForAll(c =>
+                    c.Character == owner.name && c.MoveType == nameof(AIMoveType.ShootWeapon));
+                result.Assert(manager.CurrentPhase == TurnPhase.TurnActive && manager.IsAiTakeoverActive &&
+                              !owner.CanThrow && owner.CanShoot && ai.LastDecisionTrace.Phase == "continuation" &&
+                              onlyOwnerShots && shot.WeaponType == "tidalWave" && shot.Score > 0f,
+                    "GM-08 real jump settlement keeps takeover and enters selected-character-only weapon continuation");
+                ai.ExecuteMoveForVerification(shot, manager);
+                foreach (MutinyTidalWave candidate in Object.FindObjectsByType<MutinyTidalWave>())
+                    if (candidate.Owner == owner) wave = candidate;
+                result.Assert(wave != null && wave.IsFired && !owner.CanThrow && !owner.CanShoot &&
+                              manager.IsAiTakeoverActive && human.IsAiControlled,
+                    "GM-08 takeover persists while the normal AI weapon executes");
+                if (wave != null)
+                {
+                    wave.PhysicsBody.SetTerrain(new string[40, 40], 40, 40);
+                    for (int tick = 0; tick < 500 && !wave.IsFinished; tick++)
+                    {
+                        wave.PhysicsBody.AdvanceSimulationTick();
+                        manager.AdvanceSimulationTick();
+                    }
+                }
+                for (int tick = 0; tick < 11; tick++) manager.AdvanceSimulationTick();
+                result.Assert(manager.CurrentTeam == opponent && !manager.IsAiTakeoverActive && !human.IsAiControlled,
+                    "GM-08 full AI weapon lifecycle restores human control only when the turn finishes");
+                if (wave != null) DestroyNow(wave.gameObject);
+                manager.StartGame();
+                bool takenAgain = gm.ExecuteCommand("aitakeover 1");
+                manager.StartGame();
+                result.Assert(takenAgain && !manager.IsAiTakeoverActive && !human.IsAiControlled,
+                    "GM-08 restarting the production game clears a pending takeover");
+                gm.ExecuteCommand("aitakeover 1");
+                target.TakeDamage(1000f);
+                target.ShownHealth = target.Health;
+                for (int tick = 0; tick < 11; tick++) manager.AdvanceSimulationTick();
+                result.Assert(manager.CurrentPhase == TurnPhase.GameOver && !human.IsAiControlled &&
+                              !manager.IsAiTakeoverActive && !gm.ExecuteCommand("aitakeover 1"),
+                    "GM-08 production GameOver restores ownership and rejects further takeover");
+            }
+            finally
+            {
+                if (wave != null) DestroyNow(wave.gameObject);
+                DestroyNow(inputObject);
+                DestroyNow(managerObject);
+                DestroyNow(targetObject);
+                DestroyNow(ownerObject);
+                DestroyNow(opponentObject);
+                DestroyNow(humanObject);
+                DestroyNow(rootObject);
+                MutinyAIController.TrySetForcedWeaponId(savedForce);
             }
         }
 
