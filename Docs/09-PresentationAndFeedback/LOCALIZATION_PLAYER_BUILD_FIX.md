@@ -48,3 +48,13 @@
 ### 已知差异
 
 - 设备为简体中文但没有保存偏好时，现在默认英语。这是用户明确要求的行为变更；已手动选择并保存的简体中文仍会在重启后保留。
+
+### v1.0.2 下载文件替换候选（尚未发布）
+
+- 用户选择在亲自运行验收后覆盖现有 GitHub v1.0.2 下载文件。此操作是本次授权的发布例外；现有一键发布脚本按 `EXT-REL-05` 拒绝覆盖已发布 tag，不能把候选误报为已上线。
+- 以干净隔离 worktree 的 `d39495e` 构建正式产品名 `Mutiny X`，保留版本 `1.0.2+6`。Unity `6000.6.0f1` 的 Windows 和 Android `BuildReport` 均成功；Windows ZIP 为 223 个条目，无 PDB；Inno Setup 7 安装包版本为 `1.0.2`；APK 包名 `com.RichardXue.MutinyX`，versionCode `6`，versionName `1.0.2`，签名证书 SHA-256 与当前线上 APK 相同。
+- 本地四个候选资产的文件大小和 SHA-256 均与候选 manifest 一致；文件位于 `D:/My Project/Mutiny X/_localization_release_candidate/Builds/Candidate/assets/`，详细值见该目录的 `candidate-manifest.json` 和 `SHA256SUMS.txt`。
+- 候选 SHA-256：APK `07e1af9ef3b0d472fd0972686b3f8eedb0a65c1dfa09bfb296f906a5476879df`；Windows Setup `2b82e6aba0b06e879e5f2940f7ac52500bef2adc1f78faa3ece1a6ae3a35f318`；Windows ZIP `491a96c0a7fbeb9072e189dd8fe8c5dbdfb32e756ba5b2cacc5c4ad66927ef14`；校验清单 `474b094b6a12667fd1ccf5bbb1f0e026676aa89a812c6c93ba6ecbc74b70b65f`。
+- 当前线上旧版四个资产对应的本地原件全部存在，实算 SHA-256 与原发布 manifest 和 GitHub 当前 digest 三方一致，可在替换失败时恢复。
+- 用户要求自行运行游戏验收。候选包生成后没有启动 Windows Player、Android APK 或 Unity Play Mode；标题页实际点击、GM 再次切换和安卓真机待用户确认。确认前不替换线上资产。
+- GitHub v1.0.2 Release 与 tag 仍指向旧提交 `613744b`，候选二进制来自 `d39495e`。若按用户选择覆盖同名文件，应保留旧资产备份、更新四个资产及校验清单并核对远端 SHA-256，同时在 Release 说明中注明源码 tag 与替换包的提交差异。
