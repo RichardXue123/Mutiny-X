@@ -12,6 +12,8 @@
 
 ## Android 授权适配规格
 
+手柄扩展另见 [玩家操作手册](CONTROLLER_MANUAL.md)、[基础规格](CONTROLLER_SUPPORT.md)、[特殊武器规格](CONTROLLER_SPECIAL_WEAPONS.md)、[双扳机力度规格](CONTROLLER_TRIGGER_POWER.md)和[大炮手柄规格](CONTROLLER_CANNON.md)，分支为 `feature/controller_support`。
+
 | ID | 可观察行为 | 来源 | Unity 入口 | 验收用例 | 当前结果 |
 | --- | --- | --- | --- | --- | --- |
 | AND-INP-01 | Android 第一根有效触点映射为统一主指针：`Began`=按下沿，`Moved/Stationary`=持续按住，`Ended`=松开；点击选人、按住拖动显示轨迹、松开后沿用桌面端同一跳跃/武器发射入口 | 用户授权的 Android 操作方案；桌面生产入口 `MutinyPlayerInput.Update` | `TryReadPointer`、`TryReadTouchPointer`、`PointerFrameState` | 对各触摸阶段断言统一指针状态；通过现有生产蓄力/发射入口验证状态转换 | 已实现；C# 编译通过，待 Unity/Android 运行验证 |

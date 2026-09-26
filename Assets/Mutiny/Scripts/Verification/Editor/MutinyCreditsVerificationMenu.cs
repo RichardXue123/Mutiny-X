@@ -1,6 +1,8 @@
 using System;
 using Mutiny.Presentation;
 using UnityEditor;
+using UnityEditor.Build;
+using UnityEditor.Build.Reporting;
 using UnityEngine;
 
 namespace Mutiny.Verification.Editor
@@ -41,6 +43,23 @@ namespace Mutiny.Verification.Editor
                     }
             Require(hasOpaquePixel, "Nitrome shape contains clickable pixels");
             Debug.Log("[Mutiny Parity] Credits navigation and five original resources passed (FRONT-CRED-01/02/03/04).");
+            ValidatePorterResources();
+        }
+
+        public static void ValidatePorterResources()
+        {
+            var host = new GameObject("CreditsResourceVerification");
+            try
+            {
+                var frontend = host.AddComponent<MutinyFrontendController>();
+                frontend.Initialize(null);
+                MutinyCreditsPlayerVerification.ValidateAvatar(frontend);
+                Debug.Log("[Mutiny Credits] EXT-CRED-01 production initialization uses the bundled XingTong avatar.");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(host);
+            }
         }
 
         private static Texture2D CheckSize(string name, int width, int height)
@@ -55,6 +74,17 @@ namespace Mutiny.Verification.Editor
         {
             if (!condition)
                 throw new InvalidOperationException("FRONT-CRED verification failed: " + message);
+        }
+    }
+
+    // Fail before packaging if an editor-only file fallback conceals a missing avatar again.
+    public sealed class MutinyCreditsBuildVerification : IPreprocessBuildWithReport
+    {
+        public int callbackOrder => 0;
+
+        public void OnPreprocessBuild(BuildReport report)
+        {
+            MutinyCreditsVerificationMenu.ValidatePorterResources();
         }
     }
 }

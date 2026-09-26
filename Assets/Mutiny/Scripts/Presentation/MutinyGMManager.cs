@@ -41,6 +41,7 @@ namespace Mutiny.Presentation
         }
 
         private bool m_IsOpen = false;
+        public bool IsOpen => m_IsOpen;
         private string m_InputText = "";
         private string m_StatusMessage = "Mutiny GM Console ready. Type 'help' for commands.";
         private Color m_StatusColor = new Color(0.4f, 1.0f, 0.5f, 1.0f);
@@ -367,6 +368,20 @@ namespace Mutiny.Presentation
                 m_StatusMessage = $"[RESET] Level progress reset to default.\nHighestUnlockedLevel is now {MutinySaveSystem.HighestUnlockedLevel}.";
                 succeeded = true;
             }
+            else if (lower.StartsWith("aitakeover", StringComparison.Ordinal))
+            {
+                string[] parts = cmd.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+                string error = "Usage: aitakeover 1 (current human turn only).";
+                MutinyTurnManager manager = FindAnyObjectByType<MutinyTurnManager>();
+                if (parts.Length == 2 &&
+                    string.Equals(parts[0], "aitakeover", StringComparison.OrdinalIgnoreCase) &&
+                    int.TryParse(parts[1], out int turns) && turns == 1 && manager != null)
+                    succeeded = manager.TryTakeOverCurrentPlayerTurn(out error);
+                m_StatusColor = succeeded ? new Color(0.35f, 1.0f, 0.45f) : new Color(1.0f, 0.45f, 0.45f);
+                m_StatusMessage = succeeded
+                    ? "[SUCCESS] AI controls the rest of this turn, including the weapon stage after a jump. Player control returns next turn."
+                    : $"[ERROR] {error}";
+            }
             else if (lower.StartsWith("aiforceusewaepon", StringComparison.Ordinal))
             {
                 string[] parts = cmd.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
@@ -442,6 +457,7 @@ namespace Mutiny.Presentation
                                   $"• unlockalllevels - Unlocks all 1..{MutinySaveSystem.MaxLevel} levels\n" +
                                   "• ResetLevels     - Resets progress to level 1\n" +
                                   "• aiforceusewaepon 1..15 - Forces one infinite AI weapon; 0 disables\n" +
+                                  "• aitakeover 1    - AI plays the current human turn (also after a jump)\n" +
                                   "• Help            - Shows this help message";
                 succeeded = true;
             }

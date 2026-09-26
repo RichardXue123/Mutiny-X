@@ -256,9 +256,8 @@ namespace Mutiny.Presentation
 
         public static Vector2 GetOriginalCanvasMousePosition()
         {
-            // IMGUI transforms Event.current.mousePosition into the active GUI.matrix
-            // coordinate space before controls and custom drawing are evaluated.
-            return Event.current != null ? Event.current.mousePosition : Vector2.zero;
+            // Mouse events already use GUI.matrix coordinates; the hub converts its software pointer.
+            return MutinyInputHub.GuiPointerPosition;
         }
 
         public static void DrawCornerTooltipBubble(Rect visualRect, string text)
@@ -665,16 +664,24 @@ namespace Mutiny.Presentation
 
             DrawSpeechBubble();
             DrawOriginalBattleHud();
+            MutinyControllerUI.BeginScope(PlayerInput != null ? "actions:" + PlayerInput.GetEntityId() : "actions:none");
             DrawBottomBar();
+            MutinyControllerUI.BeginScope("board");
             DrawOriginalCornerControls();
             if (m_QuitPromptAlpha > 0f)
+            {
+                MutinyControllerUI.BeginScope("quit");
                 DrawQuitPrompt();
+            }
             DrawIngameText();
 
             if (TurnManager != null && TurnManager.CurrentPhase == TurnPhase.GameOver)
             {
+                MutinyControllerUI.BeginScope("result");
                 DrawOriginalGameEndPopup();
             }
+
+            DrawControllerActionHint();
 
             if (m_ShowLevelSelect)
             {
@@ -828,14 +835,14 @@ namespace Mutiny.Presentation
 
             if (!MutinyTransitionManager.IsTransitionActive && m_QuitPromptAlpha <= 0f)
             {
-                if (GUI.Button(sfxHitRect, GUIContent.none, GUIStyle.none) ||
-                    (sfxHovered && GUI.Button(sfxBubbleRect, GUIContent.none, GUIStyle.none)))
+                if (MutinyControllerUI.Button(sfxHitRect, GUIContent.none, GUIStyle.none) ||
+                    (sfxHovered && MutinyControllerUI.Button(sfxBubbleRect, GUIContent.none, GUIStyle.none, controllerEnabled: false)))
                     ToggleCornerSfx();
-                if (GUI.Button(musicHitRect, GUIContent.none, GUIStyle.none) ||
-                    (musicHovered && GUI.Button(musicBubbleRect, GUIContent.none, GUIStyle.none)))
+                if (MutinyControllerUI.Button(musicHitRect, GUIContent.none, GUIStyle.none) ||
+                    (musicHovered && MutinyControllerUI.Button(musicBubbleRect, GUIContent.none, GUIStyle.none, controllerEnabled: false)))
                     ToggleCornerMusic();
-                if (GUI.Button(quitHitRect, GUIContent.none, GUIStyle.none) ||
-                    (quitHovered && GUI.Button(quitBubbleRect, GUIContent.none, GUIStyle.none)))
+                if (MutinyControllerUI.Button(quitHitRect, GUIContent.none, GUIStyle.none) ||
+                    (quitHovered && MutinyControllerUI.Button(quitBubbleRect, GUIContent.none, GUIStyle.none, controllerEnabled: false)))
                     OpenQuitPrompt();
             }
 
@@ -932,9 +939,9 @@ namespace Mutiny.Presentation
             DrawPopupButton(continueRect, "continue", continueHovered);
             DrawPopupButton(backRect, "back to menu", backHovered);
 
-            if (!MutinyTransitionManager.IsTransitionActive && GUI.Button(continueRect, GUIContent.none, GUIStyle.none))
+            if (!MutinyTransitionManager.IsTransitionActive && MutinyControllerUI.Button(continueRect, GUIContent.none, GUIStyle.none, "quit-continue", true, m_QuitPromptShow && m_QuitPromptAlpha >= 1f))
                 ContinueQuitPrompt();
-            if (!MutinyTransitionManager.IsTransitionActive && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+            if (!MutinyTransitionManager.IsTransitionActive && MutinyControllerUI.Button(backRect, GUIContent.none, GUIStyle.none, "quit-back", false, m_QuitPromptShow && m_QuitPromptAlpha >= 1f))
             {
                 MutinyTransitionManager.RequestTransition(() => BackToModeLevelSelect(), showLoading: false);
             }
@@ -982,6 +989,48 @@ namespace Mutiny.Presentation
             m_QuitPromptShow = true;
             Debug.Log("[MutinyHUD] HUD-CORNER-01 quit prompt opened", this);
             return true;
+        }
+
+        public bool TryOpenControllerMenu()
+        {
+            if (Speech != null && Speech.HasActiveBubble) return false;
+            return OpenQuitPrompt();
+        }
+
+        private void DrawControllerActionHint()
+        {
+            MutinyInputHub hub = MutinyInputHub.Instance;
+            if (hub == null || !hub.IsControllerActive || hub.CurrentContext != "board" ||
+                PlayerInput == null || (PlayerInput.InteractionState != MutinyPlayerInteractionState.WeaponReady &&
+                !PlayerInput.IsControllerAiming) || TurnManager == null ||
+                TurnManager.CurrentPhase != TurnPhase.TurnActive || TurnManager.CurrentTeam == null ||
+                TurnManager.CurrentTeam.IsAiControlled) return;
+            Matrix4x4 matrix = GUI.matrix;
+            Color color = GUI.color;
+            float scale = Mathf.Min(Screen.width / 550f, Screen.height / 400f);
+            GUI.matrix = Matrix4x4.TRS(new Vector3((Screen.width - 550f * scale) * 0.5f,
+                (Screen.height - 400f * scale) * 0.5f, 0f), Quaternion.identity, new Vector3(scale, scale, 1f));
+            string hint = !MutinyPlayerInput.SupportsControllerWeapon(PlayerInput.ActiveWeapon)
+                ? "controller support coming later - use mouse or touch"
+                : PlayerInput.IsControllerPointerWeaponReady
+                    ? "left stick move cursor   A place   B back"
+                    : PlayerInput.IsControllerCannonReady ? "left stick place   LT / RT aim   B back"
+                    : PlayerInput.IsControllerAiming && PlayerInput.ArmedCannon != null
+                        ? "LT / RT pin   A fire   B place"
+                        : PlayerInput.IsControllerAiming ? "LT less   RT more   A fire   B cancel" : "LT / RT aim   B back   right stick pan";
+            MutinyBitmapFont.DrawDangleText(new Rect(25f, 365f, 500f, 13f), hint,
+                new Color(1f, 0.88f, 0.25f), TextAnchor.MiddleCenter);
+            if (PlayerInput.IsControllerAiming)
+            {
+                GUI.color = new Color(0f, 0f, 0f, 0.75f);
+                GUI.DrawTexture(new Rect(190f, 345f, 110f, 8f), Texture2D.whiteTexture);
+                GUI.color = new Color(1f, 0.88f, 0.25f);
+                GUI.DrawTexture(new Rect(191f, 346f, 108f * PlayerInput.ControllerPower, 6f), Texture2D.whiteTexture);
+                MutinyBitmapFont.DrawDangleText(new Rect(305f, 343f, 55f, 13f),
+                    Mathf.RoundToInt(PlayerInput.ControllerPower * 100f) + "%", Color.white, TextAnchor.MiddleLeft);
+            }
+            GUI.color = color;
+            GUI.matrix = matrix;
         }
 
         public bool ContinueQuitPrompt()
@@ -1406,7 +1455,7 @@ namespace Mutiny.Presentation
                 previousColor.a * Mathf.Clamp01(m_ActionPanelAlpha));
             bool contentsActive = m_ActionPanelContentsActive &&
                                   PlayerInput.IsActionMenuOpen &&
-                                  m_QuitPromptAlpha <= 0f &&
+                                  !IsQuitPromptShowRequested && !IsQuitPromptVisible &&
                                   (TurnManager == null || TurnManager.CurrentPhase != TurnPhase.GameOver);
             string hoveredAction = null;
 
@@ -1419,7 +1468,7 @@ namespace Mutiny.Presentation
                 GUI.Box(panelRect, GUIContent.none, m_PanelStyle);
 
             Rect throwRect = ScaledRect(left, top, scale, 11f, 29f, 86f, 57f);
-            bool throwHovered = contentsActive && throwRect.Contains(Event.current.mousePosition);
+            bool throwHovered = contentsActive && throwRect.Contains(MutinyInputHub.GuiPointerPosition);
             MutinyThrowButtonVisualState throwState = ResolveThrowButtonVisualState(
                 TurnManager.CurrentTeam.TeamNumber, selectedChar.CanThrow, throwHovered);
             Texture2D throwTexture = GetThrowButtonTexture(throwState);
@@ -1434,7 +1483,7 @@ namespace Mutiny.Presentation
                     MutinyCursorManager.NotifyHoverInteractable();
                 }
                 GUI.enabled = previousEnabled && contentsActive;
-                if (GUI.Button(throwRect, new GUIContent(string.Empty, "throw character"), m_OriginalSlotStyle))
+                if (MutinyControllerUI.Button(throwRect, new GUIContent(string.Empty, "throw character"), m_OriginalSlotStyle, "throw"))
                     PlayerInput.SelectCharacterThrow();
             }
             else
@@ -1452,7 +1501,7 @@ namespace Mutiny.Presentation
             }
 
             Rect endTurnRect = ScaledRect(left, top, scale, 11f, 93.95f, 86f, 57f);
-            bool endTurnHovered = contentsActive && endTurnRect.Contains(Event.current.mousePosition);
+            bool endTurnHovered = contentsActive && endTurnRect.Contains(MutinyInputHub.GuiPointerPosition);
             if (endTurnHovered)
             {
                 hoveredAction = "end turn";
@@ -1463,8 +1512,8 @@ namespace Mutiny.Presentation
             if (endTurnTexture != null)
                 GUI.DrawTexture(endTurnRect, endTurnTexture, ScaleMode.StretchToFill, true);
             GUI.enabled = previousEnabled && contentsActive;
-            if (GUI.Button(endTurnRect,
-                    new GUIContent(string.Empty, "end turn"), m_OriginalSlotStyle))
+            if (MutinyControllerUI.Button(endTurnRect,
+                    new GUIContent(string.Empty, "end turn"), m_OriginalSlotStyle, "end-turn"))
                 PlayerInput.EndTurn();
 
             if (selectedChar.CanThrow)
@@ -1478,13 +1527,13 @@ namespace Mutiny.Presentation
                     GUI.DrawTexture(cancelRect, cancelTex, ScaleMode.StretchToFill, true);
                 }
 
-                if (contentsActive && cancelRect.Contains(Event.current.mousePosition))
+                if (contentsActive && cancelRect.Contains(MutinyInputHub.GuiPointerPosition))
                 {
                     hoveredAction = "cancel character";
                     MutinyCursorManager.NotifyHoverInteractable();
                 }
                 GUI.enabled = previousEnabled && contentsActive;
-                if (GUI.Button(cancelRect, new GUIContent(string.Empty, "cancel character"), m_OriginalSlotStyle))
+                if (MutinyControllerUI.Button(cancelRect, new GUIContent(string.Empty, "cancel character"), m_OriginalSlotStyle, "cancel-character", true))
                     PlayerInput.ReturnToCharacterSelection();
             }
 
@@ -1498,7 +1547,7 @@ namespace Mutiny.Presentation
                 bool available = selectedChar.CanShoot && selectedChar.HasWeapon(weaponType);
                 int ammo = selectedChar.GetAmmunition(weaponType);
                 m_WeaponIcons.TryGetValue(weaponType, out Texture2D icon);
-                bool slotHovered = contentsActive && available && slot.Contains(Event.current.mousePosition);
+                bool slotHovered = contentsActive && available && slot.Contains(MutinyInputHub.GuiPointerPosition);
 
                 Texture2D slotTexture = available
                     ? (TurnManager.CurrentTeam.TeamNumber == 2
@@ -1537,6 +1586,14 @@ namespace Mutiny.Presentation
                     GUI.matrix = ammoSavedMatrix;
                 }
 
+                if (available && MutinyInputHub.Instance != null && MutinyInputHub.Instance.IsControllerActive &&
+                    !MutinyPlayerInput.SupportsControllerWeapon(weaponType))
+                {
+                    Color colorBeforeDisabled = GUI.color;
+                    GUI.color = new Color(0f, 0f, 0f, 0.5f * Mathf.Clamp01(m_ActionPanelAlpha));
+                    GUI.DrawTexture(slot, Texture2D.whiteTexture);
+                    GUI.color = colorBeforeDisabled;
+                }
                 if (slotHovered && m_WeaponSlotOverTexture != null)
                     GUI.DrawTexture(slot, m_WeaponSlotOverTexture, ScaleMode.StretchToFill, true);
 
@@ -1546,11 +1603,18 @@ namespace Mutiny.Presentation
                     MutinyCursorManager.NotifyHoverInteractable();
                 }
                 GUI.enabled = previousEnabled && contentsActive && available;
-                if (GUI.Button(slot, new GUIContent(string.Empty, weaponType), m_OriginalSlotStyle))
-                    PlayerInput.SelectWeapon(weaponType);
+                if (MutinyControllerUI.Button(slot, new GUIContent(string.Empty, weaponType), m_OriginalSlotStyle, "weapon:" + weaponType, controllerEnabled: MutinyPlayerInput.SupportsControllerWeapon(weaponType)))
+                    if (MutinyInputHub.Instance != null && MutinyInputHub.Instance.IsControllerActive)
+                        PlayerInput.SelectControllerWeapon(weaponType);
+                    else
+                        PlayerInput.SelectWeapon(weaponType);
             }
 
             GetOriginalActionCopy(hoveredAction, out string title, out string description);
+            if (MutinyInputHub.Instance != null && MutinyInputHub.Instance.IsControllerActive &&
+                hoveredAction != null && hoveredAction != "throw character" && hoveredAction != "end turn" &&
+                hoveredAction != "cancel character" && !MutinyPlayerInput.SupportsControllerWeapon(hoveredAction))
+                description = "controller support coming later|use mouse or touch";
             GUI.enabled = previousEnabled;
             Matrix4x4 textSavedMatrix = GUI.matrix;
             GUI.matrix = panelMatrix;
@@ -1728,9 +1792,9 @@ namespace Mutiny.Presentation
                 Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
                 DrawGameEndButton(restartRect, "restart level", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
                 DrawGameEndButton(backRect, "back to menu", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
-                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(restartRect, GUIContent.none, GUIStyle.none))
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && MutinyControllerUI.Button(restartRect, GUIContent.none, GUIStyle.none, "result-restartRect", controllerEnabled: alpha >= 1f))
                     MutinyTransitionManager.RequestTransition(() => RestartFromGameEndPopup(), showLoading: true);
-                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && MutinyControllerUI.Button(backRect, GUIContent.none, GUIStyle.none, "result-back", true, alpha >= 1f))
                     MutinyTransitionManager.RequestTransition(() => BackToModeLevelSelect(), showLoading: false);
             }
             else if (complete)
@@ -1742,11 +1806,11 @@ namespace Mutiny.Presentation
                 Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
                 DrawGameEndButton(nextRect, "next level", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
                 DrawGameEndButton(backRect, "back to menu", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
-                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(nextRect, GUIContent.none, GUIStyle.none))
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && MutinyControllerUI.Button(nextRect, GUIContent.none, GUIStyle.none, "result-nextRect", controllerEnabled: alpha >= 1f))
                 {
                     MutinyTransitionManager.RequestTransition(() => AdvanceToNextLevel(), showLoading: true);
                 }
-                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && MutinyControllerUI.Button(backRect, GUIContent.none, GUIStyle.none, "result-back", true, alpha >= 1f))
                 {
                     MutinyTransitionManager.RequestTransition(() => BackToSinglePlayerMenu(), showLoading: false);
                 }
@@ -1756,13 +1820,13 @@ namespace Mutiny.Presentation
                 DrawGameEndScoreRow(175f, 190f, "final score", m_GameEndDisplayedTotalScore, alpha);
                 Rect congratsRect = ResolveOriginalPopupPrimaryButtonRect();
                 DrawGameEndButton(congratsRect, "continue", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
-                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(congratsRect, GUIContent.none, GUIStyle.none))
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && MutinyControllerUI.Button(congratsRect, GUIContent.none, GUIStyle.none, "result-congratsRect", controllerEnabled: alpha >= 1f))
                 {
                     MutinyTransitionManager.RequestTransition(() => CompleteCampaignAndShowEnding(), showLoading: false);
                 }
                 Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
                 DrawGameEndButton(backRect, "back to menu", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
-                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && MutinyControllerUI.Button(backRect, GUIContent.none, GUIStyle.none, "result-back", true, alpha >= 1f))
                 {
                     MutinyTransitionManager.RequestTransition(() => BackToSinglePlayerMenu(), showLoading: false);
                 }
@@ -1776,11 +1840,11 @@ namespace Mutiny.Presentation
                 DrawGameEndButton(submitRect, "submit score", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
                 DrawGameEndButton(restartRect, "restart level", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
                 DrawGameEndButton(backRect, "back to menu", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
-                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(restartRect, GUIContent.none, GUIStyle.none))
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && MutinyControllerUI.Button(restartRect, GUIContent.none, GUIStyle.none, "result-restartRect", controllerEnabled: alpha >= 1f))
                 {
                     MutinyTransitionManager.RequestTransition(() => RestartFromGameEndPopup(), showLoading: true);
                 }
-                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && MutinyControllerUI.Button(backRect, GUIContent.none, GUIStyle.none, "result-back", true, alpha >= 1f))
                 {
                     MutinyTransitionManager.RequestTransition(() => BackToSinglePlayerMenu(), showLoading: false);
                 }

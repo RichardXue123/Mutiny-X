@@ -87,6 +87,7 @@ namespace Mutiny.Verification
             VerifyRumBottle(result);
             VerifyMineCameraAndLevelCleanup(result);
             VerifySeagull(result);
+            VerifySeagullPresentation(result);
             VerifyTidalWave(result);
             VerifyLongRunningWaveTurn(result);
             VerifyVoodooDoll(result);
@@ -165,6 +166,24 @@ namespace Mutiny.Verification
         {
             var result = new MutinyLevel1VerificationResult();
             VerifyCameraMovement(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunSeagullPresentation()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifySeagull(result);
+            VerifySeagullPresentation(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunCannon()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyCannon(result);
+            VerifyAiCannonTurnSettlement(result);
+            VerifyCannonSmokeTrail(result);
+            VerifyCannonImpactEffects(result);
             return result;
         }
 
@@ -1740,7 +1759,11 @@ namespace Mutiny.Verification
 
                 opposingCharacterObject = new GameObject("AiCannonTurnVerification_Opponent");
                 MutinyCharacter opponent = opposingCharacterObject.AddComponent<MutinyCharacter>();
-                PhysicsBodyState opponentState = PhysicsBodyState.CreateDefault(500f, 200f);
+                // This synchronous fixture verifies original boundary completion.
+                // Keep its opponent outside the horizontal shot, since impact
+                // explosions and health presentation require rendered Updates.
+                // Those contact paths are covered by VerifyCannonImpactEffects.
+                PhysicsBodyState opponentState = PhysicsBodyState.CreateDefault(500f, 300f);
                 opponentState.Weight = 0f;
                 opponent.PhysicsBody.State = opponentState;
                 opposingTeam.RegisterCharacter(opponent);
@@ -5532,6 +5555,166 @@ namespace Mutiny.Verification
             }
         }
 
+        private static void VerifySeagullPresentation(MutinyLevel1VerificationResult result)
+        {
+            long referenceImpactTick = -1;
+            long referenceWaterTick = -1;
+            var existingShots = new HashSet<MutinySeagullFire>(Object.FindObjectsByType<MutinySeagullFire>());
+            var existingExplosions = new HashSet<MutinyExplosion>(Object.FindObjectsByType<MutinyExplosion>());
+            foreach (int fps in new[] { 25, 60, 120 })
+            {
+                GameObject birdObject = null;
+                try
+                {
+                    birdObject = new GameObject($"SeagullPresentation_{fps}FPS");
+                    MutinySeagull bird = birdObject.AddComponent<MutinySeagull>();
+                    bird.Initialize(null);
+                    bird.PhysicsBody.SetTerrain(new string[100, 100], 100, 100);
+                    bird.PhysicsBody.WaterPixelY = 2000f;
+                    bird.CallAirstrike(400f, 100f, 0f);
+                    bool accepted = bird.RequestShotForVerification();
+                    bird.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                    MutinySeagullFire first = null;
+                    foreach (MutinySeagullFire shot in Object.FindObjectsByType<MutinySeagullFire>())
+                    {
+                        if (!existingShots.Contains(shot))
+                            first = shot;
+                    }
+                    result.Assert(accepted && first != null && first.PhysicsBody.SimulationTickCount == 1 &&
+                                  !first.PhysicsBody.IsActive,
+                        $"SEA-PRES-01 {fps}FPS birth tick advances the parent-owned child exactly once");
+                    if (first == null)
+                        continue;
+
+                    first.PhysicsBody.ApplyPresentationPoseForVerification();
+                    bird.PhysicsBody.ApplyPresentationPoseForVerification();
+                    Vector2 birthPose = MutinyPhysics.UnityToPixel(first.transform.position);
+                    result.Assert(Vector2.Distance(birthPose, new Vector2(400f, 100f)) < 0.001f &&
+                                  Vector2.Distance(new Vector2(first.PhysicsBody.State.X, first.PhysicsBody.State.Y),
+                                      new Vector2(410f, 101f)) < 0.001f,
+                        $"SEA-PRES-01 {fps}FPS first visible child starts at the birth tick origin, not ahead of the displayed bird");
+                    typeof(MutinyPhysicsBody).GetMethod("Start",
+                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                        .Invoke(first.PhysicsBody, null);
+                    result.Assert(first.PhysicsBody.State.X == 410f && first.PhysicsBody.State.Y == 101f &&
+                                  first.PhysicsBody.SimulationTickCount == 1,
+                        $"SEA-PRES-02 {fps}FPS delayed Start cannot write the displayed birth pose back into authority");
+                    first.PhysicsBody.SetTerrain(new string[100, 100], 100, 100);
+                    first.PhysicsBody.WaterPixelY = 2000f;
+
+                    bird.PhysicsBody.AdvanceSimulationFrameForVerification(0.02f);
+                    first.PhysicsBody.AdvanceSimulationFrameForVerification(0.02f);
+                    first.PhysicsBody.ApplyPresentationPoseForVerification();
+                    bird.PhysicsBody.ApplyPresentationPoseForVerification();
+                    Vector2 halfPose = MutinyPhysics.UnityToPixel(first.transform.position);
+                    result.Assert(Vector2.Distance(halfPose, new Vector2(405f, 100.5f)) < 0.001f &&
+                                  Mathf.Abs(first.PhysicsBody.SimulationInterpolationAlpha -
+                                      bird.PhysicsBody.SimulationInterpolationAlpha) < 0.0001f &&
+                                  Mathf.Abs(first.transform.position.x - bird.transform.position.x) < 0.0001f &&
+                                  first.PhysicsBody.SimulationTickCount == 1 && first.PhysicsBody.State.Y == 101f,
+                        $"SEA-PRES-01 {fps}FPS mid-tick child Transform interpolates gravity and shares bird phase without stepping State");
+
+                    bool frameChecksPassed = true;
+                    bool interTickMoved = fps == 25;
+                    MutinySeagullFire second = null;
+                    bool secondRequested = false;
+                    long secondBirthParentTick = -1;
+                    for (int frame = 0; frame < fps && bird.PhysicsBody.SimulationTickCount < 15; frame++)
+                    {
+                        if (!secondRequested && bird.PhysicsBody.SimulationTickCount >= 5)
+                            secondRequested = bird.RequestShotForVerification();
+                        long oldCount = first.PhysicsBody.SimulationTickCount;
+                        Vector3 oldPose = first.transform.position;
+                        // This is the child's real autonomous-frame entry: it must
+                        // remain inert even though presentation is enabled.
+                        first.PhysicsBody.AdvanceSimulationFrameForVerification(1f / fps);
+                        if (second != null)
+                            second.PhysicsBody.AdvanceSimulationFrameForVerification(1f / fps);
+                        frameChecksPassed &= first.PhysicsBody.SimulationTickCount == oldCount;
+                        bird.PhysicsBody.AdvanceSimulationFrameForVerification(1f / fps);
+                        if (secondRequested && second == null)
+                        {
+                            foreach (MutinySeagullFire shot in Object.FindObjectsByType<MutinySeagullFire>())
+                            {
+                                if (shot != first && !existingShots.Contains(shot))
+                                    second = shot;
+                            }
+                            if (second != null)
+                                secondBirthParentTick = bird.PhysicsBody.SimulationTickCount;
+                        }
+                        first.PhysicsBody.ApplyPresentationPoseForVerification();
+                        bird.PhysicsBody.ApplyPresentationPoseForVerification();
+                        frameChecksPassed &= first.PhysicsBody.SimulationTickCount == bird.PhysicsBody.SimulationTickCount &&
+                            Mathf.Abs(first.transform.position.x - bird.transform.position.x) < 0.0001f &&
+                            Mathf.Abs(first.PhysicsBody.State.X - bird.PhysicsBody.State.X) < 0.001f;
+                        if (first.PhysicsBody.SimulationTickCount == oldCount && first.transform.position != oldPose)
+                            interTickMoved = true;
+                        if (second != null)
+                        {
+                            second.PhysicsBody.ApplyPresentationPoseForVerification();
+                            frameChecksPassed &= second.PhysicsBody.SimulationTickCount ==
+                                bird.PhysicsBody.SimulationTickCount - secondBirthParentTick + 1 &&
+                                Mathf.Abs(second.transform.position.x - bird.transform.position.x) < 0.0001f;
+                        }
+                    }
+                    result.Assert(frameChecksPassed && interTickMoved && second != null && bird.ActiveShotCount == 2,
+                        $"SEA-PRES-01 {fps}FPS successive rendered frames and repeated drops share phase, never double-step, and retain sub-tick motion");
+
+                    // Use real contact and water-entry paths, not a test-only finish.
+                    if (second != null)
+                    {
+                        second.PhysicsBody.WaterPixelY = second.PhysicsBody.State.Y + 20f;
+                        long waterStart = second.PhysicsBody.SimulationTickCount;
+                        for (int frame = 0; frame < fps * 2 && bird.ActiveShotCount == 2; frame++)
+                            bird.PhysicsBody.AdvanceSimulationFrameForVerification(1f / fps);
+                        long waterTicks = second.PhysicsBody.SimulationTickCount - waterStart;
+                        if (referenceWaterTick < 0)
+                            referenceWaterTick = waterTicks;
+                        int waterExplosionCount = 0;
+                        foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>())
+                            if (!existingExplosions.Contains(explosion))
+                                waterExplosionCount++;
+                        result.Assert(bird.ActiveShotCount == 1 && waterTicks == referenceWaterTick && waterExplosionCount == 0,
+                            $"SEA-PRES-02 {fps}FPS real water entry ends on the same child tick without explosion");
+                        DestroyNow(second.gameObject);
+                    }
+
+                    string[,] impactTerrain = new string[100, 100];
+                    for (int x = 0; x < 100; x++)
+                        impactTerrain[12, x] = "solid";
+                    first.PhysicsBody.SetTerrain(impactTerrain, 100, 100);
+                    for (int frame = 0; frame < fps * 2 && bird.ActiveShotCount > 0; frame++)
+                        bird.PhysicsBody.AdvanceSimulationFrameForVerification(1f / fps);
+                    long impactTick = first.PhysicsBody.SimulationTickCount;
+                    if (referenceImpactTick < 0)
+                        referenceImpactTick = impactTick;
+                    int explosionCount = 0;
+                    bool explosionMatches = false;
+                    foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>())
+                    {
+                        if (!existingExplosions.Contains(explosion))
+                        {
+                            explosionCount++;
+                            explosionMatches = explosion.Size == 50f && explosion.MaxDamage == 50f;
+                        }
+                    }
+                    result.Assert(bird.ActiveShotCount == 0 && impactTick == referenceImpactTick &&
+                                  explosionCount == 1 && explosionMatches,
+                        $"SEA-PRES-02 {fps}FPS real terrain contact ends on the same physics tick with exactly one 50/50 explosion");
+                }
+                finally
+                {
+                    foreach (MutinySeagullFire shot in Object.FindObjectsByType<MutinySeagullFire>())
+                        if (!existingShots.Contains(shot))
+                            DestroyNow(shot.gameObject);
+                    foreach (MutinyExplosion explosion in Object.FindObjectsByType<MutinyExplosion>())
+                        if (!existingExplosions.Contains(explosion))
+                            DestroyNow(explosion.gameObject);
+                    DestroyNow(birdObject);
+                }
+            }
+        }
+
         private static void VerifyTidalWave(MutinyLevel1VerificationResult result)
         {
             GameObject waveObject = null;
@@ -6113,6 +6296,11 @@ namespace Mutiny.Verification
                               gm.RecentSuccessfulCommands[4] == "aiforceusewaepon 2" &&
                               !gm.RunRecentCommand(-1) && !gm.RunRecentCommand(5),
                     "GM-UI-02 recent button reruns the production command and moves that execution to the front");
+                // The forced-shot check intentionally leaves a live projectile.
+                // Remove only that fixture before exercising a separate real board.
+                foreach (MutinyCherryBomb bomb in Object.FindObjectsByType<MutinyCherryBomb>())
+                    if (bomb.Owner == aiCharacter) DestroyNow(bomb.gameObject);
+                VerifyGMAiTakeover(gm, result);
             }
             finally
             {
@@ -6126,6 +6314,157 @@ namespace Mutiny.Verification
                 DestroyNow(aiTeamObject);
                 DestroyNow(characterObject);
                 DestroyNow(gmObject);
+            }
+        }
+
+        private static void VerifyGMAiTakeover(MutinyGMManager gm, MutinyLevel1VerificationResult result)
+        {
+            GameObject rootObject = new GameObject("GM_Takeover_Level");
+            GameObject humanObject = new GameObject("GM_Takeover_HumanTeam");
+            GameObject opponentObject = new GameObject("GM_Takeover_OpponentTeam");
+            GameObject ownerObject = new GameObject("GM_Takeover_Owner");
+            GameObject targetObject = new GameObject("GM_Takeover_Target");
+            GameObject managerObject = new GameObject("GM_Takeover_Manager");
+            GameObject inputObject = new GameObject("GM_Takeover_Input");
+            MutinyWeapon wave = null;
+            int savedForce = MutinyAIController.ForcedWeaponId;
+            try
+            {
+                MutinyLevelRoot root = rootObject.AddComponent<MutinyLevelRoot>();
+                root.Width = 40;
+                root.Height = 40;
+                root.WaterLevelY = -1000f / MutinyPhysics.PixelsPerUnit;
+                MutinyTeam human = humanObject.AddComponent<MutinyTeam>();
+                human.TeamNumber = 1;
+                MutinyTeam opponent = opponentObject.AddComponent<MutinyTeam>();
+                opponent.TeamNumber = 2;
+                opponent.IsAiControlled = true;
+                MutinyCharacter owner = ownerObject.AddComponent<MutinyCharacter>();
+                owner.TeamIndex = 1;
+                owner.Luck = 3f;
+                owner.PhysicsBody.State = PhysicsBodyState.CreateDefault(64f, 96f);
+                owner.PhysicsBody.WaterPixelY = 1000f;
+                owner.AddWeapon("banana", 2);
+                human.RegisterCharacter(owner);
+                MutinyCharacter target = targetObject.AddComponent<MutinyCharacter>();
+                target.TeamIndex = 2;
+                target.PhysicsBody.State = PhysicsBodyState.CreateDefault(10000f, 800f);
+                opponent.RegisterCharacter(target);
+                MutinyTurnManager manager = managerObject.AddComponent<MutinyTurnManager>();
+                manager.Initialize(human, opponent);
+                MutinyPlayerInput input = inputObject.AddComponent<MutinyPlayerInput>();
+                input.TurnManager = manager;
+                human.SelectCharacter(owner);
+                input.SelectWeapon("banana");
+                MutinyWeapon readyWeapon = input.EquippedWeapon;
+                int historyCount = gm.RecentSuccessfulCommands.Count;
+                result.Assert(!gm.ExecuteCommand("aitakeover") && !gm.ExecuteCommand("aitakeover 0") &&
+                              !gm.ExecuteCommand("aitakeover 2") && !gm.ExecuteCommand("aitakeover x") &&
+                              !gm.ExecuteCommand("aitakeover 1 extra") && !human.IsAiControlled &&
+                              !manager.IsAiTakeoverActive && gm.RecentSuccessfulCommands.Count == historyCount,
+                    "GM-08 invalid takeover arguments do not change ownership or success history");
+
+                int turns = human.TotalTurnsTaken;
+                result.Assert(gm.ExecuteCommand("  AiTakeOver 1  ") && manager.IsAiTakeoverActive &&
+                              human.IsAiControlled && owner.CanThrow && owner.CanShoot &&
+                              human.TotalTurnsTaken == turns && input.EquippedWeapon == null &&
+                              input.ActiveWeapon == null && !input.SelectWeapon("banana") &&
+                              owner.GetAmmunition("banana") == 2,
+                    "GM-08 production command takes over only the current turn and clears unfired player input without resetting actions/inventory");
+                // Destroy is deferred in Play Mode; do not let the cancelled probe
+                // survive into subsequent independent checks in this synchronous suite.
+                if (readyWeapon != null) DestroyNow(readyWeapon.gameObject);
+                result.Assert(!gm.ExecuteCommand("aitakeover 1") && manager.IsAiTakeoverActive,
+                    "GM-08 repeated takeover is rejected instead of extending its lifetime");
+                MutinyAIController ai = human.GetComponent<MutinyAIController>();
+                ai.UseFixedDecisionSeed = true;
+                ai.FixedDecisionSeed = 731;
+                ai.SaveDecisionTrace = false;
+                MutinyAIController.TrySetForcedWeaponId(15);
+                ai.EvaluateBestMove();
+                bool hasJump = ai.LastDecisionTrace.Candidates.Exists(c => c.MoveType == nameof(AIMoveType.SelfThrow));
+                result.Assert(ai.LastDecisionTrace.Phase == "first-action" && hasJump &&
+                              MutinyAIController.ResolveTurnGate(manager, human) == MutinyAITurnGate.Execute,
+                    "GM-08 first-action takeover uses the normal AI candidate pool including jump");
+                manager.PassTurn();
+                for (int tick = 0; tick < 11; tick++) manager.AdvanceSimulationTick();
+                result.Assert(manager.CurrentTeam == opponent && !human.IsAiControlled &&
+                              !manager.IsAiTakeoverActive && opponent.IsAiControlled &&
+                              !gm.ExecuteCommand("aitakeover 1"),
+                    "GM-08 production pass/settlement restores the human team and rejects native AI turns");
+                manager.PassTurn();
+                for (int tick = 0; tick < 11; tick++) manager.AdvanceSimulationTick();
+                result.Assert(manager.CurrentTeam == human && !human.IsAiControlled &&
+                              MutinyAIController.ResolveTurnGate(manager, human) == MutinyAITurnGate.Cancel,
+                    "GM-08 takeover does not persist when the player receives the next turn");
+
+                string[,] terrain = new string[12, 12];
+                for (int y = 0; y < 12; y++)
+                    for (int x = 0; x < 12; x++) terrain[y, x] = y == 4 ? "ground" : "-";
+                owner.PhysicsBody.SetTerrain(terrain, 12, 12);
+                human.SelectCharacter(owner);
+                bool jumped = input.TryCommitCharacterThrow(owner, new Vector2(64f, 96f), new Vector2(64f, 146f));
+                Vector2 jumpVelocity = new Vector2(owner.PhysicsBody.State.VelocityX, owner.PhysicsBody.State.VelocityY);
+                result.Assert(jumped && gm.ExecuteCommand("aitakeover 1") && !owner.CanThrow && owner.CanShoot &&
+                              owner.IsSelfThrown && human.SelectedCharacter == owner &&
+                              jumpVelocity == new Vector2(owner.PhysicsBody.State.VelocityX, owner.PhysicsBody.State.VelocityY) &&
+                              MutinyAIController.ResolveTurnGate(manager, human) == MutinyAITurnGate.Wait,
+                    "GM-08 accepts a real player jump in flight without resetting it and waits for the board");
+                for (int tick = 0; tick < 400 && manager.CurrentPhase != TurnPhase.TurnActive; tick++)
+                {
+                    owner.PhysicsBody.AdvanceSimulationTick();
+                    manager.AdvanceSimulationTick();
+                }
+                AIMove shot = ai.EvaluateBestMove();
+                bool onlyOwnerShots = ai.LastDecisionTrace.Candidates.TrueForAll(c =>
+                    c.Character == owner.name && c.MoveType == nameof(AIMoveType.ShootWeapon));
+                result.Assert(manager.CurrentPhase == TurnPhase.TurnActive && manager.IsAiTakeoverActive &&
+                              !owner.CanThrow && owner.CanShoot && ai.LastDecisionTrace.Phase == "continuation" &&
+                              onlyOwnerShots && shot.WeaponType == "tidalWave" && shot.Score > 0f,
+                    "GM-08 real jump settlement keeps takeover and enters selected-character-only weapon continuation");
+                ai.ExecuteMoveForVerification(shot, manager);
+                foreach (MutinyTidalWave candidate in Object.FindObjectsByType<MutinyTidalWave>())
+                    if (candidate.Owner == owner) wave = candidate;
+                result.Assert(wave != null && wave.IsFired && !owner.CanThrow && !owner.CanShoot &&
+                              manager.IsAiTakeoverActive && human.IsAiControlled,
+                    "GM-08 takeover persists while the normal AI weapon executes");
+                if (wave != null)
+                {
+                    wave.PhysicsBody.SetTerrain(new string[40, 40], 40, 40);
+                    for (int tick = 0; tick < 500 && !wave.IsFinished; tick++)
+                    {
+                        wave.PhysicsBody.AdvanceSimulationTick();
+                        manager.AdvanceSimulationTick();
+                    }
+                }
+                for (int tick = 0; tick < 11; tick++) manager.AdvanceSimulationTick();
+                result.Assert(manager.CurrentTeam == opponent && !manager.IsAiTakeoverActive && !human.IsAiControlled,
+                    "GM-08 full AI weapon lifecycle restores human control only when the turn finishes");
+                if (wave != null) DestroyNow(wave.gameObject);
+                manager.StartGame();
+                bool takenAgain = gm.ExecuteCommand("aitakeover 1");
+                manager.StartGame();
+                result.Assert(takenAgain && !manager.IsAiTakeoverActive && !human.IsAiControlled,
+                    "GM-08 restarting the production game clears a pending takeover");
+                gm.ExecuteCommand("aitakeover 1");
+                target.TakeDamage(1000f);
+                target.ShownHealth = target.Health;
+                for (int tick = 0; tick < 11; tick++) manager.AdvanceSimulationTick();
+                result.Assert(manager.CurrentPhase == TurnPhase.GameOver && !human.IsAiControlled &&
+                              !manager.IsAiTakeoverActive && !gm.ExecuteCommand("aitakeover 1"),
+                    "GM-08 production GameOver restores ownership and rejects further takeover");
+            }
+            finally
+            {
+                if (wave != null) DestroyNow(wave.gameObject);
+                DestroyNow(inputObject);
+                DestroyNow(managerObject);
+                DestroyNow(targetObject);
+                DestroyNow(ownerObject);
+                DestroyNow(opponentObject);
+                DestroyNow(humanObject);
+                DestroyNow(rootObject);
+                MutinyAIController.TrySetForcedWeaponId(savedForce);
             }
         }
 

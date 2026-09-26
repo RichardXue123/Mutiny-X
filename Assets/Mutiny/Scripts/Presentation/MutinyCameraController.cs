@@ -204,7 +204,11 @@ namespace Mutiny.Presentation
             // TileSystem.advanceScrolling returns before every automatic camera
             // branch while Controller.dragging is set (human player dragging).
             if (PlayerInput != null && PlayerInput.IsAiming)
+            {
+                if (PlayerInput.IsControllerAiming)
+                    AdvanceControllerScrolling(deltaTime);
                 return;
+            }
 
             if (m_Speech == null)
                 m_Speech = TurnManager.GetComponent<MutinySpeechController>();
@@ -452,6 +456,11 @@ namespace Mutiny.Presentation
 
         private void AdvanceEdgeScrolling()
         {
+            if (MutinyInputHub.Instance != null && MutinyInputHub.Instance.IsControllerActive)
+            {
+                AdvanceControllerScrolling(Time.deltaTime);
+                return;
+            }
             bool canScroll = CanUseManualScrolling() &&
                              TurnManager.CurrentTeam != null &&
                              !TurnManager.CurrentTeam.IsAiControlled &&
@@ -508,6 +517,36 @@ namespace Mutiny.Presentation
             positionWorld.x += movementPixels.x / MutinyPhysics.PixelsPerUnit;
             positionWorld.y += movementPixels.y / MutinyPhysics.PixelsPerUnit;
             SetClampedPosition(positionWorld);
+        }
+
+        private bool AdvanceControllerScrolling(float deltaTime)
+        {
+            MutinyInputHub hub = MutinyInputHub.Instance;
+            bool canScroll = hub != null && hub.IsControllerActive && hub.CurrentContext == "board" &&
+                             TurnManager != null && TurnManager.CurrentTeam != null &&
+                             !TurnManager.CurrentTeam.IsAiControlled && CanUseManualScrolling() &&
+                             PlayerInput != null && !PlayerInput.IsActionMenuOpen &&
+                             (!PlayerInput.IsAiming || PlayerInput.IsControllerAiming) &&
+                             (m_TurnPanTarget == null || PlayerInput.IsControllerAiming) &&
+                             FindActionTarget() == null;
+            if (!canScroll)
+            {
+                m_EdgeVelocityPixelsPerSecond = Vector2.zero;
+                return false;
+            }
+            Vector2 direction = Vector2.ClampMagnitude(hub.Frame.Pan, 1f);
+            if (direction.sqrMagnitude > 0f && PlayerInput.IsControllerAiming)
+                m_TurnPanTarget = null;
+            float maximumSpeed = OriginalMaxScrollPixelsPerTick / MutinyPhysics.TimeStep;
+            float acceleration = OriginalScrollAccelerationPixelsPerTick /
+                                 (MutinyPhysics.TimeStep * MutinyPhysics.TimeStep);
+            m_EdgeVelocityPixelsPerSecond = Vector2.MoveTowards(m_EdgeVelocityPixelsPerSecond,
+                direction * maximumSpeed, acceleration * deltaTime);
+            Vector3 position = transform.position;
+            position.x += m_EdgeVelocityPixelsPerSecond.x * deltaTime / MutinyPhysics.PixelsPerUnit;
+            position.y += m_EdgeVelocityPixelsPerSecond.y * deltaTime / MutinyPhysics.PixelsPerUnit;
+            SetClampedPosition(position);
+            return true;
         }
 
         private bool CanUseManualScrolling()

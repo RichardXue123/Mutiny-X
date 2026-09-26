@@ -39,18 +39,18 @@
 
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
 | --- | --- | --- | --- | --- | --- |
-| CAN-PLACE-01 | 提示圆与实际部署区域统一以 `(owner.x, owner.y-100)` 为中心，使原始 100 px 圆的底部位于角色坐标；可见资源按原版缩放为 130 px 半径，提示层不继承炮身变换 | `TileSystem.as:291-310`、`Cannon.as:93-100`、symbol 1900 | `GetPlacementCenterPixels()`、独立 `RangeCircle` 对象 | `VerifyCannon()` 校验角色 `(100,200)` 对应圆心 `(100,100)`，且越界拖动按该中心的 120 px 约束裁剪 | 已实现；自动回归已写，待 Unity 运行验证 |
+| CAN-PLACE-01 | 提示圆与实际部署区域统一以 `(owner.x, owner.y-100)` 为中心，使原始 100 px 圆的底部位于角色坐标；可见资源按原版缩放为 130 px 半径，提示层不继承炮身变换 | `TileSystem.as:291-310`、`Cannon.as:93-100`、symbol 1900 | `GetPlacementCenterPixels()`、独立 `RangeCircle` 对象 | `VerifyCannon()` 校验角色 `(100,200)` 对应圆心 `(100,100)`，且越界拖动按该中心的 120 px 约束裁剪 | 已实现；2026-09-26 隔离工程 Play Mode 24/24 大炮专项通过；主工程实景对照待验收 |
 | CAN-PLACE-02 | 左键选中炮身并持续按住时，每 tick 向鼠标移动一半距离；短拖释放时提交尚未消费的最后一个碰撞步；全程参与地形、木箱及火药桶碰撞 | `Solid.as:130-379` | `TryBeginBodyDrag/DragBodyTo/ReleasePointer` → `AdvanceBodyDragOriginalTick()` | 短拖在一个 tick 内仍移动；在 x=128 实心墙前，10 px 炮身中心停在 x=117.9 | 已实现；待 Unity 运行验证 |
-| CAN-PLACE-03 | 炮身目标限制在以 `(owner.x,owner.y-100)` 为中心的 120 px 圆内；快速指针采样越界时钳到圆周但持续保持拖动，真实松开左键才结束。原版越过 130 px 自动释放，作为明确授权差异保留记录 | `Cannon.as:91-101`、`Solid.as:138-160`、本次缺陷反馈 | `ClampToPlacementCircle()`、`ReleasePointer()` | 把鼠标一步移动到范围外，断言炮身仍处于拖动状态，且首个半距离 tick 朝该圆周目标移动 | 已实现；自动回归已写，待 Unity 运行验证 |
+| CAN-PLACE-03 | 炮身目标限制在以 `(owner.x,owner.y-100)` 为中心的 120 px 圆内；快速指针采样越界时钳到圆周但持续保持拖动，真实松开左键才结束。原版越过 130 px 自动释放，作为明确授权差异保留记录 | `Cannon.as:91-101`、`Solid.as:138-160`、本次缺陷反馈 | `ClampToPlacementCircle()`、`ReleasePointer()` | 把鼠标一步移动到范围外，断言炮身仍处于拖动状态，且首个半距离 tick 朝该圆周目标移动 | 已实现；2026-09-26 隔离工程 Play Mode 24/24 大炮专项通过；主工程实景对照待验收 |
 | CAN-PIN-01 | 炮身与拉栓是独立显示层；拖动拉栓时其局部 X 随 `PinX` 变化 | symbol 850、child 847、shape 849 | `BuildOriginalVisualLayers()`、`UpdatePinVisual()` | 校验炮身 46×38、拉栓 35×16，拉至 -30 时 Transform 位于 -30 px | 已实现；待 Unity 运行验证 |
-| CAN-PIN-02 | `PinX` 限制在 `[-40,-21]`；只有 `<-30` 才装填；以 15 px/tick 回弹并以 30 力发射 | `Cannon.as:123-163` | `DragPinTo()`、`ReleasePointer()`、`AdvanceOriginalTick()` | 等于 -30 不提交，-31 提交并产生 30 力炮弹 | 已实现；待 Unity 运行验证 |
-| CAN-FIRE-01 | 开火在炮口位置创建独立 Cannonball，炮身留在摆放位置 | `Cannon.as:167-178` | `FireCannon()` | 手动推进炮弹后断言炮弹已移动而炮身坐标未改变 | 已实现；待 Unity 运行验证 |
+| CAN-PIN-02 | `PinX` 限制在 `[-40,-21]`；只有 `<-30` 才装填；以 15 px/tick 回弹并以 30 力发射 | `Cannon.as:123-163` | `DragPinTo()`、`ReleasePointer()`、`AdvanceOriginalTick()` | 等于 -30 不提交，-31 提交并产生 30 力炮弹 | 已实现；2026-09-26 隔离工程 Play Mode 24/24 大炮专项通过；主工程实景对照待验收 |
+| CAN-FIRE-01 | 开火在炮口位置创建独立 Cannonball，炮身留在摆放位置 | `Cannon.as:167-178` | `FireCannon()` | 手动推进炮弹后断言炮弹已移动而炮身坐标未改变 | 已实现；2026-09-26 隔离工程 Play Mode 24/24 大炮专项通过；主工程实景对照待验收 |
 | CAN-AUD-01 | 炮弹创建时播放一次 `cannon explosion`；Unity 资源名映射为 `cannon_explosion.wav` | `Cannon.as:177`、音频导出表 | `FireCannon()` → `PlaySFX(FireSoundName)` | 监听 `SfxPlayed` 并断言收到 `cannon_explosion` | 已实现；待 Unity 运行验证 |
-| CAN-CAM-01 | ActionExecuting/Settling 阶段镜头跟随独立炮弹 | `Cannon.as:45-53` | `MutinyCameraController.FindActionTarget()` | `FindActionTargetForVerification()` 必须返回 `Cannonball.transform` | 已实现；待 Unity 运行验证 |
-| CAN-LIFE-01 | 炮身保持全不透明 10 tick，再淡出 10 tick；炮弹结束且炮身透明后完成 | `Cannon.as:71-87` | `MutinyCannon.AdvanceOriginalTick()` | 验证第 19 个淡出 tick 尚未完成，第 20 个完成 | 已实现；待 Unity 运行验证 |
+| CAN-CAM-01 | ActionExecuting/Settling 阶段镜头跟随独立炮弹 | `Cannon.as:45-53` | `MutinyCameraController.FindActionTarget()` | `FindActionTargetForVerification()` 必须返回 `Cannonball.transform` | 已实现；2026-09-26 隔离工程 Play Mode 24/24 大炮专项通过；主工程实景对照待验收 |
+| CAN-LIFE-01 | 炮身保持全不透明 10 tick，再淡出 10 tick；炮弹结束且炮身透明后完成 | `Cannon.as:71-87` | `MutinyCannon.AdvanceOriginalTick()` | 验证第 19 个淡出 tick 尚未完成，第 20 个完成 | 已实现；2026-09-26 隔离工程 Play Mode 24/24 大炮专项通过；主工程实景对照待验收 |
 | CAN-AI-01 | AI 候选摆放先用炮身碰撞修正，再从修正位置模拟炮弹 | `Cannon.as:179-225` | `MutinyAIController.EvaluateCannon()`、`MutinyCannon.BeginAiFire()` | AI 请求穿过 x=128 墙体时炮身同样停在 x=117.9 | 已实现；待 Unity 运行验证 |
 | CAN-AI-02 | AI 的摆放方向和发射方向使用两次独立随机角度 | `Cannon.as:190`、`Cannon.as:199` | `MutinyAIController.EvaluateCannon()` | 静态检查两个独立 `Random.Range(0,360)` 采样 | 已实现；静态确认 |
-| CAN-AI-TURN-01 | AI 提交大炮后，25 tick 待发射期间保持当前回合；发射后镜头跟随炮弹，炮弹结算、大炮淡出且场面稳定后才允许静止计时与切换回合，不会在发射前创建下一回合空投。大炮／炮弹不受非原版 150 tick 安全超时强制结束；已存在的下落空投仍遵循原版较高镜头优先级 | `Team.as:89-96`；`Cannon.as:45-85,215-225`；`Cannonball.as:46-111`；`Character.as:172-175,226-250`；`Controller.as:200-240,185-195`；`TileSystem.as:438-459` | `MutinyCannon.IsAiFirePending`、`MutinyTurnManager.CheckAllBodiesAtRest()`、`MutinyCameraController.FindActionTarget()` | 经 AI 正式执行入口推进 24/25 tick，检查回合、炮弹和镜头目标；炮弹未结束时再等待 151 tick，随后检查结算与切换 | 原版静态确认；已实现、C# 编译通过；自动回归待 Unity 运行验证 |
+| CAN-AI-TURN-01 | AI 提交大炮后，25 tick 待发射期间保持当前回合；发射后镜头跟随炮弹，炮弹结算、大炮淡出且场面稳定后才允许静止计时与切换回合，不会在发射前创建下一回合空投。大炮／炮弹不受非原版 150 tick 安全超时强制结束；已存在的下落空投仍遵循原版较高镜头优先级 | `Team.as:89-96`；`Cannon.as:45-85,215-225`；`Cannonball.as:46-111`；`Character.as:172-175,226-250`；`Controller.as:200-240,185-195`；`TileSystem.as:438-459` | `MutinyCannon.IsAiFirePending`、`MutinyTurnManager.CheckAllBodiesAtRest()`、`MutinyCameraController.FindActionTarget()` | 经 AI 正式执行入口推进 24/25 tick，检查回合、炮弹和镜头目标；炮弹未结束时再等待 151 tick，随后检查结算与切换 | 已实现；2026-09-26 隔离工程 Play Mode 24/24 大炮专项通过；主工程实景对照待验收 |
 | CAN-SMOKE-02 | 每个未结束的炮弹 tick 仅留一团烟，原版在 `advanceMotion` 后取炮弹当前位置；Unity 高刷新率显示插值必须让新烟团留在炮弹本 tick 的可见轨迹上，不能先出现在可见炮弹前方 | `Cannonball.as::advance`；用户授权的 `CAM-PRES-01` 显示插值 | `MutinyCannonball.AdvanceOriginalTick`、`MutinyPhysicsBody` tick 起点 | 发射炮弹并推进正式物理 tick，比较烟团与当前显示轨迹；再推进中间渲染帧，确认炮弹从烟团向前移动 | 原版静态确认；已实现；隔离工程 Unity Play Mode 通过，主工程画面待验收 |
 | CAN-AUD-02 | 原版炮弹碰墙/地形在接触 tick 播放一次 `pop`；直接撞人生成爆炸但不播 `pop`；爆炸动画的第 3 帧只结算伤害、不追加声音 | `Cannonball.as::contact/advance`；`Explosion.as::hit` | `MutinyCannonball.Explode`、`MutinyExplosion.PlayPopOnHit` | 核对原版两个分支；Unity 实现按下方 `CAN-AUD-03` 的用户授权扩展验收 | 原版静态确认；Unity 直击分支有明确授权差异，不再登记为完全一致 |
 | CAN-AUD-03（用户授权扩展） | 炮弹直击角色也在命中当刻播放一次 `pop`；地形与角色碰撞回调即使重叠，只允许该炮弹播放一次，爆炸伤害帧不追加声音。原版直击角色分支无音效，故本规则明确不记为原版一致性 | 用户反馈；原版 `Cannonball.as::advance` 直击分支与 `contact` 地形分支的差异 | `MutinyCannonball.Explode` 统一一次性音效门 | 生产炮弹分别撞墙、直击角色并推进爆炸伤害帧；断言每颗只收到一次 `pop`，重复结束调用不再播放 | 已实现；2026-09-26 隔离工程 Unity Play Mode 专项 19/19 通过；主工程实际听感待验收 |
@@ -74,6 +74,10 @@
 
 - 原版 AS2、资源层级和数值：静态确认。
 - Unity C# 编译：`dotnet build Assembly-CSharp.csproj --no-restore` 通过；仅有既存 `MutinyLevelTest.levelXml` 未赋值警告。
-- `VerifyCannon()` 已补生产入口回归，但本次没有在 Unity 中执行。
+- 2026-09-26：隔离工程 Unity Play Mode 执行 `RunCannon()`，包含 `VerifyCannon()`、AI 回合、烟雾与碰撞音效专项，24/24 通过；与手柄组合回归合计 278/278。实际结果见 [大炮手柄验收记录](../../11-VerificationAndDebug/02-PlayModeValidation/CONTROLLER_VERIFICATION.md)。
 - 范围锚点已按原版恢复为 `owner.y-100`；“快速越界仍保持抓取”仍是为避免高速鼠标脱手而保留的授权差异。
 - Unity Play Mode 与原版运行画面对照：待手动验证。
+
+## 手柄扩展
+
+用户授权的两阶段部署/后拉瞄准、双扳机调整视觉拉栓、A 固定 30 力开火及 B 返回部署，见 [GP-CAN 行为规格](../../08-ActionAgents/02-PlayerInput/CONTROLLER_CANNON.md)。手柄 A 在任意拉栓深度可提交；鼠标仍要求 `PinX < -30`，两者分别登记。

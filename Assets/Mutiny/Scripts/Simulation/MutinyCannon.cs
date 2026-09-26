@@ -57,6 +57,9 @@ namespace Mutiny.Simulation
         public bool IsDraggingPin => m_DraggingPin;
         public MutinyCannonball Cannonball => m_Cannonball;
         public bool IsAiFirePending => m_AiFireTicksRemaining > 0 && !IsFired && !IsFinished;
+        public bool IsFirePending => !IsFired && !IsFinished &&
+            (m_AiFireTicksRemaining > 0 || m_FireStrength > 4f);
+        public Vector2 FireDirectionPixels => DirectionForRotation();
         public SpriteRenderer PinRenderer => m_PinRenderer;
         public SpriteRenderer RangeCircleRenderer => m_RangeCircleRenderer;
         public Transform CameraFocusTarget => m_Cannonball != null ? m_Cannonball.transform : null;
@@ -153,6 +156,37 @@ namespace Mutiny.Simulation
             UpdatePinVisual();
         }
 
+        // Controller placement owns the cannon, without a held mouse drag. Use
+        // the same range clamp and swept Solid motion as body dragging and AI.
+        public void MoveForController(Vector2 targetPixels)
+        {
+            if (IsFired || IsFinished || IsFirePending || m_DraggingBody || m_DraggingPin)
+                return;
+            MoveBodyTowardWithCollision(ClampToPlacementCircle(targetPixels), 1f);
+        }
+
+        public bool TryBeginControllerAim() => !IsFirePending && !IsFinished &&
+            TryBeginPinDrag(PinWorldPosition());
+
+        public void UpdateControllerAim(Vector2 pullDirectionPixels, float visualPower)
+        {
+            if (!m_DraggingPin || IsFired || IsFinished || pullDirectionPixels.sqrMagnitude < 0.0001f)
+                return;
+            float pullDistance = Mathf.Lerp(-PinRestX, -PinMinX, Mathf.Clamp01(visualPower));
+            DragPinTo(Position + pullDirectionPixels.normalized * pullDistance);
+        }
+
+        public bool CommitControllerShot(MutinyTurnManager turnManager)
+        {
+            if (!m_DraggingPin || IsFired || IsFinished || IsFirePending)
+                return false;
+            m_DraggingPin = false;
+            // User-authorized mapping: A fires even when the visual pin is at
+            // rest. The mouse release threshold remains in ReleasePointer.
+            LoadShot(turnManager);
+            return true;
+        }
+
         public bool ReleasePointer(MutinyTurnManager turnManager)
         {
             if (m_DraggingBody)
@@ -176,6 +210,12 @@ namespace Mutiny.Simulation
                 return false;
             }
 
+            LoadShot(turnManager);
+            return true;
+        }
+
+        private void LoadShot(MutinyTurnManager turnManager)
+        {
             m_FireStrength = FireStrength;
             if (Owner != null)
             {
@@ -184,7 +224,6 @@ namespace Mutiny.Simulation
             }
             turnManager?.NotifyActionStarted();
             MutinyDebugLog.Info("Cannon", $"pin released x={PinX:F1}; loading {FireStrength:F0}", this);
-            return true;
         }
 
         public void CancelPointer()
