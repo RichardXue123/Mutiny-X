@@ -48,15 +48,6 @@ namespace Mutiny.Presentation
             DrawCjk(rect, value, new Color32(102, 102, 102, 255), TextAnchor.UpperLeft, 13, false);
         }
 
-        public static void LanguageChoice(Rect rect, bool chinese, bool selected)
-        {
-            Color color = selected ? Color.yellow : Color.white;
-            if (chinese)
-                DrawCjk(rect, "简体中文", color, TextAnchor.MiddleCenter, 14, false);
-            else
-                MutinyBitmapFont.DrawDangleText(rect, "english", color, TextAnchor.MiddleCenter);
-        }
-
         private static void DrawCjk(Rect rect, string text, Color color, TextAnchor anchor, int fontSize, bool bold)
         {
             Font font = CjkFont;

@@ -27,6 +27,8 @@
 
 ## GM-09 · 切换语言
 
+手动语言切换入口仅保留 GM 命令；主标题页不再显示语言选择按钮。
+
 原版来源：不适用，用户授权的 Unity 本地化和 GM 扩展。菜单及战斗均可输入 `setlanguage cn` 或 `setlanguage en`，经唯一生产入口 `MutinyGMManager.ExecuteCommand` 调用 `MutinyLocalization.Initialize/Select`，刷新所接入的文本、字体路径，并保存 `mutiny_language_v1`。表尚未就绪时记录选择，载入完成后显示目标语言；控制台状态说明此时正在载入。合法命令计入最近成功命令，可重放；再次选择当前语言同样成功并保存。非法输入显示 `Usage: setlanguage cn | en`，不改语言、偏好和成功历史。GM 面板自身保持开发英语。
 
 验收用例：从菜单实际 GM 解析入口依次执行 `cn`、`en`，检查本地化文本、Locale、字体路径和保存值；执行大小写/空白变化及重复命令；分别拒绝缺参、`jp`、额外参数；通过最近成功命令再次切换。2026-09-26 在隔离 Unity 6000.6.0f1 的 `Main.unity` Play Mode 通过 **7/7** 生产入口断言，字体资源和本地化表真实载入；结果见 [GM-09 验证记录](05-GMTools/Artifacts/GM-09-20260926.txt)。重启持久化、鼠标/触控面板交互及全中文页面画面仍待验收。

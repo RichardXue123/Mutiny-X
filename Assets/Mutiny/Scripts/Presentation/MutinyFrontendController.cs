@@ -413,22 +413,6 @@ namespace Mutiny.Presentation
             {
                 OpenCredits();
             }
-            DrawLanguageChoices();
-        }
-
-        private void DrawLanguageChoices()
-        {
-            DrawLanguageChoice(new Rect(168f, 313f, 104f, 24f), MutinyLocalization.English, false);
-            DrawLanguageChoice(new Rect(278f, 313f, 104f, 24f), MutinyLocalization.SimplifiedChinese, true);
-        }
-
-        private void DrawLanguageChoice(Rect rect, string code, bool chinese)
-        {
-            bool hovered = rect.Contains(GetCanvasMousePosition());
-            DrawTexture(rect, hovered ? m_ButtonSmallOver : m_ButtonSmall);
-            MutinyLocalizedText.LanguageChoice(rect, chinese, MutinyLocalization.Code == code);
-            if (!MutinyTransitionManager.IsTransitionActive && GUI.Button(rect, GUIContent.none, GUIStyle.none))
-                MutinyLocalization.Select(code);
         }
 
         private void OpenCredits()
