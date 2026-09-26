@@ -82,7 +82,7 @@ namespace Mutiny.Presentation.Editor
                 if (!MutinyLocalization.IsReady ||
                     UnityEngine.Object.FindAnyObjectByType<MutinyFrontendController>() == null ||
                     Resources.Load<Font>("Localization/Fonts/NotoSansCJKsc-Regular") == null)
-                    throw new InvalidOperationException("Production frontend did not load localization tables and font.");
+                    throw new InvalidOperationException("Production frontend did not load localization text and font.");
                 MutinyLevel1VerificationResult result = MutinyTurnActionUiVerificationTest.RunGMLanguage(gm);
                 if (!result.Passed)
                     throw new InvalidOperationException(string.Join("\n", result.Failures));
@@ -94,7 +94,7 @@ namespace Mutiny.Presentation.Editor
                 if (!speechResult.Passed)
                     throw new InvalidOperationException(string.Join("\n", speechResult.Failures));
                 passed = true;
-                Debug.Log($"[Localization] GM-09 Play Mode verification passed: {result.PassedAssertions}/{result.TotalAssertions}; production frontend loaded tables and font.");
+                Debug.Log($"[Localization] GM-09 Play Mode verification passed: {result.PassedAssertions}/{result.TotalAssertions}; production frontend loaded text and font.");
                 Debug.Log($"[Localization] Speech and tooltips Play Mode verification passed: {speechResult.PassedAssertions}/{speechResult.TotalAssertions}.");
             }
             catch (Exception exception)

@@ -4,10 +4,10 @@
 
 ## 架构与内容
 
-- Unity `6000.6.0f1` 使用 `com.unity.localization` `1.5.13`。`Mutiny.tsv` 是人工维护的键、英语、简中三列源文件；编辑器菜单 **Mutiny/Localization/Rebuild String Tables** 生成两个 Locale、String Table Collection、运行时 Localization Settings 和 Addressables 组。改完 TSV 必须重建表并提交生成资产。初版有 82 个成对键，补充对白与提示后当前为 150 个。发行版故障修复后，运行时按已保存语言、英语的顺序选择；首次固定英语。见 [发行版语言切换修复](LOCALIZATION_PLAYER_BUILD_FIX.md)。
-- `MutinyLocalization` 缓存两个表，切换时保存偏好并发送变更事件；单条缺译回退到英语，初始表未就绪时使用调用点英语，缺键只警告一次。`MutinySaveSystem` 的语言键独立于进度。未来增加 `ja`、`zh-Hant` 时，需在语言目录、GM 参数映射中增加代码和相应表，不改武器、关卡等业务 ID。
+- Unity `6000.6.0f1` 使用 `com.unity.localization` `1.5.13`。`Mutiny.tsv` 是人工维护的键、英语、简中三列源文件；编辑器菜单 **Mutiny/Localization/Rebuild String Tables** 生成两个 Locale、String Table Collection、运行时 Localization Settings、Addressables 组及随包 `MutinyRuntime.txt`。改完 TSV 必须重建并提交生成资产，生产构建入口会拒绝过期的随包文本。初版有 82 个成对键，补充对白与提示后当前为 150 个。发行版故障修复后，运行时按已保存语言、英语的顺序选择；首次固定英语。见 [发行版语言切换修复](LOCALIZATION_PLAYER_BUILD_FIX.md)。
+- `MutinyLocalization` 缓存两个表，切换时保存偏好并发送变更事件；打包版的 Unity 表查询失效时读取随包生成的 `MutinyRuntime.txt`（与人工维护的 `Mutiny.tsv` 内容一致），单条缺译回退到英语，资源未就绪时使用调用点英语，缺键只警告一次。`MutinySaveSystem` 的语言键独立于进度。未来增加 `ja`、`zh-Hant` 时，需在语言目录、GM 参数映射和运行时文本列中增加代码和对应译文，不改武器、关卡等业务 ID。详见 [反复切换修复](LOCALIZATION_RESELECT_FIX.md)。
 - `MutinyLocalizedText` 对英语继续使用 PirateFont/DangleFont 原图集；简中使用随包 Noto Sans CJK SC Regular OTF 动态字形。字体随资源打包，运行时按实际文本绘制，不预烘焙全部汉字。`OFL.txt` 随字体保存。今后日语、繁体中文应分别配置 JP、TC 地区字体，不能把 SC 当成通用汉字字形。字形检查记录具体码点；当前已检查全部 65 段对白及角落提示的实际字体布局尺寸，其余页面的溢出检测仍待补齐。
-- 已接入前端主要导航/说明/成绩/制作页、载入文字、战斗武器名和说明、回合/拾取提示、退出和结算弹窗。按用户更新要求，手动切换语言仅保留 GM 的 `setlanguage cn` / `setlanguage en` 入口；标题页不显示语言按钮。武器内部 ID 不翻译。事件队列保留待解析文案，切换语言后未显示及当前显示的提示会按新语言解析，且不重新开始其动画计时。
+- 已接入前端主要导航/说明/成绩/制作页、载入文字、战斗武器名和说明、回合/拾取提示、退出和结算弹窗。按用户更新要求，手动切换语言仅保留 GM 的 `setlanguage zh-cn` / `setlanguage en` 入口；标题页不显示语言按钮。武器内部 ID 不翻译。事件队列保留待解析文案，切换语言后未显示及当前显示的提示会按新语言解析，且不重新开始其动画计时。
 - 初版之后已补齐 60 条船长战斗对白、5 段结尾对白与 quit/music/sound fx 悬停提示；当前共 150 个成对键。实现与验收见 [对白及提示记录](LOCALIZATION_SPEECH_AND_TOOLTIPS.md)。若干帮助图内字和 GM 工具仍显示英语；品牌标志保持英语，简中完整覆盖审计尚未完成。
 
 ## 来源与可观察行为
@@ -36,7 +36,7 @@
 
 ### 2026-09-26 GM 语言切换补充
 
-最新 `main` 的手柄支持和修复已合入本分支。新增 `setlanguage cn` / `setlanguage en`，从 GM 唯一解析入口选择语言，包含持久化、错误参数拒绝及历史重放。Unity 6000.6.0f1 的 `Main.unity` Play Mode 已实际验证 **7/7**；前端、表和字体均真实载入，详见 [GM-09 记录](../11-VerificationAndDebug/05-GMTools/Artifacts/GM-09-20260926.txt)。验证启动器现在能在编辑器额外重载程序集后恢复检查，初版记录中的批处理未完成状态是历史结果。该结果不覆盖鼠标点击、重启或所有中文页面画面。
+历史初版新增 `setlanguage cn` / `setlanguage en`，从 GM 唯一解析入口选择语言，包含持久化、错误参数拒绝及历史重放。Unity 6000.6.0f1 的 `Main.unity` Play Mode 曾实际验证旧命令 **7/7**，详见 [GM-09 记录](../11-VerificationAndDebug/05-GMTools/Artifacts/GM-09-20260926.txt)。2026-09-27 用户将中文参数改为 `zh-cn`，且打包版发现表项缺失，旧结果不证明当前版本通过；见 [反复切换修复](LOCALIZATION_RESELECT_FIX.md)。
 
 1. 在 `Mutiny.tsv` 中继续做图片内文案审计和前端细项。对白英语已逐条对照原版 AS2；译文改变后重建表并运行校验。
 2. 战斗对白与角落提示已接入稳定键和语言切换。其余带文字的交互贴图可拆为底图加动态文本或用 Asset Table 选择语言专属资源。

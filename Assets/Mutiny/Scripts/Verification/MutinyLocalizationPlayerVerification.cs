@@ -56,7 +56,7 @@ namespace Mutiny.Verification
 
             if (!MutinyLocalization.IsReady || gm == null)
             {
-                Finish(false, "Locales or shared string-table data did not load.");
+                Finish(false, "Runtime translations did not load.");
                 yield break;
             }
 
@@ -77,22 +77,31 @@ namespace Mutiny.Verification
                 yield break;
             }
 
-            string command = s_Phase == "first" ? "setlanguage cn" : "setlanguage en";
-            string target = s_Phase == "first" ? MutinyLocalization.SimplifiedChinese : MutinyLocalization.English;
-            expected = s_Phase == "first" ? "开始游戏" : "play";
-            if (!gm.ExecuteCommand(command) || MutinyLocalization.Code != target ||
-                MutinySaveSystem.LanguageCode != target ||
-                MutinyLocalization.Text("frontend.play", "play") != expected ||
-                MutinyLocalization.UseOriginalFont != (target == MutinyLocalization.English))
+            string[] commands = s_Phase == "first"
+                ? new[] { "setlanguage en", "setlanguage zh-cn" }
+                : s_Phase == "saved-cn"
+                    ? new[] { "setlanguage en", "setlanguage zh-cn", "setlanguage en" }
+                    : new[] { "setlanguage zh-cn", "setlanguage en" };
+            foreach (string command in commands)
             {
-                Finish(false, "GM switch or title text failed: " + command);
-                yield break;
+                string target = command == "setlanguage zh-cn"
+                    ? MutinyLocalization.SimplifiedChinese : MutinyLocalization.English;
+                expected = target == MutinyLocalization.SimplifiedChinese ? "开始游戏" : "play";
+                if (!gm.ExecuteCommand(command) || MutinyLocalization.Code != target ||
+                    MutinySaveSystem.LanguageCode != target ||
+                    MutinyLocalization.Text("frontend.play", "play") != expected ||
+                    MutinyLocalization.UseOriginalFont != (target == MutinyLocalization.English))
+                {
+                    Finish(false, "GM switch or title text failed: " + command);
+                    yield break;
+                }
+                yield return null;
             }
 
             for (int frame = 0; frame < 4; frame++)
                 yield return null;
             Finish(s_FirstException == null, s_FirstException ??
-                ("phase=" + s_Phase + ", startup=" + initial + ", switched=" + target));
+                ("phase=" + s_Phase + ", startup=" + initial + ", sequence=" + string.Join(" -> ", commands)));
         }
 
         private static void Finish(bool success, string detail)

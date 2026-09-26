@@ -36,7 +36,7 @@ namespace Mutiny.Verification
                 // Reload through the same asset-loading entry used by cold startup.
                 typeof(MutinyAudioManager).GetMethod("LoadAllAudioClips", BindingFlags.Instance | BindingFlags.NonPublic)
                     .Invoke(audio, null);
-                gm.ExecuteCommand("setlanguage cn");
+                gm.ExecuteCommand("setlanguage zh-cn");
                 VerifyLanguageSwitch(result, gm, audio);
                 foreach (string opponent in Opponents)
                 {
@@ -95,7 +95,7 @@ namespace Mutiny.Verification
                     "LOC-SPEECH-02 language switch does not restart ten-tick delay");
                 speech.AdvanceSpeechForVerification(Tick);
                 string partialEnglish = speech.VisibleText;
-                gm.ExecuteCommand("setlanguage cn");
+                gm.ExecuteCommand("setlanguage zh-cn");
                 string chinese = MutinyLocalization.Text("speech.squid.0", null);
                 result.Assert(partialEnglish.Length == 3 && speech.VisibleText.Length > 0 &&
                     speech.VisibleText.Length < chinese.Length && chinese.StartsWith(speech.VisibleText) &&
@@ -114,7 +114,7 @@ namespace Mutiny.Verification
                 speech.AdvanceSpeechForVerification(Tick);
                 result.Assert(speech.Speaker == fixture.Enemy && !speech.IsBubbleVisible && voices == 2,
                     "LOC-SPEECH-02 next tick starts opponent response with exactly one new voice");
-                gm.ExecuteCommand("setlanguage cn");
+                gm.ExecuteCommand("setlanguage zh-cn");
             }
             finally
             {

@@ -14,6 +14,7 @@ namespace Mutiny.Presentation.Editor
         private const string DirectoryPath = "Assets/Mutiny/Localization";
         private const string SourcePath = DirectoryPath + "/Mutiny.tsv";
         private const string TablePath = DirectoryPath + "/Tables";
+        private const string RuntimeTextPath = "Assets/Mutiny/Resources/Localization/MutinyRuntime.txt";
 
         [MenuItem("Mutiny/Localization/Rebuild String Tables")]
         public static void Build()
@@ -48,6 +49,8 @@ namespace Mutiny.Presentation.Editor
             EditorUtility.SetDirty(en);
             EditorUtility.SetDirty(zh);
             EditorUtility.SetDirty(en.SharedData);
+            File.Copy(SourcePath, RuntimeTextPath, true);
+            AssetDatabase.ImportAsset(RuntimeTextPath, ImportAssetOptions.ForceUpdate);
             AssetDatabase.SaveAssets();
             Debug.Log($"[Localization] Built {count} English/Chinese keys.");
         }

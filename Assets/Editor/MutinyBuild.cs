@@ -15,6 +15,8 @@ public static class MutinyBuild
     private const string QueueActiveKey = "MutinyX.Build.QueueActive";
     private const string InstallerScriptPath = "BuildTools/WindowsInstaller/MutinyX.iss";
     private const string InnoCompilerPrefKey = "MutinyX.InnoSetup.CompilerPath";
+    private const string LocalizationSourcePath = "Assets/Mutiny/Localization/Mutiny.tsv";
+    private const string LocalizationRuntimePath = "Assets/Mutiny/Resources/Localization/MutinyRuntime.txt";
 
     [Serializable]
     private class BuildQueueState
@@ -263,6 +265,14 @@ public static class MutinyBuild
 
     internal static bool BuildTargetNow(BuildTarget target, string version, int buildNumber, string outputPath = null)
     {
+        if (!File.Exists(LocalizationSourcePath) || !File.Exists(LocalizationRuntimePath) ||
+            !File.ReadAllBytes(LocalizationSourcePath).SequenceEqual(File.ReadAllBytes(LocalizationRuntimePath)) ||
+            AssetDatabase.LoadAssetAtPath<TextAsset>(LocalizationRuntimePath) == null)
+        {
+            Debug.LogError("[Mutiny Build] Runtime localization text is missing or stale. Run Mutiny/Localization/Rebuild String Tables.");
+            return false;
+        }
+
         string[] scenes = EditorBuildSettings.scenes
             .Where(scene => scene.enabled)
             .Select(scene => scene.path)
