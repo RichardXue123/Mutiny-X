@@ -30,3 +30,7 @@ Installer output:
 `Builds/Installer/MutinyX-Setup-<version>+<build>.exe`
 
 The installer includes Start Menu integration, an optional desktop shortcut, uninstall support, and a post-install launch option.
+
+## Local tag releases
+
+For a fixed-tag Windows/Android build with filtered shipping files and automatic GitHub Release publication, use [the local release pipeline](../Release/README.md). It does not increment the committed build number.

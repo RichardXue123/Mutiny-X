@@ -11,6 +11,7 @@
 - `Assets/Mutiny/Scripts/Verification/`
 - `Assets/Mutiny/Scripts/Presentation/MutinyGMManager.cs`
 - [GM 命令说明](GM_COMMANDS.md)
+- [本地 tag 发布流水线验收](01-AutomatedRegression/LOCAL_RELEASE_PIPELINE.md)
 
 ## 完成口径
 

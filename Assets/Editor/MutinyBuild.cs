@@ -261,7 +261,7 @@ public static class MutinyBuild
             Debug.Log("[Mutiny Build] Build queue finished.");
     }
 
-    private static bool BuildTargetNow(BuildTarget target, string version, int buildNumber)
+    internal static bool BuildTargetNow(BuildTarget target, string version, int buildNumber, string outputPath = null)
     {
         string[] scenes = EditorBuildSettings.scenes
             .Where(scene => scene.enabled)
@@ -274,7 +274,7 @@ public static class MutinyBuild
             return false;
         }
 
-        string location = GetOutputPath(target, version, buildNumber);
+        string location = outputPath ?? GetOutputPath(target, version, buildNumber);
         string directory = target == BuildTarget.iOS ? location : Path.GetDirectoryName(location);
 
         if (!string.IsNullOrEmpty(directory))

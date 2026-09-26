@@ -33,6 +33,10 @@ Mutiny X 是使用 Unity 6 复刻 Nitrome Flash 游戏《Mutiny》的项目。�
 
 桌面端用鼠标选择当前队伍角色，并通过画面中的行动与武器界面操作；抛掷时按住拖动以调整方向和力度，松开提交。游戏内的 **GM** 按钮提供调试命令，说明见 [GM 命令文档](Docs/11-VerificationAndDebug/GM_COMMANDS.md)。
 
+## 构建与发布
+
+固定版本 tag 后，可使用 [本地一键发布流程](BuildTools/Release/README.md) 自动构建 Windows 便携包、安装包与 Android APK，校验后上传并发布 GitHub Release。支持 `-BuildOnly` 本地验证和 `-Resume` 中断恢复。
+
 ## 目录
 
 | 路径 | 内容 |
