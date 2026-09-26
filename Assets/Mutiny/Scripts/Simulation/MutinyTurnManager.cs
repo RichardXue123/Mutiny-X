@@ -306,14 +306,14 @@ namespace Mutiny.Simulation
             var activeWeapons = FindObjectsByType<MutinyWeapon>();
             for (int i = 0; i < activeWeapons.Length; i++)
             {
-                if (activeWeapons[i] is MutinyCannon cannon && cannon.IsAiFirePending &&
-                    CurrentTeam != null && CurrentTeam.IsAiControlled &&
+                if (activeWeapons[i] is MutinyCannon cannon && cannon.IsFirePending &&
+                    CurrentTeam != null &&
                     cannon.Owner == CurrentTeam.SelectedCharacter)
                 {
                     // Character.advance keeps inactivity at zero while its selected
-                    // weapon has not fired. Cannon.aiPerform waits 25 ticks before
-                    // firing, so that delay is part of the committed action.
-                    blocker = "cannon:ai-fire-pending";
+                    // weapon has not fired. The AI delay and player's pin return
+                    // are both part of a committed Cannon action.
+                    blocker = "cannon:fire-pending";
                     return false;
                 }
 

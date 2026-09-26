@@ -34,6 +34,10 @@ namespace Mutiny.Presentation
         public MutinyPlayerInteractionState InteractionState { get; private set; } =
             MutinyPlayerInteractionState.CharacterSelection;
         public bool IsActionMenuOpen => InteractionState == MutinyPlayerInteractionState.ActionMenu;
+        public bool IsControllerAiming => m_ControllerAiming && InteractionState == MutinyPlayerInteractionState.Aiming;
+        public float ControllerPower { get; private set; }
+        [Min(0f)] public float ControllerPowerChangePerSecond = 0.5f;
+        public MutinyCharacter ControllerFocusedCharacter => m_ControllerFocusedCharacter;
         public bool IsAiming => InteractionState == MutinyPlayerInteractionState.Aiming ||
                                 (m_ArmedCannon != null &&
                                  (m_ArmedCannon.IsDraggingBody || m_ArmedCannon.IsDraggingPin));
@@ -60,6 +64,8 @@ namespace Mutiny.Presentation
         public MutinyCannon ArmedCannon => m_ArmedCannon != null && !m_ArmedCannon.IsFinished
             ? m_ArmedCannon
             : null;
+        public bool IsControllerCannonReady => InteractionState == MutinyPlayerInteractionState.WeaponReady &&
+            m_ArmedCannon != null && !m_ArmedCannon.IsFired && !m_ArmedCannon.IsFirePending;
         public MutinyPiecesOfEight ArmedPiecesOfEight => m_ArmedPiecesOfEight != null &&
                                                           !m_ArmedPiecesOfEight.IsFinished
             ? m_ArmedPiecesOfEight
@@ -79,6 +85,12 @@ namespace Mutiny.Presentation
         }
 
         private Vector3 m_AimOrigin;
+        private bool m_ControllerAiming;
+        private bool m_ControllerTriggerMustRelease = true;
+        // Pixel-space drag direction. Solid.twang launches opposite the drag endpoint.
+        private Vector2 m_ControllerPullDirection;
+        private MutinyCharacter m_ControllerFocusedCharacter;
+        private bool m_ControllerCharacterFocusInitialized;
         private string[,] m_CachedTerrain;
         private int m_GridWidth;
         private int m_GridHeight;
@@ -155,6 +167,7 @@ namespace Mutiny.Presentation
             // input; character selection and aiming must not see the same click.
             if (MutinyTransitionManager.IsTransitionActive)
             {
+                CancelControllerAim();
                 ResetMobileGestureOwnership();
                 ClearSpecialWeaponCursor();
                 ClearHoveredCharacter();
@@ -164,7 +177,7 @@ namespace Mutiny.Presentation
             }
 
             MutinyGameHUD hud = FindAnyObjectByType<MutinyGameHUD>();
-            if (hud != null && (hud.IsQuitPromptVisible ||
+            if (hud != null && (hud.IsQuitPromptShowRequested || hud.IsQuitPromptVisible ||
                                 (hud.Speech != null && hud.Speech.HasActiveBubble)))
             {
                 // Android touch input does not have to produce an IMGUI mouse
@@ -189,6 +202,8 @@ namespace Mutiny.Presentation
 
             if (!CanProcessCurrentTurnInput())
             {
+                CancelControllerAim();
+                ResetControllerCharacterFocus();
                 ResetMobileGestureOwnership();
                 ClearSpecialWeaponCursor();
                 ClearHoveredCharacter();
@@ -227,6 +242,25 @@ namespace Mutiny.Presentation
                 return;
             }
 
+            MutinyInputHub controllerHub = MutinyInputHub.Instance;
+            if (controllerHub != null && controllerHub.IsControllerActive)
+            {
+                ResetMobileGestureOwnership();
+                MutinyCharacter selected = currentTeam.SelectedCharacter;
+                if (selected != null && selected.IsAlive)
+                {
+                    UpdateSpecialWeaponCursor(selected, controllerHub.PointerPosition,
+                        controllerHub.IsConfirmHeld);
+                    UpdateHoveredCharacter(currentTeam,
+                        GetMouseWorldPosition(controllerHub.PointerPosition));
+                }
+                else ClearSpecialWeaponCursor();
+                if (controllerHub.TryConsumeGameplay(out MutinyInputHub.ControllerFrame controllerFrame))
+                    ProcessControllerFrame(controllerFrame, controllerHub);
+                return;
+            }
+
+            ResetControllerCharacterFocus();
             UpdateSecondaryMobileCameraTouch();
 
             if (!TryReadPointer(out PointerFrameState pointer))
@@ -741,7 +775,9 @@ namespace Mutiny.Presentation
                 mode = MutinySpecialWeaponCursor.Mode.ParachuteFan;
                 float mousePixelX = GetMouseWorldPixelX(mousePosition);
                 rotationDegrees = mousePixelX >= activeBomb.PhysicsBody.State.X ? -90f : 90f;
-                animateFan = leftButtonHeld;
+                animateFan = leftButtonHeld &&
+                    (MutinyInputHub.Instance == null || !MutinyInputHub.Instance.IsControllerActive ||
+                     activeBomb.ControllerFanCanStart);
             }
             else if (selectedCharacter != null && InteractionState == MutinyPlayerInteractionState.WeaponReady)
             {
@@ -885,6 +921,291 @@ namespace Mutiny.Presentation
             return CanProcessCurrentTurnInput();
         }
 
+        public static bool SupportsControllerWeapon(string weaponType)
+        {
+            return string.IsNullOrEmpty(weaponType) ||
+                   weaponType.Equals("cherryBomb", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("dynamite", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("boulder", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("mine", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("rumBottle", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("cannonball", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("cannon", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("banana", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("parachuteBomb", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("piecesOfEight", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("voodooDoll", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("woodenCrate", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("gunpowderBarrel", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("seagull", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("tidalWave", System.StringComparison.OrdinalIgnoreCase) ||
+                   weaponType.Equals("anchor", System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        public bool IsControllerPointerWeaponReady =>
+            InteractionState == MutinyPlayerInteractionState.WeaponReady &&
+            (IsVoodooTargetSelection() || IsControllerClickWeapon(ActiveWeapon));
+
+        private static bool IsControllerClickWeapon(string weaponType)
+        {
+            return string.Equals(weaponType, "woodenCrate", System.StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(weaponType, "gunpowderBarrel", System.StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(weaponType, "anchor", System.StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(weaponType, "seagull", System.StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(weaponType, "tidalWave", System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        public bool SelectControllerWeapon(string weaponType)
+        {
+            if (!SupportsControllerWeapon(weaponType) || !SelectWeapon(weaponType)) return false;
+            if (IsControllerCannonReady) SyncControllerCannonPointer(MutinyInputHub.Instance);
+            return true;
+        }
+
+        private void ResetControllerAction()
+        {
+            m_ControllerAiming = false;
+            m_ControllerTriggerMustRelease = true;
+            ControllerPower = 0f;
+        }
+
+        public void CancelControllerAim()
+        {
+            if (IsControllerAiming) CancelCurrentAim();
+            else ResetControllerAction();
+        }
+
+        internal void ProcessControllerFrame(MutinyInputHub.ControllerFrame frame, MutinyInputHub hub)
+        {
+            if (!CanProcessCurrentTurnInput() ||
+                TurnManager.CurrentTeam == null || TurnManager.CurrentTeam.IsAiControlled ||
+                MutinyTransitionManager.IsTransitionActive)
+                return;
+            MutinyGameHUD hud = FindAnyObjectByType<MutinyGameHUD>();
+            if (hud != null && (hud.IsQuitPromptVisible ||
+                (hud.Speech != null && hud.Speech.HasActiveBubble))) return;
+            if (frame.Back)
+            {
+                TryControllerBack();
+                return; // Back always wins over Confirm, even when returning is prohibited.
+            }
+            MutinyTeam team = TurnManager.CurrentTeam;
+            if (frame.Confirm)
+            {
+                if (MutinySeagull.TryRequestPlayerShot(team)) return;
+                if (MutinyBanana.TryRequestPlayerDetonation(team)) return;
+            }
+            // Fan input is sampled by the flying bomb itself. Keep its selected
+            // character and cursor alive while ActionExecuting admits input.
+            if (MutinyParachuteBomb.HasPlayerActiveFlight(team)) return;
+            if (InteractionState == MutinyPlayerInteractionState.CharacterSelection)
+            {
+                ProcessControllerCharacterSelection(team, frame, hub);
+                return;
+            }
+            if (InteractionState == MutinyPlayerInteractionState.ActionMenu) return;
+            MutinyCharacter character = GetHumanSelectedCharacter();
+            if (character == null)
+            {
+                CancelControllerAim();
+                ReturnToCharacterSelection();
+                return;
+            }
+            if ((character.WeaponLocked && !IsAwaitingPiecesOfEight()) ||
+                !SupportsControllerWeapon(ActiveWeapon)) return;
+            Vector3 pointerWorld = GetMouseWorldPosition(hub.PointerPosition);
+            if (!IsControllerAiming && frame.Confirm &&
+                TryHandleCancelOverlayPrimaryPointer(character, pointerWorld, true))
+                return;
+            if (IsVoodooTargetSelection())
+            {
+                if (frame.Confirm) TrySelectVoodooTarget(team, character, pointerWorld);
+                return;
+            }
+            if (IsControllerClickWeapon(ActiveWeapon))
+            {
+                if (frame.Confirm) TryActivateClickWeapon(character, pointerWorld);
+                return;
+            }
+            bool triggerHeld = frame.IncreasePower > MutinyInputHub.TriggerDeadzone ||
+                               frame.DecreasePower > MutinyInputHub.TriggerDeadzone;
+            MutinyCannon cannon = m_ArmedCannon;
+            if (!triggerHeld)
+                m_ControllerTriggerMustRelease = false;
+            if (InteractionState == MutinyPlayerInteractionState.WeaponReady &&
+                !m_ControllerTriggerMustRelease && triggerHeld && CanAim(character))
+            {
+                if (cannon != null && !cannon.TryBeginControllerAim()) return;
+                if (!BeginAim(character, GetReadyActionOrigin(character))) return;
+                m_ControllerAiming = true;
+                m_ControllerPullDirection = cannon != null ? -cannon.FireDirectionPixels : Vector2.zero;
+                ControllerPower = 0f;
+            }
+            if (cannon != null && !IsControllerAiming)
+            {
+                MoveControllerCannon(frame, hub);
+                return;
+            }
+            if (!IsControllerAiming) return;
+            if (frame.Stick.sqrMagnitude > 0.0001f)
+                m_ControllerPullDirection = new Vector2(frame.Stick.x, -frame.Stick.y).normalized;
+            float increase = Mathf.Clamp01((frame.IncreasePower - MutinyInputHub.TriggerDeadzone) /
+                                          (1f - MutinyInputHub.TriggerDeadzone));
+            float decrease = Mathf.Clamp01((frame.DecreasePower - MutinyInputHub.TriggerDeadzone) /
+                                          (1f - MutinyInputHub.TriggerDeadzone));
+            ControllerPower = Mathf.Clamp01(ControllerPower + (increase - decrease) *
+                Mathf.Max(0f, ControllerPowerChangePerSecond) * frame.DeltaTime);
+            if (cannon != null)
+            {
+                cannon.UpdateControllerAim(m_ControllerPullDirection, ControllerPower);
+                if (frame.Confirm && cannon.CommitControllerShot(TurnManager))
+                {
+                    character.ConsumeWeapon("cannon");
+                    cannon.SetAimingState(false);
+                    HideTrajectory();
+                    InteractionState = MutinyPlayerInteractionState.WeaponReady;
+                    ResetControllerAction();
+                }
+                return;
+            }
+            Vector2 origin = MutinyPhysics.UnityToPixel(m_AimOrigin);
+            float force = MutinyWeaponFactory.GetTwangMaxForce(ActiveWeapon) * ControllerPower;
+            Vector2 endpoint = origin + m_ControllerPullDirection * (force * 4f);
+            Vector3 worldEndpoint = MutinyPhysics.PixelToUnity(endpoint.x, endpoint.y);
+            ShowTrajectory(worldEndpoint);
+            if (frame.Confirm)
+            {
+                ResolveAimRelease(character, worldEndpoint);
+                ResetControllerAction();
+            }
+        }
+
+        private void MoveControllerCannon(MutinyInputHub.ControllerFrame frame, MutinyInputHub hub)
+        {
+            if (!IsControllerCannonReady || GameCamera == null || hub == null) return;
+            float scale = Mathf.Min(Screen.width / 550f, Screen.height / 400f);
+            Vector2 screenDelta = frame.Stick * (hub.PointerPixelsPerSecond * scale * frame.DeltaTime);
+            float z = -GameCamera.transform.position.z;
+            Vector3 worldDelta = GameCamera.ScreenToWorldPoint(new Vector3(screenDelta.x, screenDelta.y, z)) -
+                                 GameCamera.ScreenToWorldPoint(new Vector3(0f, 0f, z));
+            if (frame.Stick.sqrMagnitude > 0.0001f)
+            {
+                Vector2 position = new Vector2(m_ArmedCannon.PhysicsBody.State.X, m_ArmedCannon.PhysicsBody.State.Y);
+                m_ArmedCannon.MoveForController(position + MutinyPhysics.UnityToPixel(worldDelta));
+            }
+            SyncControllerCannonPointer(hub);
+        }
+
+        private void SyncControllerCannonPointer(MutinyInputHub hub)
+        {
+            if (GameCamera == null || hub == null || m_ArmedCannon == null) return;
+            Vector3 screen = GameCamera.WorldToScreenPoint(m_ArmedCannon.transform.position);
+            hub.SetPointerFromGui(new Vector2(screen.x, Screen.height - screen.y));
+        }
+
+        public bool TryControllerBack()
+        {
+            if (IsControllerAiming)
+            {
+                CancelCurrentAim();
+                return true;
+            }
+            MutinyCharacter character = GetHumanSelectedCharacter();
+            if (character == null || character.WeaponLocked) return false;
+            if (InteractionState == MutinyPlayerInteractionState.WeaponReady && ShouldShowCancelWeapon(character))
+            {
+                CancelWeaponSelection();
+                return true;
+            }
+            if (InteractionState == MutinyPlayerInteractionState.ActionMenu && character.CanThrow)
+            {
+                ReturnToCharacterSelection();
+                return true;
+            }
+            return false;
+        }
+
+        internal void PrepareControllerCharacterFocus(MutinyInputHub hub)
+        {
+            if (hub == null || !hub.IsControllerActive || !CanProcessCurrentTurnInput() ||
+                TurnManager.CurrentTeam == null || TurnManager.CurrentTeam.IsAiControlled ||
+                MutinyTransitionManager.IsTransitionActive) return;
+            MutinyGameHUD hud = FindAnyObjectByType<MutinyGameHUD>();
+            if (hud != null && (hud.IsQuitPromptShowRequested || hud.IsQuitPromptVisible ||
+                (hud.Speech != null && hud.Speech.HasActiveBubble))) return;
+            MutinyTeam team = TurnManager.CurrentTeam;
+            if (team != m_ObservedTeam) ResetForCurrentTurn();
+            if (InteractionState != MutinyPlayerInteractionState.CharacterSelection) return;
+            if (m_ControllerFocusedCharacter != null &&
+                (!m_ControllerFocusedCharacter.IsAlive || !team.Characters.Contains(m_ControllerFocusedCharacter)))
+                m_ControllerFocusedCharacter = null;
+            if (!m_ControllerCharacterFocusInitialized)
+            {
+                MutinyCameraController camera = GetGameCameraController();
+                if (camera == null) return;
+                MutinyCharacter target = camera.TurnFocusCharacter;
+                if (target != null && target.IsAlive && team.Characters.Contains(target))
+                    m_ControllerFocusedCharacter = target;
+                m_ControllerCharacterFocusInitialized = true;
+            }
+            SyncControllerCharacterPointer(hub);
+        }
+
+        private void ResetControllerCharacterFocus()
+        {
+            m_ControllerFocusedCharacter = null;
+            m_ControllerCharacterFocusInitialized = false;
+        }
+
+        private void SyncControllerCharacterPointer(MutinyInputHub hub)
+        {
+            if (m_ControllerFocusedCharacter == null || GameCamera == null || hub == null) return;
+            Vector3 projected = GameCamera.WorldToScreenPoint(m_ControllerFocusedCharacter.transform.position);
+            hub.SetPointerFromGui(new Vector2(projected.x, Screen.height - projected.y));
+        }
+
+        private void ProcessControllerCharacterSelection(MutinyTeam team,
+            MutinyInputHub.ControllerFrame frame, MutinyInputHub hub)
+        {
+            if (GameCamera == null) GameCamera = Camera.main;
+            if (GameCamera == null || hub == null) return;
+            PrepareControllerCharacterFocus(hub);
+            if (m_ControllerFocusedCharacter != null && !m_ControllerFocusedCharacter.IsAlive)
+                m_ControllerFocusedCharacter = null;
+            if (frame.Stick.sqrMagnitude > 0.0001f)
+                m_ControllerFocusedCharacter = null;
+            if (frame.Navigate != Vector2.zero)
+            {
+                MutinyCharacter first = null, next = null;
+                float best = float.PositiveInfinity;
+                foreach (MutinyCharacter candidate in team.Characters)
+                {
+                    if (candidate == null || !candidate.IsAlive) continue;
+                    if (first == null) first = candidate;
+                    if (m_ControllerFocusedCharacter == null || candidate == m_ControllerFocusedCharacter) continue;
+                    Vector2 delta = candidate.transform.position - m_ControllerFocusedCharacter.transform.position;
+                    float forward = Vector2.Dot(delta, frame.Navigate);
+                    if (forward <= 0.001f) continue;
+                    float lateral = Mathf.Abs(delta.x * frame.Navigate.y - delta.y * frame.Navigate.x);
+                    float score = forward + lateral * 4f;
+                    if (score < best) { best = score; next = candidate; }
+                }
+                m_ControllerFocusedCharacter = m_ControllerFocusedCharacter == null ? first : next ?? m_ControllerFocusedCharacter;
+                if (m_ControllerFocusedCharacter != null)
+                {
+                    Vector3 projected = GameCamera.WorldToScreenPoint(m_ControllerFocusedCharacter.transform.position);
+                    if (!GameCamera.pixelRect.Contains(projected))
+                        GetGameCameraController()?.PanToCharacter(m_ControllerFocusedCharacter);
+                }
+            }
+            SyncControllerCharacterPointer(hub);
+            Vector3 pointerWorld = GetMouseWorldPosition(hub.PointerPosition);
+            UpdateHoveredCharacter(team, pointerWorld);
+            if (frame.Confirm)
+                TrySelectCharacterReference(team, m_ControllerFocusedCharacter ??
+                    FindCharacterNearPosition(pointerWorld, team, CharacterSelectionRadiusPixels));
+        }
+
         public bool SelectWeapon(string weaponType)
         {
             MutinyCharacter character = GetHumanSelectedCharacter();
@@ -914,6 +1235,7 @@ namespace Mutiny.Presentation
             m_ArmedGunpowderBarrel = m_EquippedWeapon as MutinyGunpowderBarrel;
             m_ArmedAnchor = m_EquippedWeapon as MutinyAnchor;
             m_ArmedCannon = m_EquippedWeapon as MutinyCannon;
+            ResetControllerAction();
             HideTrajectory();
             MutinyDebugLog.Info("Input",
                 $"weapon ready character={character.name} weapon={weaponType} instance={m_EquippedWeapon.name} pos=({m_EquippedWeapon.PhysicsBody.State.X:F1},{m_EquippedWeapon.PhysicsBody.State.Y:F1})", this);
@@ -932,6 +1254,7 @@ namespace Mutiny.Presentation
 
             ActiveWeapon = null;
             InteractionState = MutinyPlayerInteractionState.WeaponReady;
+            ResetControllerAction();
             HideTrajectory();
             MutinyDebugLog.Info("Input", $"character throw selected character={character.name}", this);
             return true;
@@ -939,6 +1262,7 @@ namespace Mutiny.Presentation
 
         public void CancelWeaponSelection()
         {
+            ResetControllerAction();
             HideTrajectory();
             ClearEquippedWeapon();
             ActiveWeapon = null;
@@ -950,6 +1274,7 @@ namespace Mutiny.Presentation
             MutinyDebugLog.Info("Input", $"weapon selection cancelled nextState={InteractionState}", this);
         }
 
+        // Changing ownership must not leave an unfired weapon or held aim alive.
         // ClearEquippedWeapon preserves committed objects; action qualifications
         // and the selected character belong to the turn manager and are untouched.
         public void ReleaseUncommittedInputForAiTakeover()
@@ -1017,6 +1342,11 @@ namespace Mutiny.Presentation
             if (PixelDistance(pointerWorld, readyOrigin) > DragSelectionRadiusPixels)
                 return false;
 
+            return BeginAim(character, readyOrigin);
+        }
+
+        private bool BeginAim(MutinyCharacter character, Vector3 readyOrigin)
+        {
             InteractionState = MutinyPlayerInteractionState.Aiming;
             m_AimOrigin = readyOrigin;
             m_EquippedWeapon?.SetAimingState(true);
@@ -1092,6 +1422,9 @@ namespace Mutiny.Presentation
             if (InteractionState != MutinyPlayerInteractionState.Aiming)
                 return;
 
+            if (IsControllerAiming && m_ArmedCannon != null)
+                m_ArmedCannon.CancelPointer();
+            ResetControllerAction();
             HideTrajectory();
             InteractionState = MutinyPlayerInteractionState.WeaponReady;
             m_EquippedWeapon?.SetAimingState(false);
@@ -1140,6 +1473,8 @@ namespace Mutiny.Presentation
             if (selected != null && !selected.CanThrow)
                 return;
 
+            ResetControllerAction();
+            ResetControllerCharacterFocus();
             HideTrajectory();
             ClearEquippedWeapon();
             ActiveWeapon = null;
@@ -1158,6 +1493,7 @@ namespace Mutiny.Presentation
             }
 
             HideTrajectory();
+            ResetControllerAction();
             ClearHoveredCharacter();
             ClearEquippedWeapon();
             ActiveWeapon = null;
@@ -1171,17 +1507,21 @@ namespace Mutiny.Presentation
         private void TrySelectCharacter(MutinyTeam team, Vector3 mouseWorld)
         {
             MutinyCharacter clicked = FindCharacterNearPosition(mouseWorld, team, CharacterSelectionRadiusPixels);
-            if (clicked == null)
-                return;
+            TrySelectCharacterReference(team, clicked);
+        }
 
-            if (team.SelectedCharacter != null && !team.SelectedCharacter.CanThrow)
-                return;
-
+        private bool TrySelectCharacterReference(MutinyTeam team, MutinyCharacter clicked)
+        {
+            if (team == null || clicked == null || !clicked.IsAlive || !team.Characters.Contains(clicked) ||
+                (team.SelectedCharacter != null && !team.SelectedCharacter.CanThrow))
+                return false;
             team.SelectCharacter(clicked);
             ClearHoveredCharacter();
+            ResetControllerCharacterFocus();
             ActiveWeapon = null;
             InteractionState = MutinyPlayerInteractionState.ActionMenu;
             MutinyDebugLog.Info("Input", $"character selected team=T{team.TeamNumber} character={clicked.name}", this);
+            return true;
         }
 
         // Uses the same production selection method while bypassing only the
@@ -1557,6 +1897,8 @@ namespace Mutiny.Presentation
 
         private void ResetForCurrentTurn()
         {
+            ResetControllerAction();
+            ResetControllerCharacterFocus();
             ResetMobileGestureOwnership();
             HideTrajectory();
             ClearEquippedWeapon();
@@ -1574,7 +1916,8 @@ namespace Mutiny.Presentation
         private MutinyCharacter GetHumanSelectedCharacter()
         {
             if (TurnManager == null ||
-                (TurnManager.CurrentPhase != TurnPhase.TurnActive && !IsAwaitingPiecesOfEight()))
+                (TurnManager.CurrentPhase != TurnPhase.TurnActive &&
+                 !IsAwaitingPiecesOfEight() && !HasPendingBoxPlacement()))
                 return null;
 
             MutinyTeam team = TurnManager.CurrentTeam;
@@ -1702,6 +2045,8 @@ namespace Mutiny.Presentation
                 committed |= barrel.HasPlacedAny;
             if (equipped is MutinyPiecesOfEight pieces)
                 committed |= pieces.TimesFired > 0;
+            if (equipped is MutinyCannon cannon)
+                committed |= cannon.IsFirePending;
 
             if (equipped != null && !committed)
             {

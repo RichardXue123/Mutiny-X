@@ -42,10 +42,12 @@ namespace Mutiny.Simulation
         private bool m_MobileFanHeld;
         private bool m_MobileFanPulsePending;
         private Vector2 m_MobileFanScreenPosition;
+        private bool m_ControllerFanMustRelease;
 
         [Header("Parachute State")]
         public bool ChuteOpen { get; private set; }
         public bool IsFanActive { get; private set; }
+        public bool ControllerFanCanStart => !m_ControllerFanMustRelease;
         public int FramesFromFire => m_FramesFromFire;
         public int CurrentAnimationFrame => m_CurrentFrame + 1;
 
@@ -89,6 +91,7 @@ namespace Mutiny.Simulation
             m_MobileFanHeld = false;
             m_MobileFanPulsePending = false;
             m_MobileFanScreenPosition = Vector2.zero;
+            m_ControllerFanMustRelease = true;
             ApplyFrame();
         }
 
@@ -97,6 +100,8 @@ namespace Mutiny.Simulation
             base.Fire(velocityPx);
             if (IsFired)
             {
+                // A commits the throw. Require a fresh press before A can fan it.
+                m_ControllerFanMustRelease = true;
                 PhysicsBody.IsActive = true;
                 MutinyDebugLog.Info("ParachuteBomb",
                     $"fired velocity=({PhysicsBody.State.VelocityX:F2},{PhysicsBody.State.VelocityY:F2})", this);
@@ -119,6 +124,10 @@ namespace Mutiny.Simulation
 
         protected override void Update()
         {
+            MutinyInputHub controller = MutinyInputHub.Instance;
+            if (IsFired && controller != null && controller.IsControllerActive &&
+                !controller.IsConfirmHeld)
+                m_ControllerFanMustRelease = false;
             CaptureMobileFanInput();
             AdvanceClosedFusePresentation(Time.deltaTime);
 
@@ -240,6 +249,22 @@ namespace Mutiny.Simulation
                 held = m_VerificationFanHeld.Value;
                 mousePixelX = m_VerificationMousePixelX;
                 return true;
+            }
+
+            MutinyInputHub controller = MutinyInputHub.Instance;
+            if (controller != null && controller.IsControllerActive)
+            {
+                Camera controllerCamera = Camera.main;
+                if (!controller.IsConfirmHeld)
+                    m_ControllerFanMustRelease = false;
+                held = controller.CurrentContext == "board" && controller.IsConfirmHeld &&
+                    !m_ControllerFanMustRelease;
+                mousePixelX = controllerCamera != null
+                    ? MutinyPhysics.UnityToPixel(controllerCamera.ScreenToWorldPoint(new Vector3(
+                        controller.PointerPosition.x, controller.PointerPosition.y,
+                        -controllerCamera.transform.position.z))).x
+                    : 0f;
+                return controllerCamera != null;
             }
 
             if (Application.isMobilePlatform)

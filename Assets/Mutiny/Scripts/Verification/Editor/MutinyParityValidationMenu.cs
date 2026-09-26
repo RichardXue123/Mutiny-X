@@ -10,6 +10,7 @@ namespace Mutiny.Verification.Editor
     {
         private const string CameraMovementVerificationKey = "Mutiny.CameraMovementPlayModeVerification";
         private const string CameraInitializationVerificationKey = "Mutiny.CameraInitializationPlayModeVerification";
+        private const string SeagullPresentationVerificationKey = "Mutiny.SeagullPresentationPlayModeVerification";
         private const string CannonEffectsVerificationKey = "Mutiny.CannonEffectsPlayModeVerification";
         private const string WeaponLifecycleVerificationKey = "Mutiny.WeaponLifecyclePlayModeVerification";
         private const string ScrollArrowVerificationKey = "Mutiny.ScrollArrowPlayModeVerification";
@@ -31,6 +32,7 @@ namespace Mutiny.Verification.Editor
 
             bool verifyCamera = SessionState.GetBool(CameraMovementVerificationKey, false);
             bool verifyCameraInitialization = SessionState.GetBool(CameraInitializationVerificationKey, false);
+            bool verifySeagullPresentation = SessionState.GetBool(SeagullPresentationVerificationKey, false);
             bool verifyCannon = SessionState.GetBool(CannonEffectsVerificationKey, false);
             bool verifyWeaponLifecycle = SessionState.GetBool(WeaponLifecycleVerificationKey, false);
             bool verifyScrollArrow = SessionState.GetBool(ScrollArrowVerificationKey, false);
@@ -39,13 +41,14 @@ namespace Mutiny.Verification.Editor
             bool verifyPiecesOfEightPresentation = SessionState.GetBool(PiecesOfEightPresentationVerificationKey, false);
             bool verifyAimCancelTouch = SessionState.GetBool(AimCancelTouchVerificationKey, false);
             bool verifyCharacterAimOverlay = SessionState.GetBool(CharacterAimOverlayVerificationKey, false);
-            if (!verifyCamera && !verifyCameraInitialization && !verifyCannon && !verifyWeaponLifecycle && !verifyScrollArrow &&
+            if (!verifySeagullPresentation && !verifyCamera && !verifyCameraInitialization && !verifyCannon && !verifyWeaponLifecycle && !verifyScrollArrow &&
                 !verifyLevelLifecycle && !verifyAnchorAnimation && !verifyPiecesOfEightPresentation &&
                 !verifyAimCancelTouch && !verifyCharacterAimOverlay)
                 return;
 
             SessionState.EraseBool(CameraMovementVerificationKey);
             SessionState.EraseBool(CameraInitializationVerificationKey);
+            SessionState.EraseBool(SeagullPresentationVerificationKey);
             SessionState.EraseBool(CannonEffectsVerificationKey);
             SessionState.EraseBool(WeaponLifecycleVerificationKey);
             SessionState.EraseBool(ScrollArrowVerificationKey);
@@ -58,6 +61,7 @@ namespace Mutiny.Verification.Editor
             try
             {
                 MutinyLevel1VerificationResult result =
+                    verifySeagullPresentation ? MutinyTurnActionUiVerificationTest.RunSeagullPresentation() :
                     verifyCameraInitialization ? MutinyTurnActionUiVerificationTest.RunCameraInitialization() :
                     verifyCharacterAimOverlay ? MutinyTurnActionUiVerificationTest.RunCharacterAimOverlay() :
                     verifyAimCancelTouch ? MutinyTurnActionUiVerificationTest.RunAimCancelTouch() :
@@ -69,7 +73,8 @@ namespace Mutiny.Verification.Editor
                         verifyWeaponLifecycle ? MutinyTurnActionUiVerificationTest.RunWeaponLifecycle() :
                             MutinyTurnActionUiVerificationTest.RunCameraMovement();
                 passed = result.Passed;
-                string label = verifyCameraInitialization ? "Camera initialization" :
+                string label = verifySeagullPresentation ? "Seagull presentation" :
+                    verifyCameraInitialization ? "Camera initialization" :
                     verifyCharacterAimOverlay ? "Character aim overlay" :
                     verifyAimCancelTouch ? "Aim cancel touch" :
                     verifyPiecesOfEightPresentation ? "Pieces of Eight presentation" :
@@ -309,6 +314,16 @@ namespace Mutiny.Verification.Editor
         public static void ValidateCameraInitializationPlayMode()
         {
             SessionState.SetBool(CameraInitializationVerificationKey, true);
+            if (EditorApplication.isPlaying)
+                OnPlayModeStateChanged(PlayModeStateChange.EnteredPlayMode);
+            else
+                EditorApplication.EnterPlaymode();
+        }
+
+        [MenuItem("Mutiny/Parity/Validate Seagull Presentation Play Mode")]
+        public static void ValidateSeagullPresentationPlayMode()
+        {
+            SessionState.SetBool(SeagullPresentationVerificationKey, true);
             if (EditorApplication.isPlaying)
                 OnPlayModeStateChanged(PlayModeStateChange.EnteredPlayMode);
             else

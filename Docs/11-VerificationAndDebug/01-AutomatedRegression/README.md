@@ -1,5 +1,11 @@
 # 11.01 · 自动回归
 
+## 海鸥投弹高刷新率回归（2026-09-26）
+
+`Mutiny/Parity/Validate Seagull Presentation Play Mode` 调用 `RunSeagullPresentation()`，包含既有原版海鸥出生、点击排队、图层、时间轴、碰撞与落水测试，以及 `SEA-PRES-01/02` 的 25/60/120 FPS 显示扩展回归。经真实 `RequestShot → AdvanceSimulationFrame → OnSimulationStep → 子弹 AdvanceSimulationTick` 链路检查出生 tick 一次、首可见起点、半 tick 实际 Transform、父子相位、连续投放、自身 Update 不多推进、延迟 Start 不改写权威位置；最后比较实际碰撞和落水结束 tick 及爆炸数。2026-09-26 Unity 6000.6.0f1 隔离工程 Play Mode 31/31 断言通过；主工程完整投弹画面及 Android 真机未运行。
+
+同一隔离工程同步最新生产代码，复跑 `Validate Camera Movement` 11/11 与 `Validate Pieces Of Eight Presentation Play Mode` 4/4 通过；未改这些既有用例的期望值。显示仍有与海鸥一致的一个已完成物理 tick 延迟，这是已授权高刷新率策略，不是原版新增物理规则。
+
 ## 关卡初始镜头回归（2026-09-26）
 
 `Mutiny/Parity/Validate Camera Initialization Play Mode` 调用 `RunCameraInitialization()`。从任意旧位置经真实 `TryLoadLevel` 加载 1/7/13/30 关，在旧关仍待帧末销毁时检查新关回合/输入/speech 引用和旧角色/武器跟随释放；继续驱动 `RestartCurrentLevel`、`LoadNextLevel`、`ClearLevel → TryLoadLevel`。额外覆盖旧版烘焙根的真实 `Awake` 接管/`Start` 重置，以及 `StartGame → Update 同源 AdvanceSpeech → AdvanceCamera` 的 120 FPS 首帧 speech 平移。

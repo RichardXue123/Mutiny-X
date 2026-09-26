@@ -41,6 +41,7 @@ namespace Mutiny.Presentation
         }
 
         private bool m_IsOpen = false;
+        public bool IsOpen => m_IsOpen;
         private string m_InputText = "";
         private string m_StatusMessage = "Mutiny GM Console ready. Type 'help' for commands.";
         private Color m_StatusColor = new Color(0.4f, 1.0f, 0.5f, 1.0f);

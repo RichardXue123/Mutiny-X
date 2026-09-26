@@ -330,6 +330,7 @@ namespace Mutiny.Presentation
             if (m_Flow.CurrentPage == MutinyFrontendPage.Gameplay)
                 return;
 
+            MutinyControllerUI.BeginScope("front:" + m_Flow.CurrentPage);
             GUI.depth = -10000;
             Matrix4x4 oldMatrix = GUI.matrix;
             Color oldColor = GUI.color;
@@ -783,7 +784,7 @@ namespace Mutiny.Presentation
             Texture2D texture = hovered && over != null ? over : up;
             if (texture != null)
                 GUI.DrawTexture(rect, texture, ScaleMode.StretchToFill, true);
-            return active && GUI.Button(rect, GUIContent.none, GUIStyle.none);
+            return active && MutinyControllerUI.Button(rect, GUIContent.none, GUIStyle.none);
         }
 
         private void DrawHelp()
@@ -873,7 +874,7 @@ namespace Mutiny.Presentation
             DrawTexture(backRect, hovered && m_EndingBackButtonOver != null
                 ? m_EndingBackButtonOver : m_EndingBackButton);
             MutinyBitmapFont.DrawPirateText(backRect, "back to title", hovered, true, -3);
-            if (canReturn && GUI.Button(backRect, GUIContent.none, GUIStyle.none))
+            if (canReturn && MutinyControllerUI.Button(backRect, GUIContent.none, GUIStyle.none, "ending-back", true))
                 MutinyTransitionManager.RequestTransition(() => ReturnFromEndingToTitle(), showLoading: false);
         }
 
@@ -924,7 +925,7 @@ namespace Mutiny.Presentation
                     GUI.color = prev;
                 }
 
-                bool clicked = !isTransitioning && GUI.Button(rect, GUIContent.none, GUIStyle.none);
+                bool clicked = !isTransitioning && MutinyControllerUI.Button(rect, GUIContent.none, GUIStyle.none, "level:" + level);
                 if ((clicked || pressed) && !isTransitioning)
                 {
                     int targetLevel = level;
@@ -955,7 +956,8 @@ namespace Mutiny.Presentation
             DrawTexture(rect, texToDraw);
             MutinyBitmapFont.DrawPirateText(rect, text, hovered, true, -3);
 
-            bool clicked = !isTransitioning && GUI.Button(rect, GUIContent.none, GUIStyle.none);
+            bool clicked = !isTransitioning && MutinyControllerUI.Button(rect, GUIContent.none, GUIStyle.none,
+                "button:" + text, text.StartsWith("back", StringComparison.Ordinal));
             return activateOnPress ? (pressed || clicked) : clicked;
         }
 
@@ -972,7 +974,7 @@ namespace Mutiny.Presentation
             // coordinate space before controls and custom drawing are evaluated. Applying
             // ScreenToCanvasPoint or GUI.matrix.inverse here transforms the pointer a second time,
             // so the original Flash-style up/over hit tests fail when scaled or letterboxed.
-            return Event.current != null ? Event.current.mousePosition : Vector2.zero;
+            return MutinyInputHub.GuiPointerPosition;
         }
 
         private bool StartLevel(int level, MutinyGameMode mode)
@@ -1101,11 +1103,11 @@ namespace Mutiny.Presentation
 
             if (!MutinyTransitionManager.IsTransitionActive)
             {
-                if (GUI.Button(sfxHitRect, GUIContent.none, GUIStyle.none) ||
-                    (sfxHovered && GUI.Button(sfxBubbleRect, GUIContent.none, GUIStyle.none)))
+                if (MutinyControllerUI.Button(sfxHitRect, GUIContent.none, GUIStyle.none) ||
+                    (sfxHovered && MutinyControllerUI.Button(sfxBubbleRect, GUIContent.none, GUIStyle.none, controllerEnabled: false)))
                     audio?.ToggleSFX();
-                if (GUI.Button(musicHitRect, GUIContent.none, GUIStyle.none) ||
-                    (musicHovered && GUI.Button(musicBubbleRect, GUIContent.none, GUIStyle.none)))
+                if (MutinyControllerUI.Button(musicHitRect, GUIContent.none, GUIStyle.none) ||
+                    (musicHovered && MutinyControllerUI.Button(musicBubbleRect, GUIContent.none, GUIStyle.none, controllerEnabled: false)))
                     audio?.ToggleMusic();
             }
         }

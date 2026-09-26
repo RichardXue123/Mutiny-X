@@ -8,6 +8,7 @@ namespace Mutiny.Presentation
     /// OS arrow pointer and the native pointing hand cursor when hovering over
     /// interactable buttons, characters, weapon slots, and links.
     /// </summary>
+    [DefaultExecutionOrder(10000)]
     [DisallowMultipleComponent]
     public sealed class MutinyCursorManager : MonoBehaviour
     {
@@ -15,6 +16,7 @@ namespace Mutiny.Presentation
         private static Texture2D s_HandCursorTexture;
         private static int s_LastHoverFrame = -1;
         private static bool s_IsHandCursorActive;
+        private bool m_WasControllerActive;
 
         // Windows standard 32x32 pointing hand cursor bitmap
         private const string SystemHandCursorPngBase64 =
@@ -72,6 +74,17 @@ namespace Mutiny.Presentation
         private void LateUpdate()
         {
             UpdateCursor();
+            bool controller = MutinyInputHub.Instance != null && MutinyInputHub.Instance.IsControllerActive;
+            if (controller)
+                Cursor.visible = false;
+            else if (m_WasControllerActive)
+            {
+                MutinyCameraController camera = FindAnyObjectByType<MutinyCameraController>();
+                MutinyPlayerInput player = FindAnyObjectByType<MutinyPlayerInput>();
+                Cursor.visible = (camera == null || !camera.IsDesktopScrollArrowVisible) &&
+                                 (player == null || !player.HasVisibleSpecialCursor);
+            }
+            m_WasControllerActive = controller;
         }
 
         public static void UpdateCursor()

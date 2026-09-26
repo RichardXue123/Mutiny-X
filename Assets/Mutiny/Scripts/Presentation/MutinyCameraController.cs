@@ -35,6 +35,7 @@ namespace Mutiny.Presentation
         private MutinyLevelRoot m_LevelRoot;
         private MutinyTeam m_PreviousTeam;
         private Transform m_TurnPanTarget;
+        private MutinyCharacter m_TurnFocusCharacter;
         private MutinyWeapon m_TrackedWeapon;
         private Vector2 m_EdgeVelocityPixelsPerSecond;
         private bool m_AirDropCameraWasLocked;
@@ -77,6 +78,15 @@ namespace Mutiny.Presentation
 
         public bool IsTrackingAirDrop => FindFallingChest() != null;
         public bool IsPanningToTurnTarget => m_TurnPanTarget != null;
+        public MutinyCharacter TurnFocusCharacter
+        {
+            get
+            {
+                EnsureReferences();
+                RefreshTurnPanTarget();
+                return m_TurnFocusCharacter;
+            }
+        }
 
         public static void ResetCamerasForLevel(MutinyLevelRoot level)
         {
@@ -103,6 +113,7 @@ namespace Mutiny.Presentation
             m_EdgeVelocityPixelsPerSecond = Vector2.zero;
             m_PreviousTeam = null;
             m_TurnPanTarget = null;
+            m_TurnFocusCharacter = null;
             m_TrackedWeapon = null;
             m_AirDropCameraWasLocked = false;
 
@@ -188,12 +199,7 @@ namespace Mutiny.Presentation
             if (m_Camera == null || m_LevelRoot == null || TurnManager == null)
                 return;
 
-            if (TurnManager.CurrentTeam != m_PreviousTeam)
-            {
-                m_PreviousTeam = TurnManager.CurrentTeam;
-                MutinyCharacter panCharacter = FindTurnPanCharacter(m_PreviousTeam);
-                m_TurnPanTarget = panCharacter != null ? panCharacter.transform : null;
-            }
+            RefreshTurnPanTarget();
 
             if (MutinyTransitionManager.IsTransitionActive)
             {
@@ -204,7 +210,11 @@ namespace Mutiny.Presentation
             // TileSystem.advanceScrolling returns before every automatic camera
             // branch while Controller.dragging is set (human player dragging).
             if (PlayerInput != null && PlayerInput.IsAiming)
+            {
+                if (PlayerInput.IsControllerAiming)
+                    AdvanceControllerScrolling(deltaTime);
                 return;
+            }
 
             if (m_Speech == null)
                 m_Speech = TurnManager.GetComponent<MutinySpeechController>();
@@ -418,6 +428,14 @@ namespace Mutiny.Presentation
             return character != null && m_TurnPanTarget == character.transform;
         }
 
+        private void RefreshTurnPanTarget()
+        {
+            if (TurnManager == null || TurnManager.CurrentTeam == m_PreviousTeam) return;
+            m_PreviousTeam = TurnManager.CurrentTeam;
+            m_TurnFocusCharacter = FindTurnPanCharacter(m_PreviousTeam);
+            m_TurnPanTarget = m_TurnFocusCharacter != null ? m_TurnFocusCharacter.transform : null;
+        }
+
         private MutinyCharacter FindTurnPanCharacter(MutinyTeam team)
         {
             if (team == null || team.Characters == null)
@@ -452,6 +470,11 @@ namespace Mutiny.Presentation
 
         private void AdvanceEdgeScrolling()
         {
+            if (MutinyInputHub.Instance != null && MutinyInputHub.Instance.IsControllerActive)
+            {
+                AdvanceControllerScrolling(Time.deltaTime);
+                return;
+            }
             bool canScroll = CanUseManualScrolling() &&
                              TurnManager.CurrentTeam != null &&
                              !TurnManager.CurrentTeam.IsAiControlled &&
@@ -508,6 +531,36 @@ namespace Mutiny.Presentation
             positionWorld.x += movementPixels.x / MutinyPhysics.PixelsPerUnit;
             positionWorld.y += movementPixels.y / MutinyPhysics.PixelsPerUnit;
             SetClampedPosition(positionWorld);
+        }
+
+        private bool AdvanceControllerScrolling(float deltaTime)
+        {
+            MutinyInputHub hub = MutinyInputHub.Instance;
+            bool canScroll = hub != null && hub.IsControllerActive && hub.CurrentContext == "board" &&
+                             TurnManager != null && TurnManager.CurrentTeam != null &&
+                             !TurnManager.CurrentTeam.IsAiControlled && CanUseManualScrolling() &&
+                             PlayerInput != null && !PlayerInput.IsActionMenuOpen &&
+                             (!PlayerInput.IsAiming || PlayerInput.IsControllerAiming) &&
+                             (m_TurnPanTarget == null || PlayerInput.IsControllerAiming) &&
+                             FindActionTarget() == null;
+            if (!canScroll)
+            {
+                m_EdgeVelocityPixelsPerSecond = Vector2.zero;
+                return false;
+            }
+            Vector2 direction = Vector2.ClampMagnitude(hub.Frame.Pan, 1f);
+            if (direction.sqrMagnitude > 0f && PlayerInput.IsControllerAiming)
+                m_TurnPanTarget = null;
+            float maximumSpeed = OriginalMaxScrollPixelsPerTick / MutinyPhysics.TimeStep;
+            float acceleration = OriginalScrollAccelerationPixelsPerTick /
+                                 (MutinyPhysics.TimeStep * MutinyPhysics.TimeStep);
+            m_EdgeVelocityPixelsPerSecond = Vector2.MoveTowards(m_EdgeVelocityPixelsPerSecond,
+                direction * maximumSpeed, acceleration * deltaTime);
+            Vector3 position = transform.position;
+            position.x += m_EdgeVelocityPixelsPerSecond.x * deltaTime / MutinyPhysics.PixelsPerUnit;
+            position.y += m_EdgeVelocityPixelsPerSecond.y * deltaTime / MutinyPhysics.PixelsPerUnit;
+            SetClampedPosition(position);
+            return true;
         }
 
         private bool CanUseManualScrolling()
