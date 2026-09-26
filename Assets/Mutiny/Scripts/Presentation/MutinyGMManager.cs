@@ -301,7 +301,7 @@ namespace Mutiny.Presentation
                 fontSize = Mathf.Max(8, Mathf.RoundToInt(8f * scale)),
                 normal = { textColor = new Color(0.65f, 0.70f, 0.80f, 0.9f) }
             };
-            GUI.Label(hintRect, "Tip: Type 'UnlockWeapons' or 'UnlockAllLevels' and press Enter.", hintStyle);
+            GUI.Label(hintRect, "Tip: 'setlanguage cn' / 'setlanguage en'. Type 'help' for more.", hintStyle);
         }
 
         private void DrawRecentCommands(Rect area, float scale)
@@ -354,7 +354,30 @@ namespace Mutiny.Presentation
 
             Debug.Log($"[MutinyGM] Executing command: '{cmd}'", this);
 
-            if (lower == "unlockalllevels" || lower == "unlockall" || lower == "unlock all")
+            if (lower.StartsWith("setlanguage", StringComparison.Ordinal))
+            {
+                string[] parts = cmd.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+                string code = parts.Length == 2 && string.Equals(parts[0], "setlanguage", StringComparison.OrdinalIgnoreCase)
+                    ? string.Equals(parts[1], "cn", StringComparison.OrdinalIgnoreCase) ? MutinyLocalization.SimplifiedChinese
+                    : string.Equals(parts[1], "en", StringComparison.OrdinalIgnoreCase) ? MutinyLocalization.English : null
+                    : null;
+                if (code == null)
+                {
+                    m_StatusColor = new Color(1.0f, 0.45f, 0.45f);
+                    m_StatusMessage = "[ERROR] Usage: setlanguage cn | en";
+                }
+                else
+                {
+                    MutinyLocalization.Initialize(this);
+                    MutinyLocalization.Select(code);
+                    m_StatusColor = new Color(0.35f, 1.0f, 0.45f);
+                    m_StatusMessage = "[SUCCESS] Language set to " +
+                        (code == MutinyLocalization.SimplifiedChinese ? "Simplified Chinese (zh-Hans)." : "English (en).") +
+                        (MutinyLocalization.IsReady ? string.Empty : "\nLoading language tables...");
+                    succeeded = true;
+                }
+            }
+            else if (lower == "unlockalllevels" || lower == "unlockall" || lower == "unlock all")
             {
                 MutinySaveSystem.HighestUnlockedLevel = MutinySaveSystem.MaxLevel;
                 m_StatusColor = new Color(0.35f, 1.0f, 0.45f);
@@ -458,6 +481,7 @@ namespace Mutiny.Presentation
                                   "• ResetLevels     - Resets progress to level 1\n" +
                                   "• aiforceusewaepon 1..15 - Forces one infinite AI weapon; 0 disables\n" +
                                   "• aitakeover 1    - AI plays the current human turn (also after a jump)\n" +
+                                  "• setlanguage cn / en - Selects Simplified Chinese / English\n" +
                                   "• Help            - Shows this help message";
                 succeeded = true;
             }

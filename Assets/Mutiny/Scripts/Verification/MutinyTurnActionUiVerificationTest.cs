@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using Mutiny.Levels;
+using Mutiny.Persistence;
 using Mutiny.Presentation;
 using Mutiny.Simulation;
 using UnityEngine;
+using UnityEngine.Localization.Settings;
 
 namespace Mutiny.Verification
 {
@@ -152,6 +154,13 @@ namespace Mutiny.Verification
         {
             var result = new MutinyLevel1VerificationResult();
             VerifyGMManager(result, includeLegacyChecks: false);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunGMLanguage(MutinyGMManager gm)
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyGMSetLanguage(gm, result);
             return result;
         }
 
@@ -6301,6 +6310,7 @@ namespace Mutiny.Verification
                 foreach (MutinyCherryBomb bomb in Object.FindObjectsByType<MutinyCherryBomb>())
                     if (bomb.Owner == aiCharacter) DestroyNow(bomb.gameObject);
                 VerifyGMAiTakeover(gm, result);
+                VerifyGMSetLanguage(gm, result);
             }
             finally
             {
@@ -6314,6 +6324,67 @@ namespace Mutiny.Verification
                 DestroyNow(aiTeamObject);
                 DestroyNow(characterObject);
                 DestroyNow(gmObject);
+            }
+        }
+
+        private static void VerifyGMSetLanguage(MutinyGMManager gm, MutinyLevel1VerificationResult result)
+        {
+            result.Assert(gm != null && MutinyLocalization.IsReady,
+                "GM-09 localization tables must be loaded before checking visible translations");
+            if (gm == null || !MutinyLocalization.IsReady)
+                return;
+
+            const string languageKey = "mutiny_language_v1";
+            bool hadLanguage = PlayerPrefs.HasKey(languageKey);
+            string previousSaved = MutinySaveSystem.LanguageCode;
+            string previousCode = MutinyLocalization.Code;
+            try
+            {
+                result.Assert(gm.ExecuteCommand("setlanguage cn") &&
+                              MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
+                              MutinySaveSystem.LanguageCode == MutinyLocalization.SimplifiedChinese &&
+                              !MutinyLocalization.UseOriginalFont &&
+                              MutinyLocalization.Text("frontend.play", "play") == "开始游戏" &&
+                              LocalizationSettings.SelectedLocale.Identifier.Code == MutinyLocalization.SimplifiedChinese,
+                    "GM-09 cn changes production text, locale, dynamic font route and saved preference");
+                result.Assert(gm.ExecuteCommand("setlanguage en") &&
+                              MutinyLocalization.Code == MutinyLocalization.English &&
+                              MutinySaveSystem.LanguageCode == MutinyLocalization.English &&
+                              MutinyLocalization.UseOriginalFont &&
+                              MutinyLocalization.Text("frontend.play", "play") == "play" &&
+                              LocalizationSettings.SelectedLocale.Identifier.Code == MutinyLocalization.English,
+                    "GM-09 en restores English text, locale, original font route and saved preference");
+                result.Assert(gm.ExecuteCommand("  SeTLaNgUaGe\tCN  ") &&
+                              MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese,
+                    "GM-09 parsing accepts case changes and whitespace separators");
+                result.Assert(gm.ExecuteCommand("setlanguage cn") &&
+                              gm.RecentSuccessfulCommands[0] == "setlanguage cn" &&
+                              MutinySaveSystem.LanguageCode == MutinyLocalization.SimplifiedChinese,
+                    "GM-09 reselecting the current language succeeds and joins recent history");
+
+                var history = new List<string>(gm.RecentSuccessfulCommands);
+                bool rejected = !gm.ExecuteCommand("setlanguage") && !gm.ExecuteCommand("setlanguage jp") &&
+                                !gm.ExecuteCommand("setlanguage en extra") && !gm.ExecuteCommand("setlanguagecn");
+                bool unchangedHistory = history.Count == gm.RecentSuccessfulCommands.Count;
+                for (int i = 0; unchangedHistory && i < history.Count; i++)
+                    unchangedHistory = history[i] == gm.RecentSuccessfulCommands[i];
+                result.Assert(rejected && unchangedHistory &&
+                              MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
+                              MutinySaveSystem.LanguageCode == MutinyLocalization.SimplifiedChinese,
+                    "GM-09 invalid parameters preserve runtime language, saved preference and successful history");
+                result.Assert(gm.ExecuteCommand("setlanguage en") && gm.RunRecentCommand(1) &&
+                              MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
+                              gm.RecentSuccessfulCommands[0] == "setlanguage cn",
+                    "GM-09 a recent command replays through the production parser and changes language again");
+            }
+            finally
+            {
+                MutinyLocalization.Select(previousCode);
+                if (hadLanguage)
+                    MutinySaveSystem.LanguageCode = previousSaved;
+                else
+                    PlayerPrefs.DeleteKey(languageKey);
+                PlayerPrefs.Save();
             }
         }
 

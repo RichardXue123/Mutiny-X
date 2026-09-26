@@ -7,6 +7,7 @@ using UnityEditor.Localization;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using Mutiny.Persistence;
+using Mutiny.Verification;
 using UnityEngine.Localization.Settings;
 using UnityEngine.Localization.Tables;
 
@@ -25,6 +26,8 @@ namespace Mutiny.Presentation.Editor
         static MutinyLocalizationVerification()
         {
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+            if (SessionState.GetBool(PlayModeKey, false))
+                ArmRunningGameCheck();
         }
 
         [MenuItem("Mutiny/Localization/Validate Play Mode")]
@@ -49,16 +52,26 @@ namespace Mutiny.Presentation.Editor
             Debug.Log("[Localization] Play Mode state: " + state);
             if (state != PlayModeStateChange.EnteredPlayMode)
                 return;
-            SessionState.EraseBool(PlayModeKey);
+            ArmRunningGameCheck();
+        }
+
+        private static void ArmRunningGameCheck()
+        {
             s_PlayModeStart = EditorApplication.timeSinceStartup;
+            EditorApplication.update -= VerifyRunningGame;
             EditorApplication.update += VerifyRunningGame;
         }
 
         private static void VerifyRunningGame()
         {
+            if (!EditorApplication.isPlaying)
+                return;
+            MutinyGMManager gm = MutinyGMManager.Instance ?? UnityEngine.Object.FindAnyObjectByType<MutinyGMManager>();
+            MutinyLocalization.Initialize(gm);
             if (!MutinyLocalization.IsReady && EditorApplication.timeSinceStartup - s_PlayModeStart < 20d)
                 return;
             EditorApplication.update -= VerifyRunningGame;
+            SessionState.EraseBool(PlayModeKey);
             bool passed = false;
             bool hadLanguage = PlayerPrefs.HasKey(LanguagePrefKey);
             string previousLanguage = PlayerPrefs.GetString(LanguagePrefKey, string.Empty);
@@ -69,19 +82,13 @@ namespace Mutiny.Presentation.Editor
                     UnityEngine.Object.FindAnyObjectByType<MutinyFrontendController>() == null ||
                     Resources.Load<Font>("Localization/Fonts/NotoSansCJKsc-Regular") == null)
                     throw new InvalidOperationException("Production frontend did not load localization tables and font.");
-                MutinyLocalization.Select(MutinyLocalization.SimplifiedChinese);
-                if (MutinyLocalization.Text("frontend.play", "play") != "开始游戏" ||
-                    MutinySaveSystem.LanguageCode != MutinyLocalization.SimplifiedChinese ||
-                    MutinyLocalization.UseOriginalFont ||
-                    LocalizationSettings.SelectedLocale.Identifier.Code != MutinyLocalization.SimplifiedChinese)
-                    throw new InvalidOperationException("Simplified Chinese selection did not update runtime state.");
-                MutinyLocalization.Select(MutinyLocalization.English);
-                if (MutinyLocalization.Text("frontend.play", "play") != "play" ||
-                    !MutinyLocalization.UseOriginalFont ||
-                    LocalizationSettings.SelectedLocale.Identifier.Code != MutinyLocalization.English)
-                    throw new InvalidOperationException("English selection did not restore original text and font route.");
+                MutinyLevel1VerificationResult result = MutinyTurnActionUiVerificationTest.RunGMLanguage(gm);
+                if (!result.Passed)
+                    throw new InvalidOperationException(string.Join("\n", result.Failures));
+                foreach (string line in result.Logs)
+                    Debug.Log(line);
                 passed = true;
-                Debug.Log("[Localization] Play Mode verification passed: production frontend loaded tables and font; both language selections updated text, locale, save and font route.");
+                Debug.Log($"[Localization] GM-09 Play Mode verification passed: {result.PassedAssertions}/{result.TotalAssertions}; production frontend loaded tables and font.");
             }
             catch (Exception exception)
             {
