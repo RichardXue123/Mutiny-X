@@ -848,19 +848,32 @@ namespace Mutiny.Presentation
                 MutinyEndingSequence.Dialogue dialogue = MutinyEndingSequence.Dialogues[dialogueIndex];
                 DrawTexture(dialogue.Bubble,
                     dialogue.Symbol == 792 ? m_EndingKrakenBubble : m_EndingBubble);
-                string[] lines = dialogue.Text.Split('|');
-                for (int i = 0; i < lines.Length; i++)
+                if (!MutinyLocalization.UseOriginalFont)
                 {
-                    float reveal = MutinyEndingSequence.LineRevealAtFrame(m_EndingFrame, dialogueIndex, i);
-                    if (reveal <= 0f)
-                        continue;
-                    float textWidth = Mathf.Min(212f, MutinyBitmapFont.MeasureDangleText(lines[i]));
-                    float lineY = dialogue.TextOrigin.y + i * 13f;
-                    GUI.BeginGroup(new Rect(dialogue.TextOrigin.x, lineY,
-                        Mathf.Max(1f, textWidth * reveal), 13f));
-                    MutinyBitmapFont.DrawSpeechText(new Rect(0f, 0f, textWidth, 13f),
-                        lines[i], TextAnchor.UpperLeft, 0, 13);
-                    GUI.EndGroup();
+                    string text = MutinyEndingSequence.LocalizedDialogue(dialogueIndex);
+                    // Preserve the original segment's reveal duration and end frame.
+                    // CJK wraps naturally instead of reusing English's manual lines.
+                    float reveal = MutinyEndingSequence.DialogueRevealAtFrame(m_EndingFrame, dialogueIndex);
+                    int visibleCharacters = Mathf.Min(text.Length, Mathf.CeilToInt(text.Length * reveal));
+                    MutinyLocalizedText.Speech(MutinyGameHUD.ResolveSpeechTextRect(dialogue.Bubble),
+                        null, text.Substring(0, visibleCharacters));
+                }
+                else
+                {
+                    string[] lines = dialogue.Text.Split('|');
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        float reveal = MutinyEndingSequence.LineRevealAtFrame(m_EndingFrame, dialogueIndex, i);
+                        if (reveal <= 0f)
+                            continue;
+                        float textWidth = Mathf.Min(212f, MutinyBitmapFont.MeasureDangleText(lines[i]));
+                        float lineY = dialogue.TextOrigin.y + i * 13f;
+                        GUI.BeginGroup(new Rect(dialogue.TextOrigin.x, lineY,
+                            Mathf.Max(1f, textWidth * reveal), 13f));
+                        MutinyBitmapFont.DrawSpeechText(new Rect(0f, 0f, textWidth, 13f),
+                            lines[i], TextAnchor.UpperLeft, 0, 13);
+                        GUI.EndGroup();
+                    }
                 }
             }
 
@@ -1125,15 +1138,7 @@ namespace Mutiny.Presentation
 
         private static void DrawCornerSprite(Rect rect, Texture2D texture, bool hovered, MutinyCornerControl control)
         {
-            if (texture != null)
-            {
-                DrawTexture(rect, texture);
-            }
-            else if (hovered)
-            {
-                string label = MutinyGameHUD.ResolveOriginalCornerTooltip(control);
-                MutinyGameHUD.DrawCornerTooltipBubble(rect, label);
-            }
+            MutinyGameHUD.DrawLocalizedCornerSprite(rect, texture, hovered, control);
         }
 
         private void UpdateCornerHover(ref bool previous, bool current)

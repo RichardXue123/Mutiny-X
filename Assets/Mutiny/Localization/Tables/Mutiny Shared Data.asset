@@ -343,6 +343,278 @@ MonoBehaviour:
     m_Key: weapon.tidalWave.desc
     m_Metadata:
       m_Items: []
+  - m_Id: 84226425741312
+    m_Key: speech.squid.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684352
+    m_Key: speech.squid.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684353
+    m_Key: speech.squid.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684354
+    m_Key: speech.squid.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684355
+    m_Key: speech.crab.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684356
+    m_Key: speech.crab.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684357
+    m_Key: speech.crab.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684358
+    m_Key: speech.crab.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684359
+    m_Key: speech.shark.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684360
+    m_Key: speech.shark.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684361
+    m_Key: speech.shark.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684362
+    m_Key: speech.shark.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684363
+    m_Key: speech.parrot.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684364
+    m_Key: speech.parrot.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684365
+    m_Key: speech.parrot.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684366
+    m_Key: speech.parrot.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684367
+    m_Key: speech.monkey.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684368
+    m_Key: speech.monkey.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684369
+    m_Key: speech.monkey.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684370
+    m_Key: speech.monkey.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684371
+    m_Key: speech.soldier.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684372
+    m_Key: speech.soldier.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684373
+    m_Key: speech.soldier.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684374
+    m_Key: speech.soldier.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684375
+    m_Key: speech.blindPirate.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684376
+    m_Key: speech.blindPirate.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684377
+    m_Key: speech.blindPirate.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684378
+    m_Key: speech.blindPirate.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684379
+    m_Key: speech.femalePirate.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684380
+    m_Key: speech.femalePirate.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684381
+    m_Key: speech.femalePirate.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684382
+    m_Key: speech.femalePirate.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684383
+    m_Key: speech.oldPirate.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684384
+    m_Key: speech.oldPirate.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684385
+    m_Key: speech.oldPirate.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684386
+    m_Key: speech.oldPirate.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684387
+    m_Key: speech.rainbowBeard.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684388
+    m_Key: speech.rainbowBeard.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684389
+    m_Key: speech.rainbowBeard.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684390
+    m_Key: speech.rainbowBeard.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684391
+    m_Key: speech.cabinBoy.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684392
+    m_Key: speech.cabinBoy.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684393
+    m_Key: speech.cabinBoy.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684394
+    m_Key: speech.cabinBoy.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684395
+    m_Key: speech.tribe.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684396
+    m_Key: speech.tribe.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684397
+    m_Key: speech.tribe.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684398
+    m_Key: speech.tribe.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684399
+    m_Key: speech.skeletonPirate.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684400
+    m_Key: speech.skeletonPirate.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684401
+    m_Key: speech.skeletonPirate.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684402
+    m_Key: speech.skeletonPirate.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684403
+    m_Key: speech.bossGuy.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684404
+    m_Key: speech.bossGuy.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684405
+    m_Key: speech.bossGuy.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684406
+    m_Key: speech.bossGuy.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684407
+    m_Key: speech.bossGuyZombie.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684408
+    m_Key: speech.bossGuyZombie.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684409
+    m_Key: speech.bossGuyZombie.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684410
+    m_Key: speech.bossGuyZombie.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684411
+    m_Key: speech.ending.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684412
+    m_Key: speech.ending.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684413
+    m_Key: speech.ending.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684414
+    m_Key: speech.ending.3
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684415
+    m_Key: speech.ending.4
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684416
+    m_Key: corner.quit
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684417
+    m_Key: corner.music
+    m_Metadata:
+      m_Items: []
+  - m_Id: 84226467684418
+    m_Key: corner.sfx
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:

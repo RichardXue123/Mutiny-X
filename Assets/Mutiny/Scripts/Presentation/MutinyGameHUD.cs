@@ -230,10 +230,23 @@ namespace Mutiny.Presentation
             return new Rect(visualRect.x, visualRect.y + 17f, visualRect.width, 17f);
         }
 
+        public static string ResolveLocalizedCornerTooltip(MutinyCornerControl control) =>
+            MutinyLocalization.Text("corner." + control.ToString().ToLowerInvariant(), ResolveOriginalCornerTooltip(control));
+
+        private static Rect CornerBubbleRect(Rect visualRect)
+        {
+            float width = MutinyLocalization.UseOriginalFont ? visualRect.width : Mathf.Max(32f, visualRect.width);
+            return new Rect(visualRect.center.x - width * 0.5f, visualRect.y + 17f, width,
+                MutinyLocalization.UseOriginalFont ? 17f : 23f);
+        }
+
+        public static Rect ResolveCornerBubbleRect(MutinyCornerControl control) =>
+            CornerBubbleRect(ResolveOriginalCornerVisualRect(control));
+
         public static bool IsCornerHovered(MutinyCornerControl control, Vector2 canvasMouse, bool currentlyHovered)
         {
             Rect hitRect = ResolveOriginalCornerHitRect(control);
-            Rect bubbleRect = ResolveOriginalCornerBubbleRect(control);
+            Rect bubbleRect = ResolveCornerBubbleRect(control);
             // When already hovered, the tooltip bubble is visible below the button, so hovering over
             // either the icon (hitRect) or the speech bubble below (bubbleRect) maintains the hovered state.
             // Using bubbleRect rather than the full AABB bounding box (visualRect) ensures the empty
@@ -265,23 +278,47 @@ namespace Mutiny.Presentation
             if (string.IsNullOrEmpty(text))
                 return;
 
-            // Authentic Flash speech bubble below button: y=28..45 (17px height)
-            Rect bubbleRect = new Rect(visualRect.x, visualRect.y + 17f, visualRect.width, 17f);
+            // English retains the original 17px bubble. Unicode needs room for
+            // full glyph metrics; the icon's click region remains unchanged.
+            Rect bubbleRect = CornerBubbleRect(visualRect);
 
             // Draw bubble background & border
-            DrawSolidRect(new Rect(bubbleRect.x + 1f, bubbleRect.y + 3f, bubbleRect.width - 2f, 13f), Color.white);
-            DrawOutline(new Rect(bubbleRect.x + 1f, bubbleRect.y + 3f, bubbleRect.width - 2f, 13f), Color.black);
+            Rect background = new Rect(bubbleRect.x + 1f, bubbleRect.y + 3f, bubbleRect.width - 2f, bubbleRect.height - 4f);
+            DrawSolidRect(background, Color.white);
+            DrawOutline(background, Color.black);
 
             // Pointer arrow pointing up to icon
             float pointerX = Mathf.Round(bubbleRect.x + bubbleRect.width * 0.5f);
             DrawSolidRect(new Rect(pointerX - 2f, bubbleRect.y + 1f, 4f, 2f), Color.white);
             DrawOutline(new Rect(pointerX - 2f, bubbleRect.y, 4f, 3f), Color.black);
 
-            // Render label using MutinyBitmapFont Dangle text
-            MutinyBitmapFont.DrawDangleText(
-                new Rect(bubbleRect.x, bubbleRect.y + 3f, bubbleRect.width, 12f),
-                text, Color.black, TextAnchor.MiddleCenter, -1);
+            Rect labelRect = MutinyLocalization.UseOriginalFont
+                ? new Rect(bubbleRect.x, bubbleRect.y + 3f, bubbleRect.width, 12f)
+                : new Rect(bubbleRect.x + 2f, bubbleRect.y + 3f, bubbleRect.width - 4f, 18f);
+            MutinyLocalizedText.Tooltip(labelRect, text);
         }
+
+        public static void DrawLocalizedCornerSprite(Rect rect, Texture2D texture, bool hovered, MutinyCornerControl control)
+        {
+            if (hovered && !MutinyLocalization.UseOriginalFont)
+            {
+                // Hover sprites bake English into their lower 17 pixels. Preserve
+                // the actual icon state and replace only the tooltip with text.
+                if (texture != null)
+                    GUI.DrawTextureWithTexCoords(new Rect(rect.x, rect.y, rect.width, 17f), texture,
+                        new Rect(0f, 1f - 17f / rect.height, 1f, 17f / rect.height), true);
+                DrawCornerTooltipBubble(rect, ResolveLocalizedCornerTooltip(control));
+            }
+            else if (texture != null)
+                GUI.DrawTexture(rect, texture, ScaleMode.StretchToFill, true);
+            else if (hovered)
+                DrawCornerTooltipBubble(rect, ResolveLocalizedCornerTooltip(control));
+        }
+
+        public static Rect ResolveSpeechTextRect(Rect bubbleRect) =>
+            MutinyLocalization.UseOriginalFont
+                ? new Rect(bubbleRect.x + 22f, bubbleRect.y + 35f, 220f, 92f)
+                : new Rect(bubbleRect.x + 14f, bubbleRect.y + 14f, 216f, 98f);
 
         private static readonly string[] OriginalWeaponOrder =
         {
@@ -754,17 +791,24 @@ namespace Mutiny.Presentation
             float y = (Screen.height - projected.y - top) / scale;
             // SWF DefineShape 463 is 244x132 and centred on the bubble clip.
             Rect bubbleRect = new Rect(x - 122f, y - 66f, 244f, 132f);
+            if (!MutinyLocalization.UseOriginalFont)
+            {
+                bubbleRect.x = Mathf.Clamp(bubbleRect.x, 6f, OriginalCanvasWidth - bubbleRect.width - 6f);
+                bubbleRect.y = Mathf.Clamp(bubbleRect.y, 48f, OriginalCanvasHeight - bubbleRect.height - 6f);
+            }
             Matrix4x4 oldMatrix = GUI.matrix;
             GUI.matrix = Matrix4x4.TRS(new Vector3(left, top, 0f), Quaternion.identity,
                 new Vector3(scale, scale, 1f));
+            Color previousColor = GUI.color;
+            GUI.color = Color.white;
             if (m_SpeechBubbleTexture != null)
                 GUI.DrawTexture(bubbleRect, m_SpeechBubbleTexture, ScaleMode.StretchToFill, true);
 
             // DefineSprite 465: textHolder at (-75,-21), DangleFont at (-25,-10)
             // relative to the clip registration point. Keep the same visible field
             // for typing and click-to-complete (the Flash mouseDown used a wrong path).
-            MutinyLocalizedText.Speech(
-                new Rect(x - 100f, y - 31f, 220f, 92f), null, Speech.VisibleText);
+            MutinyLocalizedText.Speech(ResolveSpeechTextRect(bubbleRect), null, Speech.VisibleText);
+            GUI.color = previousColor;
 
             Event evt = Event.current;
             if (evt != null && evt.type == EventType.MouseDown && evt.button == 0 &&
@@ -884,10 +928,7 @@ namespace Mutiny.Presentation
 
         private static void DrawOriginalCornerSprite(Rect rect, Texture2D texture, bool hovered, MutinyCornerControl control)
         {
-            if (texture != null)
-                GUI.DrawTexture(rect, texture, ScaleMode.StretchToFill, true);
-            else if (hovered)
-                DrawCornerTooltipBubble(rect, ResolveOriginalCornerTooltip(control));
+            DrawLocalizedCornerSprite(rect, texture, hovered, control);
         }
 
         private void DrawCornerButton(Rect rect, string label, bool hovered)

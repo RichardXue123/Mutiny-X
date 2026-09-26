@@ -43,6 +43,8 @@ namespace Mutiny.Presentation
         private int m_CompleteTicks;
         private int m_RevealedCharacters;
         private string m_Line = string.Empty;
+        private string m_LineKey;
+        private string m_EnglishLine;
         private float m_TickAccumulator;
         private Vector3 m_BubbleWorldPosition;
 
@@ -56,6 +58,8 @@ namespace Mutiny.Presentation
 
         public void Initialize(MutinyTurnManager turnManager)
         {
+            MutinyLocalization.Changed -= RefreshLanguage;
+            MutinyLocalization.Changed += RefreshLanguage;
             if (m_TurnManager != null)
                 m_TurnManager.OnGameOver -= HandleGameOver;
             m_TurnManager = turnManager;
@@ -68,6 +72,7 @@ namespace Mutiny.Presentation
 
         private void OnDestroy()
         {
+            MutinyLocalization.Changed -= RefreshLanguage;
             if (m_TurnManager != null)
                 m_TurnManager.OnGameOver -= HandleGameOver;
         }
@@ -129,7 +134,9 @@ namespace Mutiny.Presentation
             }
 
             m_LineIndex = lineIndex;
-            m_Line = sequence[lineIndex];
+            m_LineKey = LineKey(type, lineIndex);
+            m_EnglishLine = sequence[lineIndex];
+            m_Line = MutinyLocalization.Text(m_LineKey, m_EnglishLine);
             m_Active = true;
             m_EndingLine = lineIndex >= 2;
             m_StartTicks = StartDelayTicks;
@@ -143,6 +150,21 @@ namespace Mutiny.Presentation
             string voiceType = GetTeamType(team);
             if (voiceType != null)
                 MutinyAudioManager.Instance?.PlaySFX(voiceType);
+        }
+
+        public static string LineKey(string opponentType, int lineIndex) =>
+            "speech." + opponentType + "." + lineIndex;
+
+        private void RefreshLanguage()
+        {
+            if (!m_Active)
+                return;
+            bool complete = m_RevealedCharacters == m_Line.Length;
+            float revealedFraction = m_Line.Length == 0 ? 0f : (float)m_RevealedCharacters / m_Line.Length;
+            m_Line = MutinyLocalization.Text(m_LineKey, m_EnglishLine);
+            m_RevealedCharacters = complete ? m_Line.Length : Mathf.FloorToInt(m_Line.Length * revealedFraction);
+            // Keep speaker, voice playback, delay, hold timer and tick accumulator.
+            // Reassigning via StartLine would restart the conversation on every switch.
         }
 
         private void AdvanceTick()

@@ -161,6 +161,15 @@ namespace Mutiny.Presentation
             return Mathf.Clamp01((localFrame - lineIndex * 10f) / 10f);
         }
 
+        public static string LocalizedDialogue(int dialogueIndex) =>
+            MutinyLocalization.Text("speech.ending." + dialogueIndex, Dialogues[dialogueIndex].Text);
+
+        public static float DialogueRevealAtFrame(int frame, int dialogueIndex)
+        {
+            int lineCount = Dialogues[dialogueIndex].Text.Split('|').Length;
+            return Mathf.Clamp01((frame - Dialogues[dialogueIndex].Start + 1f) / (lineCount * 10f));
+        }
+
         public static bool IsScoreVisible(int frame) => frame >= 754;
         // The button is a child of sprite 800 from its first placed frame.
         // It moves with the panel rather than waiting for the landing frame.

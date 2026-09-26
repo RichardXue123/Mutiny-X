@@ -81,3 +81,74 @@ weapon.voodooDoll.name	voodoo doll	巫毒娃娃
 weapon.voodooDoll.desc	choose an enemy player by\nclicking on them. then click\nand drag to throw the doll and\nwatch the enemy helplessly\nfly off in the same direction!	先点击选定敌人，再拖动投出娃娃。\n敌人会朝同一方向飞出去！
 weapon.tidalWave.name	tidal wave	海啸
 weapon.tidalWave.desc	click to send a huge tidal wave\nacross the bottom of the stage.\nIt will affect all players it\nhits.	点击后，巨浪席卷场景底部，\n波及途经的所有角色。
+
+# Battle dialogue: AS2 Team.as::lines; indices 0/1 intro, 2/3 victory; Chinese is an authorized adaptation.
+speech.squid.0	Arrrgh what sort o' sea|beastie be this?	哎呀呀！这又是哪门子的海怪，伙计们？
+speech.squid.1	Splund splund... I'm gonna|ink you up... splund splund.	噗噜，噗噜……瞧我把你们喷成墨水罐！噗噜！
+speech.squid.2	Yearggh take that you|varmint, we be eating squid|rings tonight.	哈哈，尝到厉害了吧！伙计们，今晚吃炸鱿鱼圈！
+speech.squid.3	Splund splund... I'm so|happy I've just inked|myself... splund.	噗噜，噗噜……我高兴得连自己都喷黑啦！噗噜！
+speech.crab.0	Looks like we've got a|bad case of the crabs|here, mateys!	哎哟，伙计们！咱们可惹上了一群横行的家伙！
+speech.crab.1	Prepare to lose your|beards... snip snip!	胡子留好了！咔嚓，咔嚓……我要开剪啦！
+speech.crab.2	I think we shell-shocked|them, mateys!	哈哈，伙计们！这回连壳都给他们吓软啦！
+speech.crab.3	Looks like they fell for|our deadly pincer|manoeuvre... at last their|beards be ours.	哈！夹击妙计，百发百中！你们的胡子，归我们啦！
+speech.shark.0	Ahoy. I think there be|something fishy here.	喂，伙计们！我闻见了……好大一股鱼腥味！
+speech.shark.1	We're gonna hammer you!|You're Shark Bait!	瞧我这记铁头锤！你们就等着当鲨鱼饵吧！
+speech.shark.2	Ya Har! 'Twas too easy!|But thar be plenty more|fish in the sea!	哈哈，轻而易举！不过嘛，大海里的鱼可多着呢！
+speech.shark.3	Stop! ...Hammer-time!	都站住！现在是……铁头锤时间！
+speech.parrot.0	Arrrgh!... Who be a pretty|boy then? ...Does Polly|want a cracker?	哟，谁是漂亮的小乖乖呀？波莉，要不要块饼干？
+speech.parrot.1	Squawk!... Who's a pretty|boy then? ...Squawk!...|Polly want a cracker!|...Squawk!	嘎！谁是漂亮的小乖乖？嘎！波莉要饼干！嘎！
+speech.parrot.2	Arrrgh... 'tiz a shame.|They could have made fine|shoulder enhancers.	唉，可惜啦！本来还能给咱们肩膀添点风光呢！
+speech.parrot.3	Squawk!... Polly want a|cracker!	嘎！波莉要饼干！
+speech.monkey.0	Guard the fruit mateys...|If the monkeys get it we'll|be up for another bout|of scurvy!	守住水果，伙计们！叫猴子抢了去，坏血病又得找上门啦！
+speech.monkey.1	Oooh Oooh Ahh Ahh Bananas!	呜呜！啊啊！香蕉！
+speech.monkey.2	Yarrgh! Yer monkey business|ain't foolin' any of us!	哈！少耍猴戏啦！咱们可没那么好糊弄！
+speech.monkey.3	Oooh Oooh Ahh Ahh More|Bananas!	呜呜！啊啊！还要香蕉！
+speech.soldier.0	These boys look too clean|to be in a real fight! And|look... they've still got|teeth to knock out!	哟，制服真干净！打过架吗？瞧，牙还都在，正好练练手！
+speech.soldier.1	We fight for King and|Country! ...and because we|get a decent benefits|package and pension plan!	为国王和国家而战！当然，还有优厚的福利……和退休金！
+speech.soldier.2	They don't look so smart|now lads... I think We'll|be using his toupee to swab|the decks!	瞧，还神气吗？伙计们，拿他的假发擦甲板去！
+speech.soldier.3	You pirates will get what|you deserve... a short drop|and a sudden stop!	海盗们，报应来啦！绳圈一套，脚下一空……就此告别！
+speech.blindPirate.0	Yargh... These guys have|one too many eye patches!|This should be easy! Let's|get 'em!	哈！他们的眼罩也太多啦！伙计们，这回闭着眼都能赢！
+speech.blindPirate.1	Get who? Where am I...|how did I get here?	赢谁？我在哪儿？哎，我怎么跑到这儿来了？
+speech.blindPirate.2	Yarrgh!|They didn't see us coming!	哈哈！咱们这招，可真叫他们看不见啊！
+speech.blindPirate.3	Gar... I can't hear them...|Does anyone know if we|won?	哎，怎么没声啦？谁告诉我……咱们赢了吗？
+speech.femalePirate.0	Garrrgh... Looks like we've|found ourselves some|mighty fine booty here,|mateys!	哟呵，伙计们！瞧瞧，眼前可都是上好的“宝贝”呀！
+speech.femalePirate.1	Yarp... The only booty you|will be getting is on the|end of my foot!	哼！你能捞着的“宝贝”，就只有本姑娘这一脚！
+speech.femalePirate.2	Arrgh... shame... what a|waste of such lovely|sea legs!	唉，真可惜！白瞎了这么漂亮的水手腿！
+speech.femalePirate.3	Yarp... Everybody knows|girls are better than boys!	哈！这还用说？姑娘们就是比小伙子强！
+speech.oldPirate.0	Arrrrggggh... I think we|found some old sea dogs!|Ready for retirement!	哟呵，一群老海狗！各位，该上岸养老啦！
+speech.oldPirate.1	We're not Old, we're|experienced... and now we're|gonna kick your... erm...|erm... what was I saying|again... who are you?	老？这叫经验！瞧我踢你们的……呃，说到哪儿了？你是谁？
+speech.oldPirate.2	Garrrrgh! Ok, Grandads...|time for your afternoon|nap!	好啦，老爷子们！午睡时间到，乖乖闭眼吧！
+speech.oldPirate.3	That'll show you... in my|day we used to fight a|Kraken with nothin' but a|couple o' stones. Arrrgh...|Those be the days...	服了吧！想当年，几块石头就能打海怪！唉，那才叫好日子！
+speech.rainbowBeard.0	This guy be looking a little|too jolly to be flying the|ol' jolly roger, eh mateys?	伙计们，瞧这花枝招展的！挂骷髅旗，他是不是高兴过头啦？
+speech.rainbowBeard.1	Ohhhh look at you... don't|you look tough? Anyway,|haven't you heard? Fancy|colours are the new black!	哎哟，真威风呀！可你还不知道？五彩缤纷才是新潮流！
+speech.rainbowBeard.2	I'd have beaten you sooner if|your fancy beards didn't|keep catchin' the light!	要不是你们的花胡子晃得我眼花，早就收拾完啦！
+speech.rainbowBeard.3	Oo-er! Now we're finished|with them, it's time for a|bit of retail therapy!	哎呀，打完收工！走，逛商店，好好犒劳自己！
+speech.cabinBoy.0	Yarrgh! ...ye be wanting to|grow a proper beard before|taking on the likes of us,|boys...	小家伙们，想跟咱们较量？先长出一把像样的胡子吧！
+speech.cabinBoy.1	We're no boys! I had a couple|of hairs only last month on|me chin, just ask me mum!	我才不是小孩！上个月下巴就长了两根毛！不信问我妈妈！
+speech.cabinBoy.2	Yarrgh! Best be running|along home now boys! I think|it be past yer bedtime?	回家去吧，小家伙们！早过了你们的睡觉时间啦！
+speech.cabinBoy.3	That was fun... just like a|Nitrome video game! LOL!	真好玩！就像玩了局 Nitrome 游戏！哈哈！
+speech.tribe.0	Garrgh! I've got a bad feelin'|about this lads! They be|lookin' kinda hungry!	伙计们，我有种不祥的预感……他们好像饿坏了！
+speech.tribe.1	Get the cookin' pot ready...|pirate stew tonight!	架起大锅！今晚开荤，炖海盗！
+speech.tribe.2	Good work lads! we've|avoided being lunch... looks|like they'll have to stick|with mangos and coconuts|from now on!	干得漂亮！咱们没成午饭！让他们啃芒果、嚼椰子去吧！
+speech.tribe.3	mmmmmmm! can't remember|the last time we had a good|pirate stew!|...has anyone got the salt?	嗯……好久没尝过海盗炖汤啦！哎，谁把盐递过来？
+speech.skeletonPirate.0	This crew looks like they|could do with a good feed|more than a fight...	瞧这一船伙计！他们缺的不是一场架，是一顿饱饭！
+speech.skeletonPirate.1	you'll have to catch us all|first ...fatty!	先追得上我们再说吧……胖墩儿！
+speech.skeletonPirate.2	I am rubber, you are glue!	我是橡皮你是胶，骂我的话全弹回你身上！
+speech.skeletonPirate.3	Sticks and stones may break|my bones but pirates never|hurt me!	棍子石头能打断骨头，你们这些海盗可伤不了我！
+speech.bossGuy.0	Garrrgh! what a big hat...|I think he be trying to|make up for something, lads!	哟，这帽子可真够大！伙计们，他是不是想遮掩点什么呀？
+speech.bossGuy.1	Argh! ye not be winning with|a hat like that. And once I|win I'll be taking your hats.	戴那种帽子还想赢？等我赢了，你们的帽子也全归我！
+speech.bossGuy.2	I think he was a little|hot-headed...|maybe it was his hat!	瞧他那副火冒三丈的样子！八成是帽子捂得太热啦！
+speech.bossGuy.3	These hats 'll be a mighty|fine addition to my|collection!	妙极啦！这些帽子，正好给我的收藏添点新花样！
+speech.bossGuyZombie.0	I think he's been playing|with a few too many|voodoo dolls, lads! he's back|from Davey Jones locker.	伙计们，巫毒娃娃可不能乱玩！这家伙从海底鬼门关回来啦！
+speech.bossGuyZombie.1	aaaaaaaaahhhhhhhh...|hhhhhaaaaattttttss...|errrr... I mean...|bbbbrrraaaiiinnsss...	啊——帽——子——！呃，我是说……脑——子——！
+speech.bossGuyZombie.2	Yo-Ho-Ho... we've done it|lads! that finished him off...|eerrrrm didn't we?	哟呵呵！伙计们，这回总算收拾掉他啦！呃……是吧？
+speech.bossGuyZombie.3	Yar hats be mine after all!|hhhhhaaaaattttttss!!!	你们的帽子，到头来还是我的！帽——子——！
+# Ending dialogue: original DangleFont construction actions in sprites 784, 788, 791, 793, 795.
+speech.ending.0	Arrgh, Ahoy mateys! That|be too easy. Them bunch of|lilly livred land lubbers|never stood a chance.|we be both filthy and rich |now. Nothing be standing in |our way. Yo ho ho...	哟呵，伙计们！小菜一碟！那帮胆小的旱鸭子哪是咱们的对手！如今咱们又脏又阔，谁也挡不住！哟呵呵！
+speech.ending.1	Aye... that be true. Unless|we be bumping into the|kraken that is?	是啊，没错……只要别一头撞上海怪克拉肯就好。
+speech.ending.2	kraken... what kraken?	克拉肯？什么克拉肯？
+speech.ending.3	Yearrrgh... I think he be on |about the sequel captin!	哎呀，船长！我想，他说的是续集吧！
+speech.ending.4	...Sequel ...what sequel?	……续集？什么续集？
+corner.quit	quit	退出
+corner.music	music	音乐
+corner.sfx	sound fx	音效

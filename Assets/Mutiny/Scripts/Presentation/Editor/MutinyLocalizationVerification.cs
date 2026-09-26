@@ -18,6 +18,7 @@ namespace Mutiny.Presentation.Editor
     {
         private const string SourcePath = "Assets/Mutiny/Localization/Mutiny.tsv";
         private const string OriginalWeaponPath = "Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/game/WeaponSelectButton.as";
+        private const string OriginalScriptsPath = "Docs/10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/";
         private const string FontPath = "Assets/Mutiny/Resources/Localization/Fonts/NotoSansCJKsc-Regular.otf";
         private const string PlayModeKey = "Mutiny.LocalizationPlayModeVerification";
         private const string LanguagePrefKey = "mutiny_language_v1";
@@ -87,8 +88,14 @@ namespace Mutiny.Presentation.Editor
                     throw new InvalidOperationException(string.Join("\n", result.Failures));
                 foreach (string line in result.Logs)
                     Debug.Log(line);
+                MutinyLevel1VerificationResult speechResult = MutinySpeechLocalizationVerificationTest.Run(gm);
+                foreach (string line in speechResult.Logs)
+                    Debug.Log(line);
+                if (!speechResult.Passed)
+                    throw new InvalidOperationException(string.Join("\n", speechResult.Failures));
                 passed = true;
                 Debug.Log($"[Localization] GM-09 Play Mode verification passed: {result.PassedAssertions}/{result.TotalAssertions}; production frontend loaded tables and font.");
+                Debug.Log($"[Localization] Speech and tooltips Play Mode verification passed: {speechResult.PassedAssertions}/{speechResult.TotalAssertions}.");
             }
             catch (Exception exception)
             {
@@ -154,6 +161,9 @@ namespace Mutiny.Presentation.Editor
                     if (!char.IsWhiteSpace(character) && !font.HasCharacter(character))
                         throw new InvalidOperationException($"Missing bundled glyph U+{(int)character:X4}: {fields[0]}");
                 }
+                if (fields[0].StartsWith("speech.", StringComparison.Ordinal) &&
+                    MutinyLocalizedText.MeasureSpeechHeight(zh, 216f) > 98f)
+                    throw new InvalidOperationException("Chinese dialogue overflows bubble: " + fields[0]);
                 count++;
             }
 
@@ -172,7 +182,40 @@ namespace Mutiny.Presentation.Editor
                     original[0] != title || original[1] != description)
                     throw new InvalidOperationException("Original weapon copy changed in table: " + weapon);
             }
-            Debug.Log($"[Localization] Validation passed: {count} paired keys, bundled glyphs and 15 SWF weapon copies.");
+            int speechCount = 0;
+            string originalTeams = File.ReadAllText(OriginalScriptsPath + "__Packages/com/nitrome/throwgame/Team.as");
+            foreach (Match team in Regex.Matches(originalTeams, @"(\w+):\[([^\]]+)\]"))
+            {
+                MatchCollection lines = Regex.Matches(team.Groups[2].Value, "\"((?:\\\\.|[^\"])*)\"");
+                if (lines.Count != 4)
+                    throw new InvalidOperationException("Expected four original dialogue lines: " + team.Groups[1].Value);
+                for (int index = 0; index < lines.Count; index++)
+                {
+                    string key = MutinySpeechController.LineKey(team.Groups[1].Value, index);
+                    string original = lines[index].Groups[1].Value.Replace("\\'", "'");
+                    if (english.GetEntry(key)?.LocalizedValue != original)
+                        throw new InvalidOperationException("Original speech changed or missing: " + key);
+                    speechCount++;
+                }
+            }
+            if (speechCount != 60)
+                throw new InvalidOperationException("Expected 60 battle speech lines from AS2.");
+            int[] endingSprites = { 784, 788, 791, 793, 795 };
+            for (int index = 0; index < endingSprites.Length; index++)
+            {
+                string actionPath = OriginalScriptsPath + $"DefineSprite_{endingSprites[index]}/frame_1/PlaceObject2_149_DangleFont_1/CLIPACTIONRECORD on(construct).as";
+                Match action = Regex.Match(File.ReadAllText(actionPath), "text = \"([^\"]*)\";");
+                if (!action.Success || english.GetEntry("speech.ending." + index)?.LocalizedValue != action.Groups[1].Value ||
+                    MutinyEndingSequence.Dialogues[index].Text != action.Groups[1].Value)
+                    throw new InvalidOperationException("Original ending dialogue changed: " + index);
+            }
+            Debug.Log($"[Localization] Validation passed: {count} paired keys, bundled glyphs, 15 SWF weapon copies, 60 battle/5 ending originals and 65 Chinese bubble layouts.");
+        }
+
+        public static void RebuildAndValidate()
+        {
+            MutinyLocalizationTableBuilder.Build();
+            Validate();
         }
 
         private static IEnumerable<string> ExtractSlots(string value)
