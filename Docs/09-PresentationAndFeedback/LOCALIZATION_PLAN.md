@@ -2,6 +2,8 @@
 
 此文保留实施前的调查与目标；`feature/Localization` 的初版实现及验证状态见 [LOCALIZATION_INITIAL_IMPLEMENTATION.md](LOCALIZATION_INITIAL_IMPLEMENTATION.md)。
 
+2026-09-27 用户将默认语言改为英语，覆盖本文“设备语言优先”的旧设计。发行版故障及新规格见 [LOCALIZATION_PLAYER_BUILD_FIX.md](LOCALIZATION_PLAYER_BUILD_FIX.md)。
+
 本轮仅调查与设计，未安装包、导入字体、修改代码或执行 Unity 运行验收。英语保留为原版对照语言；简体中文是用户授权的新语言。日语、繁体中文先预留数据和字体架构，未列为当前翻译完成范围。
 
 ## 1. 已确认的工程基线

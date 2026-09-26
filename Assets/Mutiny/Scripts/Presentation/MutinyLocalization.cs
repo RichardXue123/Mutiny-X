@@ -3,9 +3,11 @@ using System.Collections;
 using System.Collections.Generic;
 using Mutiny.Persistence;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
 using UnityEngine.Localization;
 using UnityEngine.Localization.Settings;
 using UnityEngine.Localization.Tables;
+using UnityEngine.ResourceManagement.AsyncOperations;
 
 namespace Mutiny.Presentation
 {
@@ -15,16 +17,21 @@ namespace Mutiny.Presentation
         public const string English = "en";
         public const string SimplifiedChinese = "zh-Hans";
         private const string TableName = "Mutiny";
+        private const string SharedDataAddress = "Assets/Mutiny/Localization/Tables/Mutiny Shared Data.asset";
 
         private static readonly Dictionary<string, StringTable> Tables = new Dictionary<string, StringTable>();
         private static readonly HashSet<string> MissingKeys = new HashSet<string>();
         private static bool s_Started;
         private static string s_Code = English;
+        private static AsyncOperationHandle<SharedTableData> s_SharedDataHandle;
 
         public static event Action Changed;
         public static string Code => s_Code;
-        public static bool IsReady => Tables.ContainsKey(English) && Tables.ContainsKey(SimplifiedChinese);
-        public static bool UseOriginalFont => s_Code == English || !Tables.ContainsKey(s_Code);
+        public static bool IsReady => HasUsableTable(English) && HasUsableTable(SimplifiedChinese);
+        public static bool UseOriginalFont => s_Code == English || !HasUsableTable(s_Code);
+
+        private static bool HasUsableTable(string code) =>
+            Tables.TryGetValue(code, out StringTable table) && table != null && table.SharedData != null;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetState()
@@ -33,6 +40,7 @@ namespace Mutiny.Presentation
             MissingKeys.Clear();
             s_Started = false;
             s_Code = English;
+            s_SharedDataHandle = default;
             Changed = null;
         }
 
@@ -42,8 +50,7 @@ namespace Mutiny.Presentation
                 return;
             s_Started = true;
             string saved = MutinySaveSystem.LanguageCode;
-            s_Code = IsSupported(saved) ? saved :
-                Application.systemLanguage == SystemLanguage.ChineseSimplified ? SimplifiedChinese : English;
+            s_Code = IsSupported(saved) ? saved : English;
             host.StartCoroutine(LoadTables());
         }
 
@@ -74,6 +81,16 @@ namespace Mutiny.Presentation
                 yield break;
             }
 
+            // StringTable bundles in standalone builds can load without their
+            // cross-bundle SharedTableData reference. Pin the shared asset before
+            // loading either table and repair that reference when necessary.
+            s_SharedDataHandle = Addressables.LoadAssetAsync<SharedTableData>(SharedDataAddress);
+            yield return s_SharedDataHandle;
+            SharedTableData sharedData = s_SharedDataHandle.Status == AsyncOperationStatus.Succeeded
+                ? s_SharedDataHandle.Result : null;
+            if (sharedData == null)
+                Debug.LogError("[Localization] Shared table data did not load; English call-site text will be used.");
+
             foreach (string code in new[] { English, SimplifiedChinese })
             {
                 Locale locale = LocalizationSettings.AvailableLocales.GetLocale(code);
@@ -84,8 +101,16 @@ namespace Mutiny.Presentation
                 }
                 var table = LocalizationSettings.StringDatabase.GetTableAsync(TableName, locale);
                 yield return table;
-                if (table.Status == UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationStatus.Succeeded && table.Result != null)
-                    Tables[code] = table.Result;
+                if (table.Status == AsyncOperationStatus.Succeeded && table.Result != null)
+                {
+                    StringTable stringTable = table.Result;
+                    if (stringTable.SharedData == null && sharedData != null)
+                        stringTable.SharedData = sharedData;
+                    if (stringTable.SharedData != null)
+                        Tables[code] = stringTable;
+                    else
+                        Debug.LogError($"[Localization] String Table {TableName}/{code} has no shared key data.");
+                }
                 else
                     Debug.LogError($"[Localization] Missing String Table {TableName}/{code}.");
             }
@@ -95,7 +120,7 @@ namespace Mutiny.Presentation
 
         private static void ApplySelectedLocale()
         {
-            if (!Tables.ContainsKey(s_Code))
+            if (!HasUsableTable(s_Code))
                 return;
             Locale locale = LocalizationSettings.AvailableLocales.GetLocale(s_Code);
             if (locale != null)
@@ -108,13 +133,13 @@ namespace Mutiny.Presentation
                 return Format(englishFallback, arguments);
             if (Tables.Count == 0)
                 return Format(englishFallback ?? key, arguments);
-            if (Tables.TryGetValue(s_Code, out StringTable table))
+            if (HasUsableTable(s_Code) && Tables.TryGetValue(s_Code, out StringTable table))
             {
                 StringTableEntry entry = table.GetEntry(key);
                 if (entry != null && !string.IsNullOrEmpty(entry.LocalizedValue))
                     return entry.GetLocalizedString(arguments);
             }
-            if (Tables.TryGetValue(English, out StringTable english))
+            if (HasUsableTable(English) && Tables.TryGetValue(English, out StringTable english))
             {
                 StringTableEntry entry = english.GetEntry(key);
                 if (entry != null && !string.IsNullOrEmpty(entry.LocalizedValue))

@@ -4,7 +4,7 @@
 
 ## 架构与内容
 
-- Unity `6000.6.0f1` 使用 `com.unity.localization` `1.5.13`。`Mutiny.tsv` 是人工维护的键、英语、简中三列源文件；编辑器菜单 **Mutiny/Localization/Rebuild String Tables** 生成两个 Locale、String Table Collection、运行时 Localization Settings 和 Addressables 组。改完 TSV 必须重建表并提交生成资产。初版有 82 个成对键，补充对白与提示后当前为 150 个。运行时按保存语言、设备语言、英语的顺序选择；本版设备自动识别简体中文，其他设备语言用英语。
+- Unity `6000.6.0f1` 使用 `com.unity.localization` `1.5.13`。`Mutiny.tsv` 是人工维护的键、英语、简中三列源文件；编辑器菜单 **Mutiny/Localization/Rebuild String Tables** 生成两个 Locale、String Table Collection、运行时 Localization Settings 和 Addressables 组。改完 TSV 必须重建表并提交生成资产。初版有 82 个成对键，补充对白与提示后当前为 150 个。发行版故障修复后，运行时按已保存语言、英语的顺序选择；首次固定英语。见 [发行版语言切换修复](LOCALIZATION_PLAYER_BUILD_FIX.md)。
 - `MutinyLocalization` 缓存两个表，切换时保存偏好并发送变更事件；单条缺译回退到英语，初始表未就绪时使用调用点英语，缺键只警告一次。`MutinySaveSystem` 的语言键独立于进度。未来增加 `ja`、`zh-Hant` 时，需在语言目录、GM 参数映射中增加代码和相应表，不改武器、关卡等业务 ID。
 - `MutinyLocalizedText` 对英语继续使用 PirateFont/DangleFont 原图集；简中使用随包 Noto Sans CJK SC Regular OTF 动态字形。字体随资源打包，运行时按实际文本绘制，不预烘焙全部汉字。`OFL.txt` 随字体保存。今后日语、繁体中文应分别配置 JP、TC 地区字体，不能把 SC 当成通用汉字字形。字形检查记录具体码点；当前已检查全部 65 段对白及角落提示的实际字体布局尺寸，其余页面的溢出检测仍待补齐。
 - 已接入前端主要导航/说明/成绩/制作页、载入文字、战斗武器名和说明、回合/拾取提示、退出和结算弹窗。按用户更新要求，手动切换语言仅保留 GM 的 `setlanguage cn` / `setlanguage en` 入口；标题页不显示语言按钮。武器内部 ID 不翻译。事件队列保留待解析文案，切换语言后未显示及当前显示的提示会按新语言解析，且不重新开始其动画计时。
