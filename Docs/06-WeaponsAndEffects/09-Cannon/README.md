@@ -52,7 +52,8 @@
 | CAN-AI-02 | AI 的摆放方向和发射方向使用两次独立随机角度 | `Cannon.as:190`、`Cannon.as:199` | `MutinyAIController.EvaluateCannon()` | 静态检查两个独立 `Random.Range(0,360)` 采样 | 已实现；静态确认 |
 | CAN-AI-TURN-01 | AI 提交大炮后，25 tick 待发射期间保持当前回合；发射后镜头跟随炮弹，炮弹结算、大炮淡出且场面稳定后才允许静止计时与切换回合，不会在发射前创建下一回合空投。大炮／炮弹不受非原版 150 tick 安全超时强制结束；已存在的下落空投仍遵循原版较高镜头优先级 | `Team.as:89-96`；`Cannon.as:45-85,215-225`；`Cannonball.as:46-111`；`Character.as:172-175,226-250`；`Controller.as:200-240,185-195`；`TileSystem.as:438-459` | `MutinyCannon.IsAiFirePending`、`MutinyTurnManager.CheckAllBodiesAtRest()`、`MutinyCameraController.FindActionTarget()` | 经 AI 正式执行入口推进 24/25 tick，检查回合、炮弹和镜头目标；炮弹未结束时再等待 151 tick，随后检查结算与切换 | 原版静态确认；已实现、C# 编译通过；自动回归待 Unity 运行验证 |
 | CAN-SMOKE-02 | 每个未结束的炮弹 tick 仅留一团烟，原版在 `advanceMotion` 后取炮弹当前位置；Unity 高刷新率显示插值必须让新烟团留在炮弹本 tick 的可见轨迹上，不能先出现在可见炮弹前方 | `Cannonball.as::advance`；用户授权的 `CAM-PRES-01` 显示插值 | `MutinyCannonball.AdvanceOriginalTick`、`MutinyPhysicsBody` tick 起点 | 发射炮弹并推进正式物理 tick，比较烟团与当前显示轨迹；再推进中间渲染帧，确认炮弹从烟团向前移动 | 原版静态确认；已实现；隔离工程 Unity Play Mode 通过，主工程画面待验收 |
-| CAN-AUD-02 | 炮弹碰墙/地形在接触 tick 播放一次 `pop`；直接撞人生成爆炸但不播 `pop`；爆炸动画的第 3 帧只结算伤害、不追加声音 | `Cannonball.as::contact/advance`；`Explosion.as::hit` | `MutinyCannonball.Explode`、`MutinyExplosion.PlayPopOnHit` | 通过正式物理接触和角色重叠各生成爆炸，监听音频事件并执行爆炸命中入口，分别断言 1 次和 0 次 `pop` | 原版静态确认；已实现；隔离工程 Unity Play Mode 通过，主工程实际听感待验收 |
+| CAN-AUD-02 | 原版炮弹碰墙/地形在接触 tick 播放一次 `pop`；直接撞人生成爆炸但不播 `pop`；爆炸动画的第 3 帧只结算伤害、不追加声音 | `Cannonball.as::contact/advance`；`Explosion.as::hit` | `MutinyCannonball.Explode`、`MutinyExplosion.PlayPopOnHit` | 核对原版两个分支；Unity 实现按下方 `CAN-AUD-03` 的用户授权扩展验收 | 原版静态确认；Unity 直击分支有明确授权差异，不再登记为完全一致 |
+| CAN-AUD-03（用户授权扩展） | 炮弹直击角色也在命中当刻播放一次 `pop`；地形与角色碰撞回调即使重叠，只允许该炮弹播放一次，爆炸伤害帧不追加声音。原版直击角色分支无音效，故本规则明确不记为原版一致性 | 用户反馈；原版 `Cannonball.as::advance` 直击分支与 `contact` 地形分支的差异 | `MutinyCannonball.Explode` 统一一次性音效门 | 生产炮弹分别撞墙、直击角色并推进爆炸伤害帧；断言每颗只收到一次 `pop`，重复结束调用不再播放 | 已实现；2026-09-26 隔离工程 Unity Play Mode 专项 19/19 通过；主工程实际听感待验收 |
 
 ## 修复边界
 

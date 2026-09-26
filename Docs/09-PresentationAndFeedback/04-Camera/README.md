@@ -12,6 +12,14 @@
 
 ## 行为规格
 
+### 关卡初始镜头（2026-09-26）
+
+| ID | 可观察行为及状态转换 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
+| --- | --- | --- | --- | --- | --- |
+| CAM-INIT-01 | 每次进入、重开、切关，在开始自动运镜前同步重置到原版视口左上角 `(0,0)` 对应的镜头中心 `(275/32,-200/32)`；不继承上一局位置或滚屏速度、武器/角色/气泡目标 | `TileSystem.as::readXML:178-187`；`Controller.as::changeLevel` 新建 TileSystem | `MutinyLevelController.BuildLevel/Start`、`MutinyCameraController.ResetForLevel` | 从任意旧镜头位置经实际编号加载、重开、下一关和退出再加载入口检查重置、绑定新关和清除旧目标；烘焙旧场景走实际 Awake/Start | 静态确认、已实现；Unity 6000.6.0f1 隔离 Play Mode 专项 13/13 通过；主工程画面待验收 |
+| CAM-INIT-02 | 初始位置仍走原版边界与水位裁切；第 7/30 关视口左上角为 `(0,-32)`，第 13 关为 `(0,-192)`，其余关为 `(0,0)`；没有逐关独立镜头配置 | `TileSystem.as::panCamera:497-518`；原始 XML 的 water.y | `MutinyCameraController.ResetForLevel/ClampPosition` | 用真实关卡 1/7/13/30 资源加载，检查初始镜头像素中心分别为 `(275,200)/(275,168)/(275,8)/(275,168)` | 静态确认、已实现；上述真实资源加载断言通过；其余关卡画面未逐关运行 |
+| CAM-INIT-03 | 开场重置不瞬移到 speaker；speech 激活后从重置起点按 50 px/tick（显示帧等效速度）移向气泡记录位置，气泡隐藏的 10 tick 也可运镜 | `TileSystem.as::readXML/advanceScrolling:429-432`；`SpeechBubble.as::setTarget/advance` | `MutinySpeechController.Update/AdvanceSpeech`、`MutinyCameraController.AdvanceCamera` | 生产 StartGame、Update 同源 speech 推进、镜头更新链检查第一帧位移上限、方向和气泡未显示时运镜；实际画面另验收 | 静态确认、已实现；专项 120 FPS 首帧数值断言通过；完整两方 speech 画面待验收 |
+
 战斗背景由 `MutinyBattleBackground` 在镜头定位之后读取实际摄像机位置，以原版 550×400 舞台、32 PPU 和 `Water.as::advance` 的分层取模公式更新；镜头本身仍只修改视图，不修改物理坐标。三套图层按 `TileSystem.as` 的关卡编号分组选择。`VIS-BG-01` 已接入，待 Unity Play Mode 在关卡 1/6/11/16 逐帧核对。
 
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 当前结果 |
@@ -58,6 +66,6 @@
 | AND-CAM-02 | Android 空白处单指拖动提供桌面边缘滚屏的移动端替代操作；手指拖动地图内容，镜头作反向等比例移动，并继续使用生产镜头边界 | 用户授权的 Android 镜头适配要求 | `CanStartMobileTouchPan`、`PanByMobileTouchDelta`、`ScreenDeltaToWorldDelta` | 以不同屏幕宽高换算拖动量，断言相机正交可视范围与拖动比例一致；生产入口调用 `SetClampedPosition` | 已实现；C# 编译通过，待 Android 真机验证 |
 | AND-CAM-03 | 玩家用第一指蓄力时，第二指镜头拖动可越过原版“dragging 时不滚屏”的门；仅用户授权的第二触点可使用该分支，自动跟随目标、AI 回合和关卡边界仍保持生产约束 | 用户授权的 Android 多指扩展 | `CanStartMobileTouchPan(true)`、`PanByMobileTouchDelta(..., true)` | 普通触点在 aiming 时仍被拒绝；明确标记的第二镜头触点可平移 | 已实现；C# 编译通过，待 Android 真机验证 |
 
-手动滚屏时的原版 `scroll1/scroll2` 箭头及安卓拖动方向指示，按 [CUR-SCROLL-01 / AND-CUR-SCROLL-01](../08-CursorsAndTrajectory/README.md) 验收；Android 箭头读取钳制后的实际镜头位移，不在无法继续移动的边界显示。
+桌面手动滚屏时的原版 `scroll1/scroll2` 箭头按 [CUR-SCROLL-01](../08-CursorsAndTrajectory/README.md) 验收；用户已撤回安卓拖动方向箭头，安卓只保留触摸平移，按 [AND-CUR-SCROLL-02](../08-CursorsAndTrajectory/README.md) 验收。
 
 该条是移动端适配，不属于 Flash 原版规则变更。移动端镜头手势将另行定义，不能复用依赖“悬停”的桌面边缘滚屏。

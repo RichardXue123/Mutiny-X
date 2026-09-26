@@ -10,26 +10,42 @@ namespace Mutiny.Presentation
     public sealed class MutinyGMManager : MonoBehaviour
     {
         public static MutinyGMManager Instance { get; private set; }
-        public const float ButtonSize = 60f;
+        public const float CanvasReferenceWidth = 550f;
+        public const float CanvasReferenceHeight = 400f;
+        public const float BaseButtonSize = 30f;
+        public const float BaseButtonMargin = 4f;
+        public const int MaxRecentSuccessfulCommands = 5;
+
+        // Kept for backward compatibility
+        public const float ButtonSize = BaseButtonSize;
+
+        public static float CalculateScale(float screenWidth, float screenHeight)
+        {
+            return Mathf.Min(screenWidth / CanvasReferenceWidth, screenHeight / CanvasReferenceHeight);
+        }
 
         public static Rect ResolveButtonRect(float screenHeight)
         {
-            return new Rect(8f, (screenHeight - ButtonSize) * 0.5f, ButtonSize, ButtonSize);
+            return ResolveButtonRect(screenHeight * (CanvasReferenceWidth / CanvasReferenceHeight), screenHeight);
         }
 
         public static Rect ResolveButtonRect(float screenWidth, float screenHeight)
         {
-            float scale = Mathf.Min(screenWidth / 550f, screenHeight / 400f);
-            float canvasLeft = (screenWidth - 550f * scale) * 0.5f;
-            float x = canvasLeft + 8f;
-            float y = (screenHeight - ButtonSize) * 0.5f;
-            return new Rect(x, y, ButtonSize, ButtonSize);
+            float scale = CalculateScale(screenWidth, screenHeight);
+            float size = BaseButtonSize * scale;
+            float canvasLeft = (screenWidth - CanvasReferenceWidth * scale) * 0.5f;
+            float canvasTop = (screenHeight - CanvasReferenceHeight * scale) * 0.5f;
+            float x = canvasLeft + BaseButtonMargin * scale;
+            float y = canvasTop + (CanvasReferenceHeight * scale - size) * 0.5f;
+            return new Rect(x, y, size, size);
         }
 
         private bool m_IsOpen = false;
         private string m_InputText = "";
         private string m_StatusMessage = "Mutiny GM Console ready. Type 'help' for commands.";
         private Color m_StatusColor = new Color(0.4f, 1.0f, 0.5f, 1.0f);
+        private readonly List<string> m_RecentSuccessfulCommands = new List<string>();
+        public IReadOnlyList<string> RecentSuccessfulCommands => m_RecentSuccessfulCommands;
 
         // GUI Styles and Textures
         private Texture2D m_CircleNormalTex;
@@ -43,6 +59,8 @@ namespace Mutiny.Presentation
         private GUIStyle m_InputFieldStyle;
         private GUIStyle m_ActionButtonStyle;
         private GUIStyle m_StatusLabelStyle;
+        private GUIStyle m_RecentButtonStyle;
+        private GUIStyle m_RecentHeaderStyle;
 
         private const string FocusControlName = "GM_Command_Input";
         private bool m_NeedsFocus = false;
@@ -69,69 +87,95 @@ namespace Mutiny.Presentation
             DontDestroyOnLoad(gameObject);
         }
 
-        private void EnsureResources()
+        private void EnsureResources(float scale)
         {
-            if (m_CircleNormalTex != null)
-                return;
-
-            const int circleSize = (int)ButtonSize;
-            m_CircleNormalTex = CreateCircleTexture(circleSize, new Color(0.2f, 0.2f, 0.2f, 0.70f), new Color(0.6f, 0.6f, 0.6f, 0.85f), 3f);
-            m_CircleHoverTex = CreateCircleTexture(circleSize, new Color(0.35f, 0.35f, 0.35f, 0.90f), new Color(1.0f, 0.85f, 0.3f, 1.0f), 3f);
-
-            m_PanelBackgroundTex = CreateSolidTexture(new Color(0.08f, 0.09f, 0.12f, 0.90f));
-            m_InputBackgroundTex = CreateSolidTexture(new Color(0.15f, 0.16f, 0.20f, 0.95f));
-            m_ButtonBackgroundTex = CreateSolidTexture(new Color(0.24f, 0.26f, 0.34f, 0.95f));
-
-            m_CircleButtonStyle = new GUIStyle
+            if (m_CircleNormalTex == null)
             {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = 18,
-                fontStyle = FontStyle.Bold
-            };
-            m_CircleButtonStyle.normal.textColor = Color.white;
-            m_CircleButtonStyle.hover.textColor = new Color(1f, 0.92f, 0.45f);
+                const int circleTexResolution = 128;
+                m_CircleNormalTex = CreateCircleTexture(circleTexResolution, new Color(0.2f, 0.2f, 0.2f, 0.70f), new Color(0.6f, 0.6f, 0.6f, 0.85f), 6f);
+                m_CircleHoverTex = CreateCircleTexture(circleTexResolution, new Color(0.35f, 0.35f, 0.35f, 0.90f), new Color(1.0f, 0.85f, 0.3f, 1.0f), 6f);
 
-            m_PanelHeaderStyle = new GUIStyle
-            {
-                alignment = TextAnchor.MiddleLeft,
-                fontSize = 22,
-                fontStyle = FontStyle.Bold
-            };
-            m_PanelHeaderStyle.normal.textColor = new Color(0.95f, 0.85f, 0.45f);
+                m_PanelBackgroundTex = CreateSolidTexture(new Color(0.08f, 0.09f, 0.12f, 0.90f));
+                m_InputBackgroundTex = CreateSolidTexture(new Color(0.15f, 0.16f, 0.20f, 0.95f));
+                m_ButtonBackgroundTex = CreateSolidTexture(new Color(0.24f, 0.26f, 0.34f, 0.95f));
 
-            m_InputFieldStyle = new GUIStyle(GUI.skin.textField)
-            {
-                alignment = TextAnchor.MiddleLeft,
-                fontSize = 20,
-                fontStyle = FontStyle.Normal,
-                padding = new RectOffset(12, 12, 8, 8)
-            };
-            m_InputFieldStyle.normal.background = m_InputBackgroundTex;
-            m_InputFieldStyle.normal.textColor = Color.white;
-            m_InputFieldStyle.focused.background = m_InputBackgroundTex;
-            m_InputFieldStyle.focused.textColor = Color.white;
+                m_CircleButtonStyle = new GUIStyle
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    fontStyle = FontStyle.Bold
+                };
+                m_CircleButtonStyle.normal.textColor = Color.white;
+                m_CircleButtonStyle.hover.textColor = new Color(1f, 0.92f, 0.45f);
 
-            m_ActionButtonStyle = new GUIStyle(GUI.skin.button)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = 20,
-                fontStyle = FontStyle.Bold
-            };
-            m_ActionButtonStyle.normal.background = m_ButtonBackgroundTex;
-            m_ActionButtonStyle.normal.textColor = Color.white;
+                m_PanelHeaderStyle = new GUIStyle
+                {
+                    alignment = TextAnchor.MiddleLeft,
+                    fontStyle = FontStyle.Bold
+                };
+                m_PanelHeaderStyle.normal.textColor = new Color(0.95f, 0.85f, 0.45f);
 
-            m_StatusLabelStyle = new GUIStyle
-            {
-                alignment = TextAnchor.UpperLeft,
-                fontSize = 17,
-                wordWrap = true
-            };
-            m_StatusLabelStyle.normal.textColor = m_StatusColor;
+                m_InputFieldStyle = new GUIStyle(GUI.skin.textField)
+                {
+                    alignment = TextAnchor.MiddleLeft,
+                    fontStyle = FontStyle.Normal
+                };
+                m_InputFieldStyle.normal.background = m_InputBackgroundTex;
+                m_InputFieldStyle.normal.textColor = Color.white;
+                m_InputFieldStyle.focused.background = m_InputBackgroundTex;
+                m_InputFieldStyle.focused.textColor = Color.white;
+
+                m_ActionButtonStyle = new GUIStyle(GUI.skin.button)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    fontStyle = FontStyle.Bold
+                };
+                m_ActionButtonStyle.normal.background = m_ButtonBackgroundTex;
+                m_ActionButtonStyle.normal.textColor = Color.white;
+
+                m_StatusLabelStyle = new GUIStyle
+                {
+                    alignment = TextAnchor.UpperLeft,
+                    wordWrap = true
+                };
+                m_StatusLabelStyle.normal.textColor = m_StatusColor;
+
+                m_RecentButtonStyle = new GUIStyle(GUI.skin.button)
+                {
+                    alignment = TextAnchor.MiddleLeft,
+                    padding = new RectOffset(6, 4, 2, 2)
+                };
+                m_RecentButtonStyle.normal.background = m_ButtonBackgroundTex;
+                m_RecentButtonStyle.normal.textColor = Color.white;
+                m_RecentButtonStyle.hover.textColor = new Color(1f, 0.92f, 0.45f);
+
+                m_RecentHeaderStyle = new GUIStyle(m_StatusLabelStyle)
+                {
+                    fontStyle = FontStyle.Bold
+                };
+                m_RecentHeaderStyle.normal.textColor = new Color(0.75f, 0.81f, 0.91f);
+            }
+
+            // Dynamically scale fonts and paddings relative to canvas scale
+            m_CircleButtonStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(10f * scale));
+            m_PanelHeaderStyle.fontSize = Mathf.Max(11, Mathf.RoundToInt(12f * scale));
+
+            m_InputFieldStyle.fontSize = Mathf.Max(10, Mathf.RoundToInt(11f * scale));
+            int padX = Mathf.Max(4, Mathf.RoundToInt(6f * scale));
+            int padY = Mathf.Max(3, Mathf.RoundToInt(4f * scale));
+            m_InputFieldStyle.padding = new RectOffset(padX, padX, padY, padY);
+
+            m_ActionButtonStyle.fontSize = Mathf.Max(10, Mathf.RoundToInt(11f * scale));
+            m_StatusLabelStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(9.5f * scale));
+            m_RecentButtonStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(9f * scale));
+            m_RecentHeaderStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(9f * scale));
+            m_RecentButtonStyle.padding = new RectOffset(
+                Mathf.Max(4, Mathf.RoundToInt(6f * scale)), 4, 2, 2);
         }
 
         private void OnGUI()
         {
-            EnsureResources();
+            float scale = CalculateScale(Screen.width, Screen.height);
+            EnsureResources(scale);
 
             // Save GUI state
             Matrix4x4 prevMatrix = GUI.matrix;
@@ -142,7 +186,7 @@ namespace Mutiny.Presentation
             GUI.matrix = Matrix4x4.identity;
             GUI.color = Color.white;
 
-            // 1. Draw circular floating GM button on the left vertical center (reduced to 1/3: 60px)
+            // 1. Draw circular floating GM button on the left vertical center, relative to canvas scale
             Rect buttonRect = ResolveButtonRect(Screen.width, Screen.height);
             float btnSize = buttonRect.width;
             float btnX = buttonRect.x;
@@ -162,7 +206,7 @@ namespace Mutiny.Presentation
             // 2. Draw command window if open
             if (m_IsOpen)
             {
-                DrawCommandPanel(btnX + btnSize + 14f, btnY + btnSize * 0.5f);
+                DrawCommandPanel(btnX + btnSize + 8f * scale, btnY + btnSize * 0.5f, scale);
             }
 
             // Restore GUI state
@@ -170,52 +214,62 @@ namespace Mutiny.Presentation
             GUI.matrix = prevMatrix;
         }
 
-        private void DrawCommandPanel(float originX, float centerY)
+        private void DrawCommandPanel(float originX, float centerY, float scale)
         {
-            float panelWidth = Mathf.Min(680f, Screen.width - (originX + 15f));
-            float panelHeight = Mathf.Min(360f, Screen.height - 30f);
-            float panelY = Mathf.Clamp(centerY - panelHeight * 0.5f, 15f, Screen.height - panelHeight - 15f);
+            float panelWidth = Mathf.Min(360f * scale, Screen.width - (originX + 10f * scale));
+            float panelHeight = Mathf.Min(320f * scale, Screen.height - 20f * scale);
+            float panelY = Mathf.Clamp(centerY - panelHeight * 0.5f, 10f * scale, Screen.height - panelHeight - 10f * scale);
             Rect panelRect = new Rect(originX, panelY, panelWidth, panelHeight);
 
             // Semi-transparent background
             GUI.DrawTexture(panelRect, m_PanelBackgroundTex);
 
             // Border
-            DrawOutline(panelRect, new Color(0.40f, 0.45f, 0.60f, 0.85f), 2f);
+            DrawOutline(panelRect, new Color(0.40f, 0.45f, 0.60f, 0.85f), Mathf.Max(1f, 2f * scale));
 
             // Inner content layout
-            float padding = 16f;
+            float padding = 10f * scale;
             float contentWidth = panelWidth - padding * 2;
 
             // Header: Title & Close [X]
-            float headerHeight = 32f;
-            Rect headerRect = new Rect(panelRect.x + padding, panelRect.y + padding, contentWidth - 44f, headerHeight);
+            float headerHeight = 20f * scale;
+            float closeWidth = 22f * scale;
+            Rect headerRect = new Rect(panelRect.x + padding, panelRect.y + padding, contentWidth - closeWidth - 6f * scale, headerHeight);
             GUI.Label(headerRect, "MUTINY GM CONSOLE", m_PanelHeaderStyle);
 
-            Rect closeRect = new Rect(panelRect.xMax - padding - 36f, panelRect.y + padding, 36f, 32f);
+            Rect closeRect = new Rect(panelRect.xMax - padding - closeWidth, panelRect.y + padding, closeWidth, headerHeight);
             if (GUI.Button(closeRect, "X", m_ActionButtonStyle))
             {
                 m_IsOpen = false;
             }
 
             // Bottom section: Hint, Input row
-            float inputHeight = 46f;
-            float buttonWidth = 92f;
-            float hintHeight = 24f;
+            float inputHeight = 28f * scale;
+            float buttonWidth = 56f * scale;
+            float hintHeight = 16f * scale;
 
             float hintY = panelRect.yMax - padding - hintHeight;
-            float inputY = hintY - inputHeight - 8f;
+            float inputY = hintY - inputHeight - 6f * scale;
 
             // Status / Log Display Area (fills space between header and input)
-            float statusY = headerRect.yMax + 12f;
-            float statusHeight = inputY - statusY - 12f;
-            Rect statusRect = new Rect(panelRect.x + padding, statusY, contentWidth, statusHeight);
+            float statusY = headerRect.yMax + 6f * scale;
+            float statusHeight = inputY - statusY - 6f * scale;
+            float recentHeight = m_RecentSuccessfulCommands.Count > 0 ? 106f * scale : 0f;
+            float statusTextHeight = Mathf.Max(0f, statusHeight - recentHeight - (recentHeight > 0f ? 6f * scale : 0f));
+            Rect statusRect = new Rect(panelRect.x + padding, statusY, contentWidth, statusTextHeight);
             m_StatusLabelStyle.normal.textColor = m_StatusColor;
             GUI.Label(statusRect, m_StatusMessage, m_StatusLabelStyle);
 
+            if (recentHeight > 0f)
+            {
+                Rect recentRect = new Rect(panelRect.x + padding, statusRect.yMax + 6f * scale,
+                    contentWidth, recentHeight);
+                DrawRecentCommands(recentRect, scale);
+            }
+
             // Input field & Submit button
-            Rect inputRect = new Rect(panelRect.x + padding, inputY, contentWidth - buttonWidth - 10f, inputHeight);
-            Rect runRect = new Rect(inputRect.xMax + 10f, inputY, buttonWidth, inputHeight);
+            Rect inputRect = new Rect(panelRect.x + padding, inputY, contentWidth - buttonWidth - 6f * scale, inputHeight);
+            Rect runRect = new Rect(inputRect.xMax + 6f * scale, inputY, buttonWidth, inputHeight);
 
             GUI.SetNextControlName(FocusControlName);
             m_InputText = GUI.TextField(inputRect, m_InputText, m_InputFieldStyle);
@@ -243,10 +297,33 @@ namespace Mutiny.Presentation
             Rect hintRect = new Rect(panelRect.x + padding, hintY, contentWidth, hintHeight);
             var hintStyle = new GUIStyle(m_StatusLabelStyle)
             {
-                fontSize = 14,
+                fontSize = Mathf.Max(8, Mathf.RoundToInt(8f * scale)),
                 normal = { textColor = new Color(0.65f, 0.70f, 0.80f, 0.9f) }
             };
             GUI.Label(hintRect, "Tip: Type 'UnlockWeapons' or 'UnlockAllLevels' and press Enter.", hintStyle);
+        }
+
+        private void DrawRecentCommands(Rect area, float scale)
+        {
+            GUI.Label(new Rect(area.x, area.y, area.width, 16f * scale),
+                "RECENT SUCCESSFUL COMMANDS", m_RecentHeaderStyle);
+            float buttonHeight = 26f * scale;
+            float gap = 3f * scale;
+            float buttonWidth = (area.width - gap) * 0.5f;
+            int count = Mathf.Min(m_RecentSuccessfulCommands.Count, MaxRecentSuccessfulCommands);
+            for (int i = 0; i < count; i++)
+            {
+                int row = i / 2;
+                int column = i % 2;
+                Rect buttonRect = new Rect(area.x + column * (buttonWidth + gap),
+                    area.y + 20f * scale + row * (buttonHeight + gap), buttonWidth, buttonHeight);
+                string command = m_RecentSuccessfulCommands[i];
+                if (GUI.Button(buttonRect, command, m_RecentButtonStyle))
+                {
+                    RunRecentCommand(i);
+                    break;
+                }
+            }
         }
 
         private void SubmitCommand()
@@ -261,10 +338,18 @@ namespace Mutiny.Presentation
             ExecuteCommand(command);
         }
 
-        public void ExecuteCommand(string rawCommand)
+        public bool RunRecentCommand(int index)
+        {
+            if (index < 0 || index >= m_RecentSuccessfulCommands.Count)
+                return false;
+            return ExecuteCommand(m_RecentSuccessfulCommands[index]);
+        }
+
+        public bool ExecuteCommand(string rawCommand)
         {
             string cmd = rawCommand.Trim();
             string lower = cmd.ToLowerInvariant();
+            bool succeeded = false;
 
             Debug.Log($"[MutinyGM] Executing command: '{cmd}'", this);
 
@@ -273,12 +358,14 @@ namespace Mutiny.Presentation
                 MutinySaveSystem.HighestUnlockedLevel = MutinySaveSystem.MaxLevel;
                 m_StatusColor = new Color(0.35f, 1.0f, 0.45f);
                 m_StatusMessage = $"[SUCCESS] All levels unlocked! (1..{MutinySaveSystem.MaxLevel})\nHighestUnlockedLevel is now {MutinySaveSystem.HighestUnlockedLevel}.";
+                succeeded = true;
             }
             else if (lower == "resetlevels" || lower == "resetprogress" || lower == "lockall")
             {
                 MutinySaveSystem.ResetProgress();
                 m_StatusColor = new Color(1.0f, 0.85f, 0.35f);
                 m_StatusMessage = $"[RESET] Level progress reset to default.\nHighestUnlockedLevel is now {MutinySaveSystem.HighestUnlockedLevel}.";
+                succeeded = true;
             }
             else if (lower.StartsWith("aiforceusewaepon", StringComparison.Ordinal))
             {
@@ -297,6 +384,7 @@ namespace Mutiny.Presentation
                     m_StatusMessage = weaponId == 0
                         ? "[SUCCESS] AI weapon override disabled; actual inventory restored."
                         : $"[SUCCESS] All AI teams now consider only infinite weapon {weaponId} ({MutinyAIController.ForcedWeaponType}). Jump and pass remain available.";
+                    succeeded = true;
                 }
             }
             else if (lower == "unlockweapons" || lower == "unlockallweapons" || lower == "infiniteweapons" ||
@@ -319,6 +407,7 @@ namespace Mutiny.Presentation
                     }
                     m_StatusColor = new Color(0.35f, 1.0f, 0.45f);
                     m_StatusMessage = $"[SUCCESS] Unlocked all 15 weapons (infinite ammo) for {unlockedCount} characters on Team 1!";
+                    succeeded = true;
                 }
                 else
                 {
@@ -336,6 +425,7 @@ namespace Mutiny.Presentation
 
                         m_StatusColor = new Color(0.35f, 1.0f, 0.45f);
                         m_StatusMessage = $"[SUCCESS] All 15 weapons unlocked (infinite ammo) for {detail}!";
+                        succeeded = true;
                     }
                     else
                     {
@@ -349,16 +439,25 @@ namespace Mutiny.Presentation
                 m_StatusColor = new Color(0.5f, 0.85f, 1.0f);
                 m_StatusMessage = "Available GM Commands:\n" +
                                   "• UnlockWeapons   - Unlocks all 15 weapons (infinite ammo) for current character\n" +
-                                  "• UnlockAllLevels - Unlocks all 1..18 levels\n" +
+                                  $"• unlockalllevels - Unlocks all 1..{MutinySaveSystem.MaxLevel} levels\n" +
                                   "• ResetLevels     - Resets progress to level 1\n" +
                                   "• aiforceusewaepon 1..15 - Forces one infinite AI weapon; 0 disables\n" +
                                   "• Help            - Shows this help message";
+                succeeded = true;
             }
             else
             {
                 m_StatusColor = new Color(1.0f, 0.45f, 0.45f);
                 m_StatusMessage = $"[ERROR] Unknown command: '{cmd}'\nType 'help' to view available commands.";
             }
+
+            if (succeeded)
+            {
+                m_RecentSuccessfulCommands.Insert(0, cmd);
+                if (m_RecentSuccessfulCommands.Count > MaxRecentSuccessfulCommands)
+                    m_RecentSuccessfulCommands.RemoveAt(MaxRecentSuccessfulCommands);
+            }
+            return succeeded;
         }
 
         private MutinyCharacter FindTargetCharacter(out string detail)

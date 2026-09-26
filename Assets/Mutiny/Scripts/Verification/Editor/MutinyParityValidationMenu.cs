@@ -9,11 +9,15 @@ namespace Mutiny.Verification.Editor
     public static class MutinyParityValidationMenu
     {
         private const string CameraMovementVerificationKey = "Mutiny.CameraMovementPlayModeVerification";
+        private const string CameraInitializationVerificationKey = "Mutiny.CameraInitializationPlayModeVerification";
         private const string CannonEffectsVerificationKey = "Mutiny.CannonEffectsPlayModeVerification";
         private const string WeaponLifecycleVerificationKey = "Mutiny.WeaponLifecyclePlayModeVerification";
         private const string ScrollArrowVerificationKey = "Mutiny.ScrollArrowPlayModeVerification";
         private const string LevelLifecycleVerificationKey = "Mutiny.LevelLifecyclePlayModeVerification";
         private const string AnchorAnimationVerificationKey = "Mutiny.AnchorAnimationPlayModeVerification";
+        private const string PiecesOfEightPresentationVerificationKey = "Mutiny.PiecesOfEightPresentationPlayModeVerification";
+        private const string AimCancelTouchVerificationKey = "Mutiny.AimCancelTouchPlayModeVerification";
+        private const string CharacterAimOverlayVerificationKey = "Mutiny.CharacterAimOverlayPlayModeVerification";
 
         static MutinyParityValidationMenu()
         {
@@ -26,25 +30,38 @@ namespace Mutiny.Verification.Editor
                 return;
 
             bool verifyCamera = SessionState.GetBool(CameraMovementVerificationKey, false);
+            bool verifyCameraInitialization = SessionState.GetBool(CameraInitializationVerificationKey, false);
             bool verifyCannon = SessionState.GetBool(CannonEffectsVerificationKey, false);
             bool verifyWeaponLifecycle = SessionState.GetBool(WeaponLifecycleVerificationKey, false);
             bool verifyScrollArrow = SessionState.GetBool(ScrollArrowVerificationKey, false);
             bool verifyLevelLifecycle = SessionState.GetBool(LevelLifecycleVerificationKey, false);
             bool verifyAnchorAnimation = SessionState.GetBool(AnchorAnimationVerificationKey, false);
-            if (!verifyCamera && !verifyCannon && !verifyWeaponLifecycle && !verifyScrollArrow &&
-                !verifyLevelLifecycle && !verifyAnchorAnimation)
+            bool verifyPiecesOfEightPresentation = SessionState.GetBool(PiecesOfEightPresentationVerificationKey, false);
+            bool verifyAimCancelTouch = SessionState.GetBool(AimCancelTouchVerificationKey, false);
+            bool verifyCharacterAimOverlay = SessionState.GetBool(CharacterAimOverlayVerificationKey, false);
+            if (!verifyCamera && !verifyCameraInitialization && !verifyCannon && !verifyWeaponLifecycle && !verifyScrollArrow &&
+                !verifyLevelLifecycle && !verifyAnchorAnimation && !verifyPiecesOfEightPresentation &&
+                !verifyAimCancelTouch && !verifyCharacterAimOverlay)
                 return;
 
             SessionState.EraseBool(CameraMovementVerificationKey);
+            SessionState.EraseBool(CameraInitializationVerificationKey);
             SessionState.EraseBool(CannonEffectsVerificationKey);
             SessionState.EraseBool(WeaponLifecycleVerificationKey);
             SessionState.EraseBool(ScrollArrowVerificationKey);
             SessionState.EraseBool(LevelLifecycleVerificationKey);
             SessionState.EraseBool(AnchorAnimationVerificationKey);
+            SessionState.EraseBool(PiecesOfEightPresentationVerificationKey);
+            SessionState.EraseBool(AimCancelTouchVerificationKey);
+            SessionState.EraseBool(CharacterAimOverlayVerificationKey);
             bool passed = false;
             try
             {
                 MutinyLevel1VerificationResult result =
+                    verifyCameraInitialization ? MutinyTurnActionUiVerificationTest.RunCameraInitialization() :
+                    verifyCharacterAimOverlay ? MutinyTurnActionUiVerificationTest.RunCharacterAimOverlay() :
+                    verifyAimCancelTouch ? MutinyTurnActionUiVerificationTest.RunAimCancelTouch() :
+                    verifyPiecesOfEightPresentation ? MutinyTurnActionUiVerificationTest.RunPiecesOfEightPresentation() :
                     verifyAnchorAnimation ? MutinyTurnActionUiVerificationTest.RunAnchorAnimation() :
                     verifyLevelLifecycle ? MutinyTurnActionUiVerificationTest.RunLevelLifecycle() :
                     verifyScrollArrow ? MutinyTurnActionUiVerificationTest.RunScrollArrows() :
@@ -52,7 +69,11 @@ namespace Mutiny.Verification.Editor
                         verifyWeaponLifecycle ? MutinyTurnActionUiVerificationTest.RunWeaponLifecycle() :
                             MutinyTurnActionUiVerificationTest.RunCameraMovement();
                 passed = result.Passed;
-                string label = verifyAnchorAnimation ? "Anchor animation" :
+                string label = verifyCameraInitialization ? "Camera initialization" :
+                    verifyCharacterAimOverlay ? "Character aim overlay" :
+                    verifyAimCancelTouch ? "Aim cancel touch" :
+                    verifyPiecesOfEightPresentation ? "Pieces of Eight presentation" :
+                    verifyAnchorAnimation ? "Anchor animation" :
                     verifyLevelLifecycle ? "Level lifecycle" :
                     verifyScrollArrow ? "Scroll arrows" :
                     verifyCannon ? "Cannon effects" :
@@ -203,6 +224,16 @@ namespace Mutiny.Verification.Editor
                 EditorApplication.EnterPlaymode();
         }
 
+        [MenuItem("Mutiny/Parity/Validate Pieces of Eight Presentation Play Mode")]
+        public static void ValidatePiecesOfEightPresentationPlayMode()
+        {
+            SessionState.SetBool(PiecesOfEightPresentationVerificationKey, true);
+            if (EditorApplication.isPlaying)
+                OnPlayModeStateChanged(PlayModeStateChange.EnteredPlayMode);
+            else
+                EditorApplication.EnterPlaymode();
+        }
+
         [MenuItem("Mutiny/Parity/Validate GM Commands")]
         public static void ValidateGMCommands()
         {
@@ -262,6 +293,36 @@ namespace Mutiny.Verification.Editor
             else
                 Debug.LogError("[Mutiny Parity] Weapon ready/cancel verification failed:\n" +
                                string.Join("\n", result.Failures));
+        }
+
+        [MenuItem("Mutiny/Parity/Validate Aim Cancel Touch Play Mode")]
+        public static void ValidateAimCancelTouchPlayMode()
+        {
+            SessionState.SetBool(AimCancelTouchVerificationKey, true);
+            if (EditorApplication.isPlaying)
+                OnPlayModeStateChanged(PlayModeStateChange.EnteredPlayMode);
+            else
+                EditorApplication.EnterPlaymode();
+        }
+
+        [MenuItem("Mutiny/Parity/Validate Camera Initialization Play Mode")]
+        public static void ValidateCameraInitializationPlayMode()
+        {
+            SessionState.SetBool(CameraInitializationVerificationKey, true);
+            if (EditorApplication.isPlaying)
+                OnPlayModeStateChanged(PlayModeStateChange.EnteredPlayMode);
+            else
+                EditorApplication.EnterPlaymode();
+        }
+
+        [MenuItem("Mutiny/Parity/Validate Character Aim Overlay Play Mode")]
+        public static void ValidateCharacterAimOverlayPlayMode()
+        {
+            SessionState.SetBool(CharacterAimOverlayVerificationKey, true);
+            if (EditorApplication.isPlaying)
+                OnPlayModeStateChanged(PlayModeStateChange.EnteredPlayMode);
+            else
+                EditorApplication.EnterPlaymode();
         }
     }
 }

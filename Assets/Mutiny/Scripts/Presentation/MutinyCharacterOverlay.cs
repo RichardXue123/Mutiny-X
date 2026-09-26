@@ -41,6 +41,7 @@ namespace Mutiny.Presentation
 
         public bool IsTurnIndicatorVisible => m_Indicator != null && m_Indicator.activeInHierarchy;
         public bool IsHealthBarVisible => m_HealthBar != null && m_HealthBar.activeInHierarchy;
+        public bool IsSelectionCornersVisible => m_SelectionCorners != null && m_SelectionCorners.activeInHierarchy;
         public bool IsVoodooTargetVisible => m_VoodooTarget != null && m_VoodooTarget.activeInHierarchy;
         public bool IsCancelWeaponVisible => m_CancelWeapon != null && m_CancelWeapon.activeInHierarchy;
         public int CurrentHealthFrame => 1 + Mathf.Max(0, m_LastHealthSegments);
@@ -103,15 +104,15 @@ namespace Mutiny.Presentation
             ResolveTeam();
             bool isCurrentTeam = m_Team != null &&
                                  FindAnyObjectByType<MutinyTurnManager>()?.CurrentTeam == m_Team;
-            bool isDragged = IsCharacterThrowDragged();
             bool isSelfThrown = m_Character.IsSelfThrown;
 
-            // Character.updateOverlay: triangle = current team && !dragging/self-throw
-            // && alive && speechBubble.target != character. Physical velocity
-            // alone does not set Character.thrown in Flash.
+            // Character is twangable, not draggable (Character.as constructor).
+            // Aiming maps to Controller.twanging, which updateOverlay never
+            // suppresses. Hide only after the self-throw has actually committed;
+            // passive physics motion does not set Character.thrown either.
             if (m_Speech == null)
                 m_Speech = GetComponentInParent<MutinySpeechController>();
-            bool hideForCharacterAction = isDragged || isSelfThrown;
+            bool hideForCharacterAction = isSelfThrown;
             bool showIndicator = isCurrentTeam && !hideForCharacterAction &&
                                  (m_Speech == null || !m_Speech.HasActiveBubble || m_Speech.Speaker != m_Character);
             bool showHealth = !hideForCharacterAction;
@@ -185,12 +186,6 @@ namespace Mutiny.Presentation
                     return;
                 }
             }
-        }
-
-        private bool IsCharacterThrowDragged()
-        {
-            MutinyPlayerInput playerInput = FindAnyObjectByType<MutinyPlayerInput>();
-            return playerInput != null && playerInput.IsCharacterThrowDragInProgress(m_Character);
         }
 
         private void CreateOverlayUI()

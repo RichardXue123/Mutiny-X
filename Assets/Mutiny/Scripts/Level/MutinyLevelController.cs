@@ -1,5 +1,6 @@
 using System;
 using Mutiny.Diagnostics;
+using Mutiny.Presentation;
 using Mutiny.Simulation;
 using UnityEngine;
 
@@ -101,6 +102,11 @@ namespace Mutiny.Levels
             if (m_BuildOnStart && m_CurrentLevel == null && m_LevelXml != null)
             {
                 BuildLevel();
+            }
+            else if (m_CurrentLevel != null)
+            {
+                // Legacy/baked levels do not pass through BuildLevel at runtime.
+                MutinyCameraController.ResetCamerasForLevel(m_CurrentLevel);
             }
         }
 
@@ -244,6 +250,7 @@ namespace Mutiny.Levels
                     m_HasMenuSessionMode ? (MutinyGameMode?)SessionMode : null);
                 m_CurrentLevel = levelObj.GetComponent<MutinyLevelRoot>();
                 BindLevelController(m_CurrentLevel, this);
+                MutinyCameraController.ResetCamerasForLevel(m_CurrentLevel);
                 Debug.Log($"[MutinyLevelController] Built level '{levelData.Name}': {levelData.Width}x{levelData.Height}, {m_CurrentLevel.Characters.Count} characters.");
             }
             catch (Exception ex)

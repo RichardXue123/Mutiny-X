@@ -224,11 +224,11 @@ namespace Mutiny.Presentation
 
         private static Texture2D LoadAvatarTexture()
         {
-            Texture2D texture = Resources.Load<Texture2D>("UI/Frontend/richard_xue");
+            Texture2D texture = Resources.Load<Texture2D>("UI/Frontend/XingTong");
             if (texture != null)
                 return texture;
 
-            string directPath = System.IO.Path.Combine(Application.dataPath, "Mutiny/Art/Logo/RichardXue.jpg");
+            string directPath = System.IO.Path.Combine(Application.dataPath, "Mutiny/Art/Logo/XingTong.png");
             if (System.IO.File.Exists(directPath))
             {
                 byte[] data = System.IO.File.ReadAllBytes(directPath);
@@ -452,10 +452,6 @@ namespace Mutiny.Presentation
                 Rect avatarClickRect = new Rect(avatarRect.x - 1f, avatarRect.y - 1f, avatarRect.width + 2f, avatarRect.height + 15f);
                 avatarHovered = !MutinyTransitionManager.IsTransitionActive && avatarClickRect.Contains(mousePos);
 
-                Color prevColor = GUI.color;
-                GUI.color = avatarHovered ? LinkHoverColor : Color.black;
-                GUI.DrawTexture(new Rect(avatarRect.x - 1f, avatarRect.y - 1f, avatarRect.width + 2f, avatarRect.height + 2f), Texture2D.whiteTexture);
-                GUI.color = prevColor;
                 DrawTexture(avatarRect, m_CreditsAvatar);
 
                 float avatarCenterX = avatarRect.x + avatarRect.width * 0.5f;

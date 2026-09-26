@@ -6,6 +6,14 @@
 
 为每个活着的角色显示世界空间叠加 UI：回合指示器（P1/P2/CPU 三角形）、离散血条、选择框、巫毒标靶和取消武器按钮。
 
+## 行为规格
+
+| ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
+| --- | --- | --- | --- | --- | --- |
+| CHAR-OVR-AIM-01 | Throw Self/跳跃拉线蓄力属于 `twanging` 而不是 `dragging`，当前角色 P1/P2 标记、选择框、血条和取消叉保持可见；松开正式起跳才按 `thrown` 隐藏。取消蓄力不消耗跳跃，其他角色不受影响 | `Character.as:68-69,126-143,176-179,742-747`；`TileSystem.as:740-746,760-763`；对应 pcode；用户提供的原版截图 | `MutinyCharacterOverlay.LateUpdate`、`MutinyPlayerInput.TryBeginAimFromPrimaryPointer/ResolveAimRelease/ShouldShowCancelWeapon` | 生产选取跳跃→蓄力并显示轨迹→检查四项 UI→右键/叉取消→重新蓄力并正常松开起跳→检查隐藏与行动结算恢复 | 原版静态确认与用户截图一致；已实现；2026-09-26 Unity 6000.6.0f1 隔离 Play Mode 共 25/25 断言通过（本规则 7 条、既有覆盖层 13 条、触屏取消 5 条）；主工程画面及安卓真机待验收 |
+
+2026-09-26 更正：此前把 `Aiming` 等同于 `Controller.dragging` 的结论错误。原版角色 `draggable=false、twangable=true`；`updateOverlay` 没有用 `Controller.twanging` 隐藏标记、血条、选择框或取消叉。安卓第二指取消/松手落在叉上取消仍是输入适配扩展，但“蓄力显示叉”本身不是扩展。
+
 ## 原版 Flash 对应
 
 | Unity 类 | Flash 对应 | 说明 |
@@ -70,16 +78,17 @@ MutinyCharacterOverlay (MonoBehaviour)
 
 ```
 角色已死亡 → 隐藏全部
-├── showIndicator = 当前回合队伍 && !拖拽中 && !自抛中
-├── showHealth   = !拖拽中 && !自抛中
+├── showIndicator = 当前回合队伍 && !自抛中 && 非当前说话角色
+├── showHealth   = !自抛中
 ├── showVoodooTarget = 巫毒瞄准中 && (目标==本角色 || (无目标&&本角色被悬停))
 ├── showCancelWeapon = PlayerInput.ShouldShowCancelWeapon(本角色)
-└── showCorners  = !巫毒瞄准全局 && (被选中||被悬停) && !拖拽中 && !自抛中
+└── showCorners  = !巫毒瞄准全局 && (被选中||被悬停) && !自抛中
 ```
 
 关键边界：
 - **巫毒瞄准全局隐藏选择框**：`Character.updateOverlay` 在任何角色有未发射巫毒娃娃时强制关闭所有角色的 corners
 - **物理运动不隐藏指示器**：爆炸/碰撞推动不算 `Character.thrown`，原版中不关闭 overlay
+- **拉线蓄力不隐藏覆盖层**：角色只能 `twang`，不能 `drag`；原版 `Controller.dragging == this` 对正常角色蓄力不成立。只有已经提交的自抛才抑制角色覆盖层。
 
 ### 4. 指示器精灵切换 (`UpdateIndicatorSprite`)
 
@@ -129,8 +138,8 @@ frame = 1 + Clamp(Ceil(27 * shownHealth / Max(1, maxHealth)), 0, 27)
 - 显示条件由 `MutinyPlayerInput.ShouldShowCancelWeapon()` 控制：
   - 角色是当前选中角色
   - 角色存活且武器未锁定
-  - 交互状态为 `WeaponReady`
-  - 有已装备但未发射的武器
+  - 交互状态为 `WeaponReady` 或 `Aiming`，且角色尚未正式自抛
+  - 有已装备但未发射的武器，或已选择可用的 Throw Self/跳跃
 
 ## SortingOrder 分层
 
@@ -163,7 +172,7 @@ frame = 1 + Clamp(Ceil(27 * shownHealth / Max(1, maxHealth)), 0, 27)
 |---|---|---|
 | 读取 | `MutinyCharacter` | `IsAlive`、`Health`、`ShownHealth`、`MaxHealth`、`IsSelected`、`IsHovered`、`TeamIndex`、`IsSelfThrown` |
 | 读取 | `MutinyTurnManager` | `CurrentTeam` |
-| 读取 | `MutinyPlayerInput` | `IsCharacterThrowDragInProgress()`、`ArmedVoodooDoll`、`ShouldShowCancelWeapon()` |
+| 读取 | `MutinyPlayerInput` | `ArmedVoodooDoll`、`ShouldShowCancelWeapon()` |
 | 读取 | `MutinyTeam` | `IsAiControlled`、`Characters` |
 | 监听 | `MutinyCharacter.OnHealthChanged` | 触发血条刷新 |
 | 监听 | `MutinyCharacter.OnDeath` | 隐藏全部覆盖层 |
@@ -173,5 +182,5 @@ frame = 1 + Clamp(Ceil(27 * shownHealth / Max(1, maxHealth)), 0, 27)
 - 角色旋转时覆盖层保持正向（overlay root rotation = identity）
 - 血条帧 1-28 与 ShownHealth 线性映射，满血=28、0 血=1
 - 巫毒瞄准全局隐藏所有角色的选择框
-- 取消按钮在 WeaponReady + 未锁定时显示：既包括未发射的装备武器，也包括已选择但尚未拉线的 Throw Self/跳跃；进入 Aiming 后隐藏
-- 指示器在角色被拖拽投掷或自抛时隐藏
+- 取消按钮在 WeaponReady/Aiming + 未锁定且未自抛时显示：既包括未发射的装备武器，也包括已选择的 Throw Self/跳跃
+- 正常跳跃蓄力保留 P1/P2 标记、选择框、血条和取消叉；正式提交自抛后才隐藏，行动延续时恢复对应资格下的 UI

@@ -127,6 +127,8 @@
       position: sticky;
       top: 1rem;
       align-self: start;
+      max-height: calc(100vh - 2rem);
+      overflow-y: auto;
       padding: 1rem;
       border: 1px solid var(--line);
       border-radius: .8rem;
@@ -339,7 +341,7 @@
     <p class="eyebrow">Mutiny Flash → Unity</p>
     <h1>AI 完整逻辑流程</h1>
     <p class="lede">从回合门、角色移动、空投价值、15 种武器候选，到镜头等待与正式执行。本页同时标明原版规则、Unity 当前入口和仍需运行验证的边界。</p>
-    <div class="stamp">实现基线 2026-09-25 · 原版 AS2 静态证据已核对</div>
+    <div class="stamp">源码核对 2026-09-26 · 描述当前 Unity 实现，非策略设计提案</div>
   </header>
 
   <div class="stats" aria-label="实现摘要">
@@ -353,11 +355,15 @@
     <nav aria-label="页面目录">
       <b>流程导航</b>
       <a href="#overview">一回合总流程</a>
+      <a href="#eligibility">行动资格与胜出规则</a>
       <a href="#choice">怎么决定移动</a>
+      <a href="#math">评分公式与顺序</a>
       <a href="#airdrop">怎么判断空投</a>
       <a href="#weapons">怎么选择武器</a>
       <a href="#catalog">15 种武器清单</a>
+      <a href="#random">Luck 与随机数</a>
       <a href="#timing">执行与镜头</a>
+      <a href="#example">完整回合示例</a>
       <a href="#levels">关卡是否不同</a>
       <a href="#parity">原版对齐与差异</a>
       <a href="#verification">验证状态</a>
@@ -376,7 +382,7 @@
           <article class="flow-card"><b>先生成移动候选</b><p>每个可移动角色先生成 50 次 Throw Self 弹道，再逐条评分。</p></article>
           <article class="flow-card"><b>再生成武器候选</b><p>按库存去重、逐件评价；普通武器读取正式初始化的物理状态。</p></article>
           <article class="flow-card branch"><b>严格选最高分</b><p>只在新分数严格更高时替换；同分保留先出现候选。</p></article>
-          <article class="flow-card"><b>应用放弃规则</b><p>首次行动不能放弃；移动后的第二阶段只执行正分武器。</p></article>
+          <article class="flow-card"><b>应用放弃规则</b><p>首次行动有候选就选最高分；移动后的第二阶段只执行正分武器。</p></article>
           <article class="flow-card"><b>选中胜出角色</b><p>候选携带角色、武器、速度、目标或专用参数。</p></article>
           <article class="flow-card"><b>平移到胜出角色</b><p>显式请求镜头目标，并等待目标真正清空。</p></article>
           <article class="flow-card execute"><b>调用正式生产入口</b><p>预测只负责选择；真正伤害、爆炸、库存和时序由武器对象执行。</p></article>
@@ -384,8 +390,21 @@
         </div>
 
         <div class="callout">
-          <strong>两个关键门：</strong>首次行动即使最高分 ≤ 0，也执行“最不坏”的候选；只有已经移动过的续行动，才会在最佳武器分 ≤ 0 时 Pass。
+          <strong>两个关键门：</strong>首次行动只要有候选，即使最高分 ≤ 0，也执行“最不坏”的候选；若根本没有候选则 Pass。已经移动过的续行动，最佳武器分 ≤ 0 或没有候选时 Pass。
         </div>
+      </section>
+
+      <section id="eligibility">
+        <h2>谁能行动，谁能胜出</h2>
+        <p>入口是 <code>MutinyAIController.ExecuteAITurnRoutine</code>。只有游戏处于 <code>TurnActive</code>、当前队伍正是该 AI 队、队伍有存活角色时才求值；等待态不求值，队伍切换、战败或游戏结束则取消。思考开始时读取地形、水线、双方角色、库存和强制武器设置，建立本次决策的随机流。</p>
+        <table>
+          <thead><tr><th>阶段</th><th>参与角色</th><th>可加入候选</th><th>结束规则</th></tr></thead>
+          <tbody>
+            <tr><td>首次行动</td><td>按队伍角色顺序遍历全部存活队友</td><td><code>CanThrow</code> 时 50 个跳跃；<code>CanShoot</code> 时当前有效库存的武器</td><td>选全体最高分；分数可为负；无候选才 Pass</td></tr>
+            <tr><td>跳跃后续</td><td>仅已选中且存活、<code>!CanThrow &amp;&amp; CanShoot</code> 的角色</td><td>只枚举该角色的武器，不再跳跃，也不换其他队友</td><td>仅当最高分 <code>&gt; 0</code> 时开火，否则 Pass</td></tr>
+          </tbody>
+        </table>
+        <p>遍历顺序是<strong>每名角色先全部跳跃样本，后按库存顺序逐种武器</strong>。武器同名库存去重，数量不会增加候选采样。候选共享一个最高分池；新候选必须<strong>严格大于</strong>当前最高分才能替换，所以同分保留较早生成的候选。比较的是启发式分数，不是预计真实伤害或胜率。</p>
       </section>
 
       <section id="choice">
@@ -393,8 +412,9 @@
         <div class="decision-grid">
           <article class="card">
             <h3>候选生成</h3>
-            <span class="formula">angle = 180 + random(0..179)°
-force = random[5, 20)
+            <span class="formula">angle = 180 + NextInt(0, 180)°  // 180..359
+force = NextFloat(5, 20)
+velocity = (cos(angle), sin(angle)) × force
 samples = 50</span>
             <p>角色用正式角色物理参数和共享箱体障碍向前模拟，直到水平速度为 0 且 <code>|vy| ≤ 0.2</code>，或落入水线。4096 tick 只是异常地图安全门，不是正常玩法终止条件。</p>
           </article>
@@ -418,8 +438,52 @@ samples = 50</span>
           <div class="card"><b>空投</b><p>到未完成宝箱最终落地点严格小于 40 px 时，每箱 <code>+0.5</code>。</p></div>
           <div class="card"><b>移动距离</b><p>接近但略小于 300 px 的有效移动最有利；近乎原地和 ≥300 px 都受惩罚。</p></div>
           <div class="card"><b>Evilness</b><p>每处理一个敌人后，用 <code>1 + enemy.Evilness</code> 放大当时累计分数。</p></div>
-          <div class="card"><b>Cherry 源码怪癖</b><p>有 Cherry Bomb 时额外做 10 次后续收益采样，但原版实际上重复使用移动落点；Unity 保留该行为。</p></div>
+          <div class="card"><b>Cherry 源码怪癖</b><p>有 Cherry Bomb 时，每个跳跃候选额外消耗 10 次随机投掷抽样；评分实际上重复使用同一个移动落点。正收益还会被累计 10 次。</p></div>
         </div>
+      </section>
+
+      <section id="math">
+        <h2>评分细节：公式与运算顺序</h2>
+        <p>坐标单位是像素，Y 向下为正；所有距离都是二维欧氏距离。下列顺序就是代码顺序，尤其 <code>Evilness</code> 是在敌人循环<strong>内部</strong>乘到当时累计分数上，不能改写成最后统一乘一次。只有活着的敌我参与距离加减；跳跃的敌方中心则用收集到的敌方角色位置求平均。</p>
+        <div class="decision-grid">
+          <article class="card"><h3>跳跃落点 <code>L</code></h3>
+            <span class="formula">S = -(Ly - Sy) × 0.003
+S += (|Lx-Cx| - |Sx-Cx|) / -500
+S += (|Ly-Cy| - |Sy-Cy|) / -500
+若 Ly ≥ waterY：S -= 2
+依次处理每个活敌 e：
+  d = distance(L,e)
+  若 d &lt; 200：P = 0.2 × (1-d/200)
+    若 d &lt; 100：P *= d/100；S -= 3 × (1-d/100)
+  否则：P = 0.3 × 0.75^(d/200)
+  S += P；S *= 1 + e.Evilness
+依次处理每个活队友 a：
+  若 a 是自己且 d&lt;80：S -= 1-d/80
+  否则若 d&lt;40：S -= 0.1 × (1-d/40)
+每个未完成宝箱：d(L,箱底)&lt;40 时 S += 0.5
+若有效库存有 Cherry：按下述规则追加 10 次收益
+M = distance(L,S起点)
+若 M&lt;300：S += 0.3×M/300-0.3；否则 S -= 0.3</span>
+          </article>
+          <article class="card"><h3>普通落点武器 <code>I</code></h3>
+            <span class="formula">S = -0.01
+依次处理每个活敌 e：
+  若 d(I,e)&lt;70：
+    S += 1.5-d/70
+    S *= 1+e.Evilness
+依次处理每个活队友 a：
+  若 d(I,a)&lt;40：S -= 1.5-d/40
+若 Anchor：S *= 0.5
+若 Pieces of Eight：S = (S-0.5)×1.2</span>
+            <p>严格阈值意味着恰好 70/40 px 不加减分；武器只看预测投射物落点附近角色，不把后续爆炸范围、燃烧、连锁或再次瞄准直接折算成真实伤害。</p>
+            <h3>Cherry 跳跃附加分</h3>
+            <span class="formula">重复 10 次：F=0
+每个 d(L,活敌)&lt;100：F += (1-d/100)×(1+Evilness)×0.5
+若 d(L,跳跃者原位置)&lt;80：F -= 1-d/80
+只有 F&gt;0 才令 S += F</span>
+          </article>
+        </div>
+        <p class="muted">分数并非概率：例如海啸可能高分，箱体武器却直接使用随机分，两者仍进入同一个最高分池。此设计承袭当前对齐的原版候选模型，不意味着不同武器的收益被精确归一化。</p>
       </section>
 
       <section id="airdrop">
@@ -436,6 +500,7 @@ samples = 50</span>
           </article>
         </div>
         <p class="muted">AI 不做多回合寻路，不按箱内武器、库存稀缺度或敌方抢箱概率调整价值。这些不是已确认的原版规则。</p>
+        <div class="callout"><strong>为什么捡到箱子后可能不开火：</strong>落地、触箱和武器入库存属于正式回合流程；箱子首次授予武器需等待 10 tick，后续武器间隔 40 tick。回合管理器等待箱子收集结束，然后若已选角色仍能射击，才重新计算“跳跃后续”。若箱子给的是另一名角色，后续阶段不会改选他；若新武器无法生成候选或最高分 ≤ 0，也会 Pass。跳跃的 <code>+0.5</code> 箱子分并不保证后续武器被使用。</div>
       </section>
 
       <section id="weapons">
@@ -443,10 +508,10 @@ samples = 50</span>
         <div class="decision-grid">
           <article class="card">
             <h3>普通武器</h3>
-            <span class="formula">samples = floor(Luck × teamCount / aliveCount)
-angle = 180..359°
-force = random[5, twangMaxForce)</span>
-            <p>同一种库存只评估一次。每个候选从 <code>-0.01</code> 起算：70 px 内敌人增加收益，40 px 内队友产生惩罚，再应用 Evilness 和武器修正。</p>
+            <span class="formula">samples = floor(Luck × teamCount / max(1, aliveCount))
+angle = 180 + NextInt(0,180)°
+force = NextFloat(5, twangMaxForce)</span>
+            <p>同一种库存只评估一次。普通弹道武器每次采样先按正式武器的物理参数模拟投射物落点，再用上节的通用公式评分；<code>samples ≤ 0</code> 时，这类武器、Anchor 和 Cannon 没有采样候选。特殊武器不都受此数量控制。</p>
             <ul>
               <li>Anchor 最终评分 × <code>0.5</code>。</li>
               <li>Pieces of Eight：<code>(score - 0.5) × 1.2</code>。</li>
@@ -458,7 +523,7 @@ force = random[5, twangMaxForce)</span>
             <ul>
               <li>接触结束：Cherry、Rum、Pieces、Parachute、Cannonball。</li>
               <li>静止结束：Dynamite、Mine、Banana。</li>
-              <li>其他普通 Weapon：最多 101 tick。</li>
+              <li>其他普通 Weapon（如 Boulder）：最多 101 tick；Cannonball 有单独的越界/入水条件与 4096 tick 安全上限。</li>
               <li>所有 <code>hitsBoxes=true</code> 的预测读取共享箱体。</li>
             </ul>
           </article>
@@ -466,12 +531,12 @@ force = random[5, twangMaxForce)</span>
 
         <h3>复杂武器的专用候选</h3>
         <div class="score-grid">
-          <div class="card"><b>Tidal Wave</b><p>直接按水线上方 300 px 内的角色评分：敌人按当前生命比例最高 +0.5，己方每人 -1.5。</p></div>
-          <div class="card"><b>Voodoo Doll</b><p>每个敌人模拟 2 次角色投掷；目标落水约得 1..1.2，否则约 -0.5..-0.3，并保存目标和速度。</p></div>
-          <div class="card"><b>Seagull</b><p>选飞行高度，随机排序 10 个 X；仅保留正分投弹点，至少 2 点才成候选。敌我使用不同公式。</p></div>
-          <div class="card"><b>Cannon</b><p>先随机部署位置和炮口角度，再用固定 30 力度预测 Cannonball；候选保存部署点、角度和速度。</p></div>
-          <div class="card"><b>Crate / Barrel</b><p>围绕敌人随机 10 个合法位置，至少 3 个才成候选；正式执行使用前三个并按 40 tick 节奏连续放置。</p></div>
-          <div class="card"><b>Anchor</b><p>全图随机 X，从 y=-200 以 40 px/tick 垂落；只接受真实触地样本，胜出后等待 20 tick 再正式下落。</p></div>
+          <div class="card"><b>Tidal Wave</b><p>无需抽样，分数从 0 开始。每个 <code>y ≥ waterY-300</code> 的活敌加 <code>0.5×Health/MaxHealth</code>，每个同范围活队友减 <code>1.5</code>。只生成一个候选。</p></div>
+          <div class="card"><b>Voodoo Doll</b><p>每个活敌先抽 2 个力度上限 20 的投掷速度，并模拟该敌人的角色落点，再逐个抽分数扰动。落水为 <code>1+U(0,0.2)</code>；未落水为 <code>U(0,0.2)-0.5</code>。候选保存目标敌人与速度。</p></div>
+          <div class="card"><b>Seagull</b><p>飞行高度为最高活敌 Y 减 <code>100+NextInt(0,100)</code>。全图随机取 10 个 X 并排序，模拟各次投弹；40 px 内每个活敌加 <code>1-d/40</code>，每个活队友减 <code>1.5-d/40</code>。仅保留单发分数 &gt;0 的 X，至少 2 发才形成候选，分数为保留发的总和。</p></div>
+          <div class="card"><b>Cannon</b><p>抽样次数受 Luck 影响。每次独立抽部署角、半径 <code>U(0,1)×65</code> 和炮口角；部署中心为角色位置上方 100 px，经碰撞修正后，以力度 30 模拟炮弹。按通用落点公式评分，保存请求部署点、角度和速度。</p></div>
+          <div class="card"><b>Crate / Barrel</b><p>各做 10 次：随机选择活敌，以活队友平均 X 相对于该敌的方向偏移 <code>NextInt(16,64)</code>，Y 偏移 <code>NextInt(-50,50)</code>；仅保留正式 <code>CanPlace</code> 合法点。满 3 个才生成<strong>一个</strong>候选，分数直接是 <code>U(0,1)</code>，不按伤害评分；正式序列使用前三处。</p></div>
+          <div class="card"><b>Anchor</b><p>抽样次数受 Luck 影响。每次在全图宽度抽一个 X，从 <code>y=-200</code> 以 40 px/tick 垂落；没有在入水前碰到地面则丢弃。有效落点套通用公式后再乘 <code>0.5</code>，胜出后正式延迟 20 tick 下落。</p></div>
         </div>
       </section>
 
@@ -487,13 +552,13 @@ force = random[5, twangMaxForce)</span>
           <tbody>
             <tr class="weapon-row" data-kind="normal"><td>Cherry Bomb</td><td><span class="tag normal">普通弹道</span></td><td>首次接触结束；移动评分另保留 10 次源码怪癖采样</td><td><code>SpawnAndFire</code></td></tr>
             <tr class="weapon-row" data-kind="normal"><td>Dynamite</td><td><span class="tag normal">普通弹道</span></td><td>模拟至静止或 101 tick</td><td><code>SpawnAndFire</code></td></tr>
-            <tr class="weapon-row" data-kind="normal"><td>Banana</td><td><span class="tag normal">普通弹道</span></td><td>初投模拟至静止；正式 AI 再按角色距离决定引爆</td><td><code>SpawnAndFire</code></td></tr>
+            <tr class="weapon-row" data-kind="normal"><td>Banana</td><td><span class="tag normal">普通弹道</span></td><td>预测至静止；正式运行静止即爆，或最近角色 &lt;20 px，或在 &lt;50 px 内距离由近转远时引爆；这些后续时机不另计候选分</td><td><code>SpawnAndFire</code></td></tr>
             <tr class="weapon-row" data-kind="normal"><td>Boulder</td><td><span class="tag normal">普通弹道</span></td><td>专用重量/摩擦参数；候选速度原样执行</td><td><code>SpawnAndFire</code></td></tr>
             <tr class="weapon-row" data-kind="special"><td>Cannon</td><td><span class="tag special">专用候选</span></td><td>部署点 + 炮口角度 + Cannonball 预测</td><td><code>BeginAiFire</code></td></tr>
             <tr class="weapon-row" data-kind="special"><td>Gunpowder Barrel</td><td><span class="tag special">BoxWeapon</span></td><td>至少 3 个合法位置，连续放置</td><td><code>BeginAiPlacement</code></td></tr>
             <tr class="weapon-row" data-kind="normal"><td>Mine</td><td><span class="tag normal">普通弹道</span></td><td>模拟至静止；不预估未来触发收益</td><td><code>SpawnAndFire</code></td></tr>
             <tr class="weapon-row" data-kind="normal"><td>Parachute Bomb</td><td><span class="tag normal">普通 + 修正</span></td><td>每 tick 修正 vy/vx、顶部边界；接触结束</td><td><code>SpawnAndFire</code></td></tr>
-            <tr class="weapon-row" data-kind="normal"><td>Pieces of Eight</td><td><span class="tag normal">普通首枚</span></td><td>首枚统一评分；后 7 枚由武器内部重瞄</td><td><code>SpawnAndFire</code></td></tr>
+            <tr class="weapon-row" data-kind="normal"><td>Pieces of Eight</td><td><span class="tag normal">普通首枚</span></td><td>首枚落点评分后用 <code>(S-0.5)×1.2</code>；后 7 枚由武器内部处理，不逐枚预评分</td><td><code>SpawnAndFire</code></td></tr>
             <tr class="weapon-row" data-kind="normal"><td>Rum Bottle</td><td><span class="tag normal">普通弹道</span></td><td>首次接触结束；只评价瓶体落点</td><td><code>SpawnAndFire</code></td></tr>
             <tr class="weapon-row" data-kind="special"><td>Seagull</td><td><span class="tag special">专用候选</span></td><td>飞行高度 + 10 个 X + 正分投弹点</td><td><code>PlaceForAi</code></td></tr>
             <tr class="weapon-row" data-kind="special"><td>Tidal Wave</td><td><span class="tag special">专用候选</span></td><td>直接读取水线附近敌我角色，不需弹道</td><td><code>StartWave</code></td></tr>
@@ -505,24 +570,53 @@ force = random[5, twangMaxForce)</span>
         <p class="muted">Cannonball 是 Cannon 的内部投射物，不计作第 16 种库存武器。</p>
       </section>
 
+      <section id="random">
+        <h2>Luck、随机数与可复现性</h2>
+        <div class="decision-grid">
+          <article class="card"><h3>Luck 改变什么</h3>
+            <span class="formula">N = floor(character.Luck × team.Characters.Count
+          / max(1, team.AliveCount))</span>
+            <p><code>team.Characters.Count</code> 包含队伍总人数，<code>AliveCount</code> 是当前存活人数。N 是<strong>普通武器、Anchor、Cannon 的每种武器抽样次数</strong>，不是命中率加成，也不会直接乘进评分。队伍减员会改变 N；50 次跳跃、Voodoo 每敌 2 次、Seagull 10 个 X、BoxWeapon 10 次位置尝试和 Tidal Wave 直接计分不受 N 控制。</p>
+          </article>
+          <article class="card"><h3>一次决策的随机流</h3>
+            <p>每次首次行动、每次跳跃后续决策各自建立一条独立流：优先读取一次性重放记录的种子，否则使用配置的固定种子，否则从 Unity 全局随机取得种子。之后 AI 抽样在独立保存的 Unity 随机状态内进行，不持续扰动全局状态。</p>
+            <p>整数 <code>NextInt(min,max)</code> 取 <code>[min,max)</code>；浮点 <code>NextFloat(min,max)</code> 遵循 Unity 浮点 Range 语义，上界可取到。生成顺序很重要：先同角色的 50 个跳跃轨迹，之后逐个给跳跃评分；有 Cherry 时<strong>每个</strong>跳跃评分前再消耗 10 次随机弧线（每次角度、力度各一次）；然后才轮到该角色按库存顺序的武器。某种武器早退、库存顺序变化或角色死亡，都可能改变后续随机值。</p>
+          </article>
+        </div>
+        <p>日志 <code>AI-Decision</code> 记录阶段、候选数、胜出者、分数、速度与目标。默认 <code>SaveDecisionTrace=true</code> 时，还会在 <code>Application.persistentDataPath/ai-decisions</code> 保存 JSON，含 seed、每次随机抽样、所有候选及胜者；<code>ReplayDecisionTracePath</code> 对下一次同队同阶段决策生效一次，随机类型/边界或候选参数不一致会报错。<code>UseFixedDecisionSeed</code> 与 <code>FixedDecisionSeed</code> 可用于固定实验。可重放的是<strong>相同 Unity 棋盘上的当前实现</strong>，不是原版 Flash <code>Math.random()</code> 的内部状态。</p>
+        <div class="callout"><strong>GM 测试开关：</strong><code>aiforceusewaepon 1..15</code> 把所有 AI 的有效武器候选限制为该编号，并视为无限供应；跳跃仍参加竞争，续行动仍受正分门限制，因此并不保证一定开火。<code>aiforceusewaepon 0</code> 恢复真实库存。该开关是项目授权扩展，不是原版规则。</div>
+      </section>
+
       <section id="timing">
         <h2>执行、行动消耗与镜头</h2>
         <div class="timeline">
-          <div class="event"><b>思考开始</b><p><code>IsEvaluatingCandidates=true</code>；约 30 ms 的重复工作预算，超预算在下一帧续算；镜头仍允许 speech/popup。</p></div>
+          <div class="event"><b>思考开始</b><p><code>IsEvaluatingCandidates=true</code>；逐步骤按约 30 ms 每帧预算续算，一个完整的 50 样本生成批次或单种武器求值不会在内部被抢占。镜头仍允许 speech/popup。</p></div>
           <div class="event"><b>候选求值完成</b><p>输出决策日志并保存 JSON：种子、全部随机抽样、候选参数及最终胜出结果。</p></div>
           <div class="event"><b>镜头到胜出角色</b><p>调用生产镜头入口并等待 <code>IsPanningToTurnTarget=false</code>，不再固定等 0.35 秒。</p></div>
-          <div class="event"><b>Throw Self</b><p>写入正式角色速度，只消耗 <code>CanThrow</code>；落稳后保留 <code>CanShoot</code>，进入第二阶段。</p></div>
+          <div class="event"><b>Throw Self</b><p>写入正式角色速度，只消耗 <code>CanThrow</code>；落稳及可能的宝箱收集结束后，若选中角色仍有 <code>CanShoot</code>，回合继续为同角色的第二阶段。</p></div>
           <div class="event"><b>使用武器</b><p>创建或启动正式武器，消耗移动与射击资格；回合管理器等待正式武器/连续放置序列完成。</p></div>
           <div class="event"><b>异常与换队</b><p>活动队改变、队伍战败或游戏阶段改变时取消；组件禁用也会清除思考标记，避免镜头门锁死。</p></div>
         </div>
       </section>
 
+      <section id="example">
+        <h2>把一次完整回合串起来</h2>
+        <ol>
+          <li><strong>首次求值：</strong>队伍按角色顺序产生跳跃与可用武器候选。假设 A 的某个跳跃分最高，即使另一角色有武器，也先选 A。记录胜出速度与预计落点。</li>
+          <li><strong>正式跳跃：</strong>镜头到 A，给 A 的物理体设置胜出速度，<code>CanThrow=false</code> 而 <code>CanShoot=true</code>。实际碰撞、受伤、死亡和触箱在生产流程中发生；预测落点不是强制传送位置。</li>
+          <li><strong>等待稳定：</strong>回合管理器等待所有活动物体安定；如果正在收集宝箱，还要等收集序列完成。箱内武器此时才进入接触者库存。</li>
+          <li><strong>后续求值：</strong>如果 A 仍存活且可射击，只为 A 建立新的随机决策流并重新读取有效库存。不能再跳，也不能改选 B；最高武器分必须严格大于 0。</li>
+          <li><strong>正式射击或 Pass：</strong>若合格，镜头到 A 并调用对应武器的正式入口，通常消耗库存及两种行动资格；若不合格，Pass。最终由回合管理器等待武器及其后续效果结束、切换队伍，并尝试生成下一次空投。</li>
+        </ol>
+        <p class="muted">另一种路径：若首次最高分就是武器，则直接原地开火，不经过跳跃后续阶段。以上“假设”仅用于解释状态机，不是预设 AI 一定跳跃。</p>
+      </section>
+
       <section id="levels">
         <h2>不同关卡的 AI 有区别吗？</h2>
         <div class="callout">
-          <strong>没有“第 N 关专用 AI 脚本”。</strong>核心选择器和评分公式相同；看起来不同，是因为关卡 XML 提供了不同的队伍、角色 Luck/生命/Evilness、武器库存、地形、箱体、水线和出生位置。
+          <strong>没有“第 N 关专用 AI 脚本”。</strong>核心选择器和评分公式相同；关卡布局、角色 Luck/生命、库存、地形、水线、箱体及当时角色状态（包括 Evilness）改变了候选与分数。
         </div>
-        <p>因此第 15 关开头必放海啸，不是写死“第 15 关用海啸”，而是该局面让 Tidal Wave 的敌方收益远高于己方惩罚，又超过所有随机移动与其他武器候选。复杂武器以前“不会用”，通常是候选入口缺失或预测不完整；本次已让 15 种库存武器全部进入对应候选路径。</p>
+        <p>第 15 关开头常见海啸，是该局面中 Tidal Wave 的水线范围得分很高，因而可能超过随机跳跃及其他武器候选；选择器没有“第 15 关必放海啸”的硬编码。由于其他候选依赖随机抽样，不应把某次测试中的稳定现象说成无条件保证。当前 15 种库存武器均有对应候选路径，但有库存不等于一定形成候选或胜出。</p>
       </section>
 
       <section id="parity">
@@ -559,8 +653,8 @@ force = random[5, twangMaxForce)</span>
         <div class="status-list">
           <div class="status-item ok"><b>静态确认</b><span>Team、Character、Weapon、各专用武器和 TileSystem 的 AS2 证据已核对。</span></div>
           <div class="status-item ok"><b>已实现</b><span>15/15 候选入口、30 ms 可恢复步骤、完整抽样重放、正式武器物理模板、镜头门。</span></div>
-          <div class="status-item ok"><b>编译验证</b><span><code>Assembly-CSharp</code> 与 <code>Assembly-CSharp-Editor</code>：0 error。</span></div>
-          <div class="status-item wait"><b>待运行验证</b><span>分帧、随机重放、正式/预测轨迹，以及 15 武器真实整回合 Play Mode。</span></div>
+          <div class="status-item ok"><b>历史编译记录</b><span>此前记录过 <code>Assembly-CSharp</code> 与 <code>Assembly-CSharp-Editor</code> 0 error；本页更新未重新编译。</span></div>
+          <div class="status-item wait"><b>待运行验证</b><span>本次仅静态核对与文档更新；未重新运行分帧、随机重放、正式/预测轨迹或 15 武器整回合 Play Mode。</span></div>
         </div>
         <p class="muted">编译通过只证明程序集可构建，不等于 Play Mode 行为通过。详细规则与验收矩阵见 <a href="AI_IMPLEMENTATION_STATUS.md">AI_IMPLEMENTATION_STATUS.md</a>。</p>
       </section>
@@ -570,11 +664,14 @@ force = random[5, twangMaxForce)</span>
         <table>
           <thead><tr><th>职责</th><th>原版证据</th><th>Unity 当前入口</th></tr></thead>
           <tbody>
-            <tr><td>全队选择、分帧预算、两阶段</td><td><a href="../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/throwgame/Team.as">Team.as</a></td><td><code>MutinyAIController.EvaluateBestMove</code></td></tr>
-            <tr><td>移动、武器遍历、落点评分</td><td><a href="../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/throwgame/Character.as">Character.as</a></td><td><code>EvaluateCharacterSelfThrow / Weapons</code></td></tr>
+            <tr><td>全队选择、分帧预算、两阶段</td><td><a href="../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/throwgame/Team.as">Team.as</a></td><td><a href="../../Assets/Mutiny/Scripts/Simulation/MutinyAIController.cs">MutinyAIController.ExecuteAITurnRoutine / EvaluateDecisionSteps / FinishDecisionWork</a></td></tr>
+            <tr><td>移动、武器遍历、落点评分</td><td><a href="../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/throwgame/Character.as">Character.as</a></td><td><a href="../../Assets/Mutiny/Scripts/Simulation/MutinyAIController.cs">BuildSelfThrowSamples / ScoreSelfThrow / EvaluateCharacterWeapons</a></td></tr>
             <tr><td>普通武器随机投掷</td><td><a href="../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/throwgame/Weapon.as">Weapon.as</a></td><td><code>SimulateWeaponImpact</code></td></tr>
             <tr><td>专用武器</td><td><code>Anchor.as</code>、<code>BoxWeapon.as</code>、<code>Cannon.as</code>、<code>Seagull.as</code>、<code>TidalWave.as</code>、<code>VoodooDoll.as</code></td><td><code>EvaluateAnchor / BoxWeapon / Cannon / Seagull / TidalWave / Voodoo</code></td></tr>
             <tr><td>镜头优先级</td><td><a href="../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/throwgame/TileSystem.as">TileSystem.as</a></td><td><code>MutinyCameraController.LateUpdate</code></td></tr>
+            <tr><td>宝箱与后续决策</td><td><code>TreasureChest.as / Team.as</code></td><td><a href="../../Assets/Mutiny/Scripts/Simulation/MutinyTreasureChest.cs">MutinyTreasureChest</a> / <a href="../../Assets/Mutiny/Scripts/Simulation/MutinyTurnManager.cs">MutinyTurnManager</a> / <a href="../../Assets/Mutiny/Scripts/Simulation/MutinyTeam.cs">MutinyTeam</a></td></tr>
+            <tr><td>Luck、随机流与重放</td><td><code>Character.as / Weapon.as</code>；原版 PRNG 状态未知</td><td><a href="../../Assets/Mutiny/Scripts/Simulation/MutinyAIRandomStream.cs">MutinyAIRandomStream</a></td></tr>
+            <tr><td>GM 限定武器</td><td>项目扩展，非原版规则</td><td><a href="../11-VerificationAndDebug/GM_COMMANDS.md">GM_COMMANDS.md</a></td></tr>
             <tr><td>行为回归</td><td>规则 ID：<code>AI-*</code></td><td><code>MutinyTurnActionUiVerificationTest</code></td></tr>
           </tbody>
         </table>

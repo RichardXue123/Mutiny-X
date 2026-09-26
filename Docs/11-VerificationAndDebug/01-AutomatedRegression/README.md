@@ -1,5 +1,11 @@
 # 11.01 · 自动回归
 
+## 关卡初始镜头回归（2026-09-26）
+
+`Mutiny/Parity/Validate Camera Initialization Play Mode` 调用 `RunCameraInitialization()`。从任意旧位置经真实 `TryLoadLevel` 加载 1/7/13/30 关，在旧关仍待帧末销毁时检查新关回合/输入/speech 引用和旧角色/武器跟随释放；继续驱动 `RestartCurrentLevel`、`LoadNextLevel`、`ClearLevel → TryLoadLevel`。额外覆盖旧版烘焙根的真实 `Awake` 接管/`Start` 重置，以及 `StartGame → Update 同源 AdvanceSpeech → AdvanceCamera` 的 120 FPS 首帧 speech 平移。
+
+Unity 6000.6.0f1 隔离工程 Play Mode 实际 13/13 断言通过；现有 `Validate Camera Movement` 同时复跑 11/11 通过。首轮未控制首帧时间，使用编辑器真实 `unscaledDeltaTime` 执行单次 Update 时“气泡未显示”检查失败；最终使用 Update 同源入口传入指定的 `1/120s`，未修改局部布尔状态或重写生产运镜公式。主工程画面及 Android 真机仍待验收。
+
 [返回上级模块](../README.md)
 
 ## 职责
@@ -25,13 +31,22 @@
 - `LVL-RESET-01`：上述旧物体仍存在时经 `MutinyLevelController.TryLoadLevel()` 初始化新关，断言旧箱体/地雷失活、共享箱体注册清空。
 - 本轮 `LVL-PERSIST-01/LVL-RESET-01` 已加入 `MutinyTurnActionUiVerificationTest.RunLevelLifecycle()`；2026-09-26 在 Unity 6000.6.0f1 隔离工程 Play Mode 跑通最终 8/8 断言，含显式 `ClearLevel()` 卸载。其余 BoxWeapon 用例仍以各自的实际运行记录为准。
 
+## 蓄力取消回归
+
+- `WPN-CAN-PRESS-01`：武器/跳跃分别通过生产取消事件门校验“无新按下不取消、新按下才取消”；在正式蓄力入口开始后，按住移入叉不取消，通过生产松手入口在叉上释放仍发射/起跳，并核对库存或 `CanThrow` 的真实提交。2026-09-26 Unity 6000.6.0f1 隔离 Play Mode 复跑 `Validate Character Aim Overlay Play Mode`，31/31 通过：新增按下语义 6 条、覆盖层与更新后的触屏取消 25 条。主工程真实鼠标与安卓真机待验收。
+- `CHAR-OVR-AIM-01`：通过生产选角色、选 Throw Self、按下开始蓄力及持续按住绘制轨迹的同源入口，检查 P1 标记、选择框、血条、取消叉同时可见，队友标记/血条不受影响；右键/叉取消后轨迹消失但选中角色 UI 保留；正常松开发射才设 `IsSelfThrown` 并隐藏四项 UI，生产行动延续再恢复标记、血条和选择框。2026-09-26 Unity 6000.6.0f1 隔离 Play Mode 执行 `Validate Character Aim Overlay Play Mode`，25/25 通过：本规则 7 条、既有覆盖层 13 条、触屏取消 5 条。主工程画面与安卓真机待验收。
+- 原版来源更正：`Character` 构造设 `draggable=false、twangable=true`，`TileSystem.mouseDown` 进入 `Controller.twanging`；覆盖层的 `Controller.dragging` 隐藏门不适用于正常跳跃蓄力。此前取消专项仅证明叉的显示/操作，不曾验证 P1、选择框和血条；不能用其 5/5 结果证明旧覆盖层正确。
+- `EXT-AIM-CAN-02`：武器/跳跃蓄力期间取消叉仍可见；第二指在叉外不取消、在叉内新按下取消后主指松开不补发射；右键仍仅退回待命。此次更新后的 5 条触屏回归包含在上述 31/31 中。此前 `Validate Aim Cancel Touch Play Mode` 的 5/5 曾包含错误的“主指在叉上松开取消跳跃”规格，现已撤销；该历史结果不能证明当前按下语义。尚未在 Android 真机验证物理多指事件及画面。
+- 同日尝试运行既有 `Validate Weapon Ready And Cancel` 广域用例时，`WRDY-T01` 装备初始姿态/资源综合断言失败；新增取消断言未报失败。该旧断言原因未在本轮查明，不计入 `EXT-AIM-CAN-02` 的 5/5 专项结果。
+
 ## Cannon 范围锚点回归
 
 - `ANC-ANI-02/03`：通过生产 `MutinyPlayerInput` 投放 Anchor，逐 25 Hz tick 检查下落 frame 1、触地后主 frame 3 的双侧镜像 1002 碎屑、主 frame 12 停止后子帧继续、子 frame 17 移除，以及 30+10 tick 的 `Global.whiteOut` 乘色/加色/透明度。2026-09-26 Unity 6000.6.0f1 隔离 Play Mode 执行 `Validate Anchor Animation Play Mode`，9/9 断言通过；实际战斗画面待验收。
 
 - `CAN-SMOKE-02`：发射正式炮弹、推进 25 Hz 物理 tick 与半 tick 表现采样；确认首团烟与炮弹显示起点重合，随后炮弹向前移动且烟保持在身后，权威位置仍独立推进。
-- `CAN-AUD-02`：以正式物理地形接触和角色包围盒重叠分别触发炮弹爆炸，监听 `SfxPlayed`，再执行正式爆炸命中入口；地形接触 `pop` 总计一次，直接命中角色零次。
-- 实际结果：2026-09-25，Unity 6000.6.0f1 隔离临时工程 Play Mode 执行 `Validate Cannon Effects Play Mode`，连同原有烟迹检查共 15/15 断言通过；主工程实机画面与听感仍待验收。
+- `CAN-AUD-02`：原版 AS2 的地形 `contact` 分支播放 `pop`，角色重叠 `advance` 分支静音，`Explosion.hit` 不发声；此项为原版静态结论，Unity 直击分支按用户授权的 `CAN-AUD-03` 处理。
+- `CAN-AUD-03`：以正式物理地形接触和角色包围盒重叠分别触发炮弹爆炸，监听 `SfxPlayed`；两条路线均应各播一次 `pop`。再执行正式爆炸命中入口及重复炮弹结束调用，断言不追加音效，覆盖此前直击静音及双响缺陷。
+- 实际结果：2026-09-26，Unity 6000.6.0f1 隔离工程 Play Mode 执行 `Validate Cannon Effects Play Mode`，含烟迹回归共 19/19 断言通过；主工程实机画面与听感仍待验收。2026-09-25 的 15/15 为修改前的历史结果，不代表当前直击音效规格。
 - `VIS-SMOKE-02`：2026-09-26 将 Cherry Bomb、Dynamite、Rum Bottle、Parachute Bomb 的生产出烟回调对齐当前物理 tick 的可见起点。使用正式 `MutinyPhysicsBody.AdvanceSimulationFrameForVerification`，分别在飞行和 ready 状态核对新烟团与首个可见弹体位置一致、半 tick 后弹体前进而烟团静止；复跑 `Validate Cannon Effects Play Mode`，Unity 6000.6.0f1 隔离工程 19/19 断言通过。主工程 PIE 逐武器画面验收尚未运行。
 - `CAN-AI-TURN-01`：经 `MutinyAIController.ExecuteMove` 同源执行入口提交大炮，并交替推进正式 `MutinyTurnManager.AdvanceSimulationTick` 与大炮 25 Hz tick；前 24 tick 不得换回合或积累静止计数，第 25 tick 生成炮弹且镜头目标为该炮弹；炮弹未结束时再等待 151 tick 不得被通用安全超时强制结束，然后驱动正式炮弹物理跨出原版边界、炮身结束，最后才通过通常 11 tick 静止门。用例已添加，待 Unity 运行验证。
 - `CAN-PLACE-01`：角色位于 `(100,200)` 时，通过生产 `MutinyCannon.PlacementCenterPixels` 与独立 `RangeCircle` Transform 断言范围中心均为 `(100,100)`，即原始 100 px 圆的底部落在角色坐标。
@@ -40,7 +55,9 @@
 
 ## AI 武器候选缺口回归
 
-- `GM-07`：通过 GM 正式解析入口覆盖 AI 武器候选；验证无库存也能评估强制武器、首行动仍保留跳跃、续行动无合格武器候选时仍可 Pass、正式开火不扣真实弹药、`0` 恢复库存选择、非法编号不改设置及 1..15 菜单映射。此项是 Unity 调试扩展，不是原版一致性规则。2026-09-25 在当前工程 Unity Play Mode 通过专项回归 `7/7`；“有候选但评分非正”的续行动分支尚未由此专项用例单独覆盖。
+- `GM-07`：通过 GM 正式解析入口覆盖 AI 武器候选；验证无库存也能评估强制武器、首行动仍保留跳跃、续行动无合格武器候选时仍可 Pass、正式开火不扣真实弹药、`0` 恢复库存选择、非法编号不改设置及 1..15 菜单映射。此项是 Unity 调试扩展，不是原版一致性规则。2026-09-26 在 Unity 6000.6.0f1 隔离工程 Play Mode 随当前 `RunGM()` 重跑通过；“有候选但评分非正”的续行动分支尚未由此专项用例单独覆盖。
+- `GM-UI-02`：新增生产 `ExecuteCommand` 和历史按钮同源的 `RunRecentCommand` 回归，检查六次成功执行后仅保留最近五次、重复命令各占记录、失败不入列、点击旧命令后真实效果及顺序更新。3 条断言已加入 `RunGM()`；2026-09-26 隔离 Unity Play Mode 最新连同 GM-07 与 GM-03 共 `12/12` 通过，此次没有屏蔽断言；面板实际点击尚未运行。
+- `GM-03`：经精确小写 `unlockalllevels` 的生产解析入口，从只解锁第 1 关开始检查 `1..18` 全部 `IsLevelUnlocked` 资格、最高关卡为 `MaxLevel`、真实 PlayerPrefs 存档键及成功历史；再通过历史按钮同源入口重放验证全部解锁。2 条断言加入 `RunGM()`，测试结束恢复原进度；2026-09-26 Unity 6000.6.0f1 隔离 Play Mode 随专项 `12/12` 通过。重启及实际选关 UI 待验收。
 
 - `AI-WPN-04`：通过 `EvaluateCharacterWeapons` 的生产分发与 Anchor 正式执行入口，在固定随机种子和地面上验证全图垂直采样会生成 Anchor 候选；胜出后创建已发射的正式 Anchor，并消费库存。
 - `AI-WPN-05`：通过同一生产分发器验证 Wooden Crate 获得至少 3 个合法 BoxWeapon 位置后进入候选；随后启动正式 `BeginAiPlacement` 并推进原版 40 tick 延迟，断言第一箱落地且三箱序列仍处于活动状态。
@@ -126,7 +143,7 @@
 ## 跳跃取消缺陷回归
 
 - `JUMP-CAN-01`：通过生产 `SelectCharacterThrow` 进入跳跃待命，刷新实际角色覆盖层并断言取消叉可见；点击原版 20 px 命中区后断言回到行动菜单且 `CanThrow` 未消耗。
-- `EXT-JUMP-CAN-01`：进入实际 Aiming 状态后调用与鼠标右键共用的取消处理，断言轨迹蓄力撤销、回到跳跃待命、取消叉恢复且 `CanThrow` 未消耗。
+- `EXT-JUMP-CAN-01`：进入实际 Aiming 状态后调用与鼠标右键共用的取消处理，断言轨迹蓄力撤销、回到跳跃待命、取消叉保持可见且 `CanThrow` 未消耗。
 - 当前状态：用例已加入 `MutinyTurnActionUiVerificationTest`，尚未在 Unity Play Mode 实际执行，不能登记为通过。
 
 ## 高刷新率镜头跟随回归（feature/cameramovement）
@@ -138,7 +155,8 @@
 
 ## Android 镜头缺陷回归
 
-- `CUR-SCROLL-01/AND-CUR-SCROLL-01`：通过正式镜头箭头资源解码、八方向映射、视口边缘定位和移动平移核心，核对 31×22 原版帧、方向角、宽屏黑边输入门、实际位移方向及边界阻挡时隐藏。2026-09-25 Unity 6000.6.0f1 隔离临时工程 Play Mode 专项 `Validate Scroll Arrows Play Mode` 通过 5/5 断言；桌面实际鼠标画面与 Android 单指/第二触点真机绘制尚未运行。
+- `CUR-SCROLL-01/AND-CUR-SCROLL-01`：2026-09-25 的历史基线通过箭头资源、八方向、视口边缘及移动平移专项 5/5 断言；其中安卓边缘箭头要求已于 2026-09-26 被用户撤回，不再作为当前验收结果。桌面实际鼠标画面仍待验收。
+- `AND-CUR-SCROLL-02`：2026-09-26 移除安卓拖动方向箭头的状态与绘制分支，保留触摸平移和桌面滚屏箭头。Unity 6000.6.0f1 隔离临时工程 `Validate Scroll Arrows Play Mode` 通过 10/10 断言，覆盖生产绘制门、移动平移与边界钳制；`Assembly-CSharp-Editor` 编译通过。Android 真机画面尚未运行。
 - `CAM-EDGE-05`：固定 11:8 画布的用户授权黑边扩展；生产 `CalculateMouseEdgeScroll` 回归覆盖左右 Pillarbox、上下 Letterbox、黑色角落组合方向和游戏窗口外抑制。2026-09-26 Unity 6000.6.0f1 隔离临时工程 `Validate Scroll Arrows Play Mode` 通过 10/10 断言（含既有资源、方向及移动端用例）；`dotnet build Assembly-CSharp-Editor.csproj --no-restore -v:q` 通过。主工程 PIE 实际鼠标画面尚未目视验收。
 - `CUR-SCROLL-02`：原版 `CustomCursor` 同类型早退；Unity 武器特殊光标经生产 `SetMode(None)`、`Clear()` 重复调用时，镜头已经隐藏的系统鼠标保持隐藏，切换到武器特殊光标及真正退出时才改变可见性。2026-09-25 隔离 Unity 6000.6.0f1 Play Mode `Validate Scroll Arrows Play Mode` 复跑共 6/6 断言通过；主工程 PIE 连续滚屏无闪烁待目视复验。
 - `AND-CAM-01`：调用生产镜头的移动平台指针资格判定，断言 Android/移动平台即使暴露 mouse/pointer 状态也不得进入桌面悬停边缘滚屏；同时断言桌面真实鼠标仍保留原版边缘滚屏资格。

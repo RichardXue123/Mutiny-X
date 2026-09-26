@@ -74,6 +74,13 @@ namespace Mutiny.Presentation
 
         private void Update()
         {
+            AdvanceSpeech(Time.unscaledDeltaTime);
+        }
+
+        internal void AdvanceSpeechForVerification(float deltaTime) => AdvanceSpeech(deltaTime);
+
+        private void AdvanceSpeech(float deltaTime)
+        {
             if (m_IntroPending && m_TurnManager != null &&
                 m_TurnManager.CurrentPhase != TurnPhase.NotStarted)
             {
@@ -87,7 +94,7 @@ namespace Mutiny.Presentation
 
             if (!m_Active)
                 return;
-            m_TickAccumulator += Time.unscaledDeltaTime;
+            m_TickAccumulator += deltaTime;
             while (m_Active && m_TickAccumulator >= TickSeconds)
             {
                 m_TickAccumulator -= TickSeconds;

@@ -41,6 +41,11 @@ namespace Mutiny.Simulation
         private int m_GridWidth;
         private int m_GridHeight;
 
+        // A few original clips deliberately teleport before every simulation
+        // step. They may supply a display pose that does not interpolate that
+        // discontinuity; all other bodies keep the normal tick interpolation.
+        internal Func<Vector3?> PresentationPositionOverride { get; set; }
+
         public bool IsAtRest => State.IsAtRest;
         public long SimulationTickCount { get; private set; }
         // During OnSimulationStep this is the first pose the renderer presents
@@ -58,6 +63,10 @@ namespace Mutiny.Simulation
         {
             if (!SyncTransform)
                 return transform.position;
+
+            Vector3? overriddenPosition = PresentationPositionOverride?.Invoke();
+            if (overriddenPosition.HasValue)
+                return overriddenPosition.Value;
 
             Vector2 current = new Vector2(State.X, State.Y);
             if (!IsActive || !m_HasPresentationTick ||

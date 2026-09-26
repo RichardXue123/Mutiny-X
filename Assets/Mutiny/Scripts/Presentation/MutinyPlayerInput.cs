@@ -65,9 +65,9 @@ namespace Mutiny.Presentation
             ? m_ArmedPiecesOfEight
             : null;
 
-        // Controller.dragging == character in the Flash game.  Aiming a weapon
-        // drags its equipped weapon instead, so it deliberately does not hide the
-        // character's triangle or health bar.
+        // Legacy query name used by proximity/pickup consumers: this reports
+        // self-throw AIMING (Controller.twanging), not physical dragging.
+        // Never use it to suppress the character overlay: Character is not draggable.
         public bool IsCharacterThrowDragInProgress(MutinyCharacter character)
         {
             return character != null &&
@@ -320,8 +320,7 @@ namespace Mutiny.Presentation
 
             // CancelWeaponButton.onPress is consumed before TileSystem begins a
             // drag.
-            if (pointer.PressedThisFrame &&
-                TryCancelWeaponFromOverlay(selectedCharacter, mouseWorld))
+            if (TryHandleCancelOverlayPrimaryPointer(selectedCharacter, mouseWorld, pointer.PressedThisFrame))
                 return;
 
             if (pointer.SecondaryPressedThisFrame &&
@@ -363,13 +362,7 @@ namespace Mutiny.Presentation
                 float distancePixels = PixelDistance(mouseWorld, readyOrigin);
                 if (distancePixels <= DragSelectionRadiusPixels && CanAim(selectedCharacter))
                 {
-                    InteractionState = MutinyPlayerInteractionState.Aiming;
-                    m_AimOrigin = readyOrigin;
-                    m_EquippedWeapon?.SetAimingState(true);
-                    if (string.IsNullOrEmpty(ActiveWeapon))
-                        MutinyMine.NotifyCharacterBeganSelfThrowAim(selectedCharacter);
-                    MutinyDebugLog.Info("Input",
-                        $"aim started character={selectedCharacter.name} weapon={ActiveWeapon ?? "character"} origin={MutinyPhysics.UnityToPixel(m_AimOrigin)}", this);
+                    TryBeginAimFromPrimaryPointer(selectedCharacter, mouseWorld);
                 }
                 else
                 {
@@ -382,24 +375,7 @@ namespace Mutiny.Presentation
                 TryHandleCannonInput(pointer, selectedCharacter, mouseWorld))
                 return;
 
-            if (InteractionState != MutinyPlayerInteractionState.Aiming)
-                return;
-
-            if (pointer.IsPressed)
-                ShowTrajectory(mouseWorld);
-
-            if (pointer.ReleasedThisFrame)
-            {
-                float dragDistancePixels = PixelDistance(mouseWorld, m_AimOrigin);
-                if (dragDistancePixels >= MinDragDistancePixels)
-                {
-                    Launch(selectedCharacter, mouseWorld);
-                    HideTrajectory();
-                    return;
-                }
-
-                CancelCurrentAim();
-            }
+            AdvanceAimPointer(selectedCharacter, mouseWorld, pointer.IsPressed, pointer.ReleasedThisFrame);
         }
 
         // Banana.advanceMotion checks Controller.tileSystem.mouseButtonDown after
@@ -719,16 +695,22 @@ namespace Mutiny.Presentation
                 m_ActiveTouchId == NoActiveTouchId)
                 return;
 
-            MutinyCameraController cameraController = GetGameCameraController();
-            if (cameraController == null || !cameraController.CanStartMobileTouchPan(true))
-                return;
-
             for (int i = 0; i < touchscreen.touches.Count; i++)
             {
                 var candidate = touchscreen.touches[i];
                 int touchId = candidate.touchId.ReadValue();
                 if (touchId == m_ActiveTouchId || !candidate.press.wasPressedThisFrame)
                     continue;
+
+                // The aiming finger remains down. A second finger pressing the
+                // cross cancels before it can become a camera-pan gesture.
+                if (TryCancelAimFromSecondaryTouch(
+                        GetMouseWorldPosition(candidate.position.ReadValue())))
+                    return;
+
+                MutinyCameraController cameraController = GetGameCameraController();
+                if (cameraController == null || !cameraController.CanStartMobileTouchPan(true))
+                    return;
 
                 m_SecondaryCameraTouchId = touchId;
                 m_LastSecondaryCameraTouchPosition = candidate.position.ReadValue();
@@ -975,8 +957,9 @@ namespace Mutiny.Presentation
                 (EquippedWeapon != null && EquippedWeapon.Owner == character) ||
                 (string.IsNullOrEmpty(ActiveWeapon) && character != null && character.CanThrow);
             return character != null && character == selected && character.IsAlive &&
-                   !character.WeaponLocked &&
-                   InteractionState == MutinyPlayerInteractionState.WeaponReady &&
+                   !character.WeaponLocked && !character.IsSelfThrown &&
+                   (InteractionState == MutinyPlayerInteractionState.WeaponReady ||
+                    InteractionState == MutinyPlayerInteractionState.Aiming) &&
                    hasCancelableReadyAction;
         }
 
@@ -995,6 +978,101 @@ namespace Mutiny.Presentation
                 $"cancel weapon button pressed character={character.name} weapon={ActiveWeapon}", this);
             CancelWeaponSelection();
             return true;
+        }
+
+        private bool TryHandleCancelOverlayPrimaryPointer(
+            MutinyCharacter character, Vector3 pointerWorld, bool pressedThisFrame)
+        {
+            // CancelWeaponButton.onPress: entering the cross while held, or
+            // releasing on it, is not a new button press.
+            return pressedThisFrame && TryCancelWeaponFromOverlay(character, pointerWorld);
+        }
+
+        internal bool TryHandleCancelOverlayPrimaryPointerForVerification(
+            MutinyCharacter character, Vector2 pixelPosition, bool pressedThisFrame)
+        {
+            return TryHandleCancelOverlayPrimaryPointer(character,
+                MutinyPhysics.PixelToUnity(pixelPosition.x, pixelPosition.y), pressedThisFrame);
+        }
+
+        private bool TryBeginAimFromPrimaryPointer(MutinyCharacter character, Vector3 pointerWorld)
+        {
+            if (InteractionState != MutinyPlayerInteractionState.WeaponReady ||
+                character == null || !CanAim(character))
+                return false;
+
+            Vector3 readyOrigin = GetReadyActionOrigin(character);
+            if (PixelDistance(pointerWorld, readyOrigin) > DragSelectionRadiusPixels)
+                return false;
+
+            InteractionState = MutinyPlayerInteractionState.Aiming;
+            m_AimOrigin = readyOrigin;
+            m_EquippedWeapon?.SetAimingState(true);
+            if (string.IsNullOrEmpty(ActiveWeapon))
+                MutinyMine.NotifyCharacterBeganSelfThrowAim(character);
+            MutinyDebugLog.Info("Input",
+                $"aim started character={character.name} weapon={ActiveWeapon ?? "character"} origin={MutinyPhysics.UnityToPixel(m_AimOrigin)}", this);
+            return true;
+        }
+
+        private void ResolveAimRelease(MutinyCharacter character, Vector3 pointerWorld)
+        {
+            if (InteractionState != MutinyPlayerInteractionState.Aiming)
+                return;
+
+            // MouseUp/Ended only resolves the aim; the cross owns onPress, not release.
+            if (PixelDistance(pointerWorld, m_AimOrigin) >= MinDragDistancePixels)
+            {
+                Launch(character, pointerWorld);
+                HideTrajectory();
+                return;
+            }
+
+            CancelCurrentAim();
+        }
+
+        private void AdvanceAimPointer(
+            MutinyCharacter character, Vector3 pointerWorld, bool isPressed, bool releasedThisFrame)
+        {
+            if (InteractionState != MutinyPlayerInteractionState.Aiming)
+                return;
+
+            if (isPressed)
+                ShowTrajectory(pointerWorld);
+            if (releasedThisFrame)
+                ResolveAimRelease(character, pointerWorld);
+        }
+
+        internal void AdvanceAimPointerForVerification(
+            MutinyCharacter character, Vector2 pixelPosition, bool isPressed, bool releasedThisFrame)
+        {
+            AdvanceAimPointer(character,
+                MutinyPhysics.PixelToUnity(pixelPosition.x, pixelPosition.y), isPressed, releasedThisFrame);
+        }
+
+        private bool TryCancelAimFromSecondaryTouch(Vector3 pointerWorld)
+        {
+            return InteractionState == MutinyPlayerInteractionState.Aiming &&
+                   TryCancelWeaponFromOverlay(GetHumanSelectedCharacter(), pointerWorld);
+        }
+
+        internal bool TryBeginAimFromPrimaryPointerForVerification(
+            MutinyCharacter character, Vector2 pixelPosition)
+        {
+            return TryBeginAimFromPrimaryPointer(character,
+                MutinyPhysics.PixelToUnity(pixelPosition.x, pixelPosition.y));
+        }
+
+        internal void ResolveAimReleaseForVerification(MutinyCharacter character, Vector2 pixelPosition)
+        {
+            ResolveAimRelease(character,
+                MutinyPhysics.PixelToUnity(pixelPosition.x, pixelPosition.y));
+        }
+
+        internal bool TryCancelAimFromSecondaryTouchForVerification(Vector2 pixelPosition)
+        {
+            return TryCancelAimFromSecondaryTouch(
+                MutinyPhysics.PixelToUnity(pixelPosition.x, pixelPosition.y));
         }
 
         public void CancelCurrentAim()

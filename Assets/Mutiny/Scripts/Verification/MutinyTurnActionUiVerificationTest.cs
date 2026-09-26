@@ -64,6 +64,7 @@ namespace Mutiny.Verification
             VerifyGameEndPopup(result);
             VerifyEndingSequence(result);
             VerifyWeaponReadyAndCancel(result);
+            VerifyCancelCrossPressOnly(result);
             VerifyProductionActionMethods(result);
             VerifyWeaponVelocityLimits(result);
             VerifyOriginalSplashTimeline(result);
@@ -82,6 +83,7 @@ namespace Mutiny.Verification
             VerifySharedWeaponLifecycle(result);
             VerifyParachuteBomb(result);
             VerifyPiecesOfEight(result);
+            VerifyPiecesOfEightPresentation(result);
             VerifyRumBottle(result);
             VerifyMineCameraAndLevelCleanup(result);
             VerifySeagull(result);
@@ -93,6 +95,7 @@ namespace Mutiny.Verification
             VerifyAnchor(result);
             VerifyCharacterLayering(result);
             VerifyCharacterOverlay(result);
+            VerifyCharacterAimOverlay(result);
             VerifyGMManager(result);
             VerifySpritePivots(result);
             VerifyScreenTransitions(result);
@@ -137,6 +140,13 @@ namespace Mutiny.Verification
             return result;
         }
 
+        public static MutinyLevel1VerificationResult RunPiecesOfEightPresentation()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyPiecesOfEightPresentation(result);
+            return result;
+        }
+
         public static MutinyLevel1VerificationResult RunGM()
         {
             var result = new MutinyLevel1VerificationResult();
@@ -155,6 +165,13 @@ namespace Mutiny.Verification
         {
             var result = new MutinyLevel1VerificationResult();
             VerifyCameraMovement(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunCameraInitialization()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyCameraInitialization(result);
             return result;
         }
 
@@ -400,8 +417,9 @@ namespace Mutiny.Verification
                     !explosions[0].PlayPopOnHit;
                 if (explosions.Length == 1)
                     explosions[0].ApplyHit();
+                ball.Explode(); // A second contact/finish callback must be inert.
                 result.Assert(wallContact && playedSounds.Count == 1,
-                    "CAN-AUD-02 production wall contact plays exactly one pop and explosion hit adds none");
+                    "CAN-AUD-03 production wall contact plays one pop; explosion hit and repeated finish add none");
                 for (int i = 0; i < explosions.Length; i++)
                     DestroyNow(explosions[i].gameObject);
                 DestroyNow(ballObject);
@@ -427,11 +445,13 @@ namespace Mutiny.Verification
                 ball.PhysicsBody.AdvanceSimulationTick();
                 explosions = Object.FindObjectsByType<MutinyExplosion>();
                 bool characterContact = ball.IsFinished && explosions.Length == 1 &&
-                    playedSounds.Count == 0 && !explosions[0].PlayPopOnHit;
+                    playedSounds.Count == 1 && playedSounds[0] == "pop" &&
+                    !explosions[0].PlayPopOnHit;
                 if (explosions.Length == 1)
                     explosions[0].ApplyHit();
-                result.Assert(characterContact && playedSounds.Count == 0,
-                    "CAN-AUD-02 production direct character impact and explosion hit do not play pop");
+                ball.Explode();
+                result.Assert(characterContact && playedSounds.Count == 1,
+                    "CAN-AUD-03 production direct character impact plays one pop; explosion hit and repeated finish add none");
                 for (int i = 0; i < explosions.Length; i++)
                     DestroyNow(explosions[i].gameObject);
             }
@@ -585,28 +605,20 @@ namespace Mutiny.Verification
                 result.Assert(!left && !rightEdge && !down && !up,
                     "CAM-EDGE-05 pointer outside the game window never scrolls");
 
-                Rect viewport = new Rect(217.5f, 0f, 1485f, 1080f);
-                Vector2 right = MutinyCameraController.MobileScrollArrowPosition(
-                    Vector2.right, viewport, 50f);
-                Vector2 upperLeft = MutinyCameraController.MobileScrollArrowPosition(
-                    new Vector2(-2f, -1f), viewport, 50f);
-                result.Assert(Mathf.Abs(right.x - 1652.5f) < 0.001f &&
-                              Mathf.Abs(right.y - 540f) < 0.001f &&
-                              Mathf.Abs(upperLeft.x - 267.5f) < 0.001f &&
-                              Mathf.Abs(upperLeft.y - 50f) < 0.001f,
-                    "AND-CUR-SCROLL-01 mobile arrow selects the matching letterboxed viewport edge or corner");
+                result.Assert(!MutinyCameraController.ShouldDrawScrollArrow(true, Vector2.right) &&
+                              !MutinyCameraController.ShouldDrawScrollArrow(true, new Vector2(-1f, 1f)) &&
+                              MutinyCameraController.ShouldDrawScrollArrow(false, Vector2.right) &&
+                              !MutinyCameraController.ShouldDrawScrollArrow(false, Vector2.zero),
+                    "AND-CUR-SCROLL-02 production drawing gate never shows a mobile arrow while preserving desktop manual-scroll arrows");
 
                 cameraObject.transform.position = new Vector3(20f, -20f, -10f);
                 camera.ApplyMobileTouchPanForVerification(new Vector2(40f, 20f));
-                bool followsActualPan = camera.IsMobileScrollArrowVisibleForVerification &&
-                    camera.MobileScrollDirectionForVerification.x < 0f &&
-                    camera.MobileScrollDirectionForVerification.y > 0f &&
-                    cameraObject.transform.position.x < 20f &&
+                bool panStillWorks = cameraObject.transform.position.x < 20f &&
                     cameraObject.transform.position.y < -20f;
                 cameraObject.transform.position = new Vector3(0f, -20f, -10f);
                 camera.ApplyMobileTouchPanForVerification(new Vector2(40f, 0f));
-                result.Assert(followsActualPan && !camera.IsMobileScrollArrowVisibleForVerification,
-                    "AND-CUR-SCROLL-01 production mobile pan reports its actual clamped movement and hides the arrow when the edge blocks motion");
+                result.Assert(panStillWorks && Mathf.Approximately(cameraObject.transform.position.x, 0f),
+                    "AND-CUR-SCROLL-02 removing mobile arrows preserves production touch pan and level-edge clamping");
 
                 cursorObject = new GameObject("ScrollArrowVerification_SpecialCursor");
                 MutinySpecialWeaponCursor specialCursor =
@@ -754,6 +766,299 @@ namespace Mutiny.Verification
             return result;
         }
 
+        public static MutinyLevel1VerificationResult RunAimCancelTouch()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyAimCancelTouch(result);
+            VerifyCancelCrossPressOnly(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunCharacterAimOverlay()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyCharacterOverlay(result);
+            VerifyCharacterAimOverlay(result);
+            VerifyAimCancelTouch(result);
+            VerifyCancelCrossPressOnly(result);
+            return result;
+        }
+
+        private static void VerifyCancelCrossPressOnly(MutinyLevel1VerificationResult result)
+        {
+            for (int action = 0; action < 2; action++)
+            {
+                bool isJump = action == 1;
+                GameObject fixture = new GameObject("CancelCrossPressOnly_" + (isJump ? "Jump" : "Weapon"));
+                GameObject firedWeaponObject = null;
+                try
+                {
+                    var managerObject = new GameObject("Manager");
+                    managerObject.transform.SetParent(fixture.transform, false);
+                    var teamObject = new GameObject("Team");
+                    teamObject.transform.SetParent(fixture.transform, false);
+                    var characterObject = new GameObject("Character");
+                    characterObject.transform.SetParent(fixture.transform, false);
+                    var inputObject = new GameObject("Input");
+                    inputObject.transform.SetParent(fixture.transform, false);
+                    MutinyTurnManager manager = managerObject.AddComponent<MutinyTurnManager>();
+                    MutinyTeam team = teamObject.AddComponent<MutinyTeam>();
+                    MutinyCharacter character = characterObject.AddComponent<MutinyCharacter>();
+                    MutinyPlayerInput input = inputObject.AddComponent<MutinyPlayerInput>();
+                    team.TeamNumber = 1;
+                    team.RegisterCharacter(character);
+                    team.SelectCharacter(character);
+                    manager.CurrentTeam = team;
+                    manager.CurrentPhase = TurnPhase.TurnActive;
+                    input.TurnManager = manager;
+                    Vector2 origin = new Vector2(120f, 160f);
+                    Vector2 cross = origin + new Vector2(0f, 33f);
+                    character.PhysicsBody.State = PhysicsBodyState.CreateDefault(origin.x, origin.y);
+                    character.transform.position = MutinyPhysics.PixelToUnity(origin.x, origin.y);
+                    character.AddWeapon("cherryBomb");
+                    int ammunition = character.GetAmmunition("cherryBomb");
+                    bool selected = isJump ? input.SelectCharacterThrow() : input.SelectWeapon("cherryBomb");
+                    bool noPressIgnored = !input.TryHandleCancelOverlayPrimaryPointerForVerification(character, cross, false);
+                    bool newPressCancelled = input.TryHandleCancelOverlayPrimaryPointerForVerification(character, cross, true);
+                    result.Assert(selected && noPressIgnored && newPressCancelled && input.IsActionMenuOpen &&
+                                  character.CanThrow && character.GetAmmunition("cherryBomb") == ammunition,
+                        $"WPN-CAN-PRESS-01 {(isJump ? "jump" : "weapon")} ready cross requires a new press and cancels without spending action");
+
+                    selected = isJump ? input.SelectCharacterThrow() : input.SelectWeapon("cherryBomb");
+                    MutinyWeapon weapon = input.EquippedWeapon;
+                    Vector2 aimOrigin = isJump ? origin : new Vector2(weapon.PhysicsBody.State.X, weapon.PhysicsBody.State.Y);
+                    bool began = input.TryBeginAimFromPrimaryPointerForVerification(character, aimOrigin);
+                    bool heldIgnored = !input.TryHandleCancelOverlayPrimaryPointerForVerification(character, cross, false);
+                    result.Assert(selected && began && heldIgnored && input.IsAiming &&
+                                  input.ShouldShowCancelWeapon(character) && character.CanThrow &&
+                                  character.GetAmmunition("cherryBomb") == ammunition,
+                        $"WPN-CAN-PRESS-01 {(isJump ? "jump" : "weapon")} entering cross while held does not cancel the aim");
+
+                    if (weapon != null)
+                        firedWeaponObject = weapon.gameObject;
+                    input.AdvanceAimPointerForVerification(character, cross, false, true);
+                    bool committed = isJump
+                        ? character.IsSelfThrown && !character.CanThrow
+                        : weapon.IsFired && input.EquippedWeapon == null &&
+                          character.GetAmmunition("cherryBomb") == ammunition - 1;
+                    result.Assert(committed && !input.IsActionMenuOpen && !input.IsAiming,
+                        $"WPN-CAN-PRESS-01 {(isJump ? "jump" : "weapon")} production release on cross commits normally instead of activating cancel");
+                }
+                finally
+                {
+                    DestroyNow(firedWeaponObject);
+                    DestroyNow(fixture);
+                }
+            }
+        }
+
+        private static void VerifyCharacterAimOverlay(MutinyLevel1VerificationResult result)
+        {
+            GameObject managerObject = null;
+            GameObject teamObject = null;
+            GameObject characterObject = null;
+            GameObject teammateObject = null;
+            GameObject inputObject = null;
+            GameObject levelObject = null;
+            TextAsset levelXml = null;
+            try
+            {
+                managerObject = new GameObject("CharacterAimOverlay_Manager");
+                teamObject = new GameObject("CharacterAimOverlay_Team");
+                characterObject = new GameObject("CharacterAimOverlay_Character");
+                teammateObject = new GameObject("CharacterAimOverlay_Teammate");
+                inputObject = new GameObject("CharacterAimOverlay_Input");
+                levelObject = new GameObject("CharacterAimOverlay_Level");
+                MutinyTurnManager manager = managerObject.AddComponent<MutinyTurnManager>();
+                MutinyTeam team = teamObject.AddComponent<MutinyTeam>();
+                MutinyCharacter character = characterObject.AddComponent<MutinyCharacter>();
+                MutinyCharacterOverlay overlay = characterObject.AddComponent<MutinyCharacterOverlay>();
+                MutinyCharacter teammate = teammateObject.AddComponent<MutinyCharacter>();
+                MutinyCharacterOverlay teammateOverlay = teammateObject.AddComponent<MutinyCharacterOverlay>();
+                MutinyPlayerInput input = inputObject.AddComponent<MutinyPlayerInput>();
+                var trajectoryObject = new GameObject("CharacterAimOverlay_Trajectory");
+                trajectoryObject.transform.SetParent(inputObject.transform, false);
+                input.TrajectoryRenderer = trajectoryObject.AddComponent<MutinyTrajectoryRenderer>();
+                LineRenderer pullLine = trajectoryObject.GetComponent<LineRenderer>();
+                MutinyLevelController levelController = levelObject.AddComponent<MutinyLevelController>();
+                levelXml = new TextAsset("<level width=\"1\" height=\"1\" players=\"1\"><row>-</row><bgRow>-</bgRow></level>");
+                levelController.LevelXml = levelXml;
+                input.CacheTerrain();
+                team.TeamNumber = 1;
+                team.RegisterCharacter(character);
+                team.RegisterCharacter(teammate);
+                manager.CurrentTeam = team;
+                manager.CurrentPhase = TurnPhase.TurnActive;
+                input.TurnManager = manager;
+                Vector2 origin = new Vector2(120f, 160f);
+                character.PhysicsBody.State = PhysicsBodyState.CreateDefault(origin.x, origin.y);
+                character.transform.position = MutinyPhysics.PixelToUnity(origin.x, origin.y);
+                teammate.PhysicsBody.State = PhysicsBodyState.CreateDefault(240f, 160f);
+                teammate.transform.position = MutinyPhysics.PixelToUnity(240f, 160f);
+                bool selected = input.TrySelectCharacterForVerification(team, origin);
+                bool selectedJump = input.SelectCharacterThrow();
+                overlay.RefreshVisualStateForVerification();
+                result.Assert(selected && selectedJump && overlay.IsTurnIndicatorVisible &&
+                              overlay.IsHealthBarVisible && overlay.IsSelectionCornersVisible && overlay.IsCancelWeaponVisible,
+                    "CHAR-OVR-AIM-01 production jump selection displays marker, health, corners and cross");
+
+                bool began = input.TryBeginAimFromPrimaryPointerForVerification(character, origin);
+                Vector2 pulled = origin + new Vector2(-50f, 60f);
+                input.AdvanceAimPointerForVerification(character, pulled, true, false);
+                overlay.RefreshVisualStateForVerification();
+                teammateOverlay.RefreshVisualStateForVerification();
+                result.Assert(began && input.IsAiming && !character.IsSelfThrown && character.CanThrow &&
+                              pullLine.enabled && pullLine.positionCount == 2 &&
+                              overlay.IsTurnIndicatorVisible && overlay.IsHealthBarVisible &&
+                              overlay.IsSelectionCornersVisible && overlay.IsCancelWeaponVisible,
+                    "CHAR-OVR-AIM-01 held production jump aim renders trajectory without hiding any of the four overlay elements");
+                result.Assert(teammateOverlay.IsTurnIndicatorVisible && teammateOverlay.IsHealthBarVisible &&
+                              !teammateOverlay.IsSelectionCornersVisible && !teammateOverlay.IsCancelWeaponVisible,
+                    "CHAR-OVR-AIM-01 aiming only affects the selected character's action; teammate marker and health remain visible");
+
+                bool rightCancelled = input.TryCancelAimFromSecondaryPointerForVerification();
+                overlay.RefreshVisualStateForVerification();
+                result.Assert(rightCancelled && !input.IsAiming && !pullLine.enabled && character.CanThrow &&
+                              overlay.IsTurnIndicatorVisible && overlay.IsHealthBarVisible &&
+                              overlay.IsSelectionCornersVisible && overlay.IsCancelWeaponVisible,
+                    "CHAR-OVR-AIM-01 right-cancel hides trajectory but retains all ready jump overlay elements");
+
+                input.TryBeginAimFromPrimaryPointerForVerification(character, origin);
+                input.AdvanceAimPointerForVerification(character, pulled, true, false);
+                bool crossCancelled = input.TryCancelWeaponFromOverlayForVerification(
+                    character, origin + new Vector2(0f, 33f));
+                overlay.RefreshVisualStateForVerification();
+                result.Assert(crossCancelled && input.IsActionMenuOpen && !pullLine.enabled && character.CanThrow &&
+                              overlay.IsTurnIndicatorVisible && overlay.IsHealthBarVisible &&
+                              overlay.IsSelectionCornersVisible && !overlay.IsCancelWeaponVisible,
+                    "CHAR-OVR-AIM-01 cross cancel returns to action menu without hiding marker, health or selection corners");
+
+                input.SelectCharacterThrow();
+                input.TryBeginAimFromPrimaryPointerForVerification(character, origin);
+                input.AdvanceAimPointerForVerification(character, pulled, false, true);
+                overlay.RefreshVisualStateForVerification();
+                result.Assert(character.IsSelfThrown && !character.CanThrow && !pullLine.enabled &&
+                              manager.CurrentPhase == TurnPhase.ActionExecuting &&
+                              !overlay.IsTurnIndicatorVisible && !overlay.IsHealthBarVisible &&
+                              !overlay.IsSelectionCornersVisible && !overlay.IsCancelWeaponVisible,
+                    "CHAR-OVR-AIM-01 only production release commit marks thrown and hides all four overlay elements");
+
+                team.ContinueSelectedCharacterAfterAction();
+                overlay.RefreshVisualStateForVerification();
+                result.Assert(!character.IsSelfThrown && overlay.IsTurnIndicatorVisible &&
+                              overlay.IsHealthBarVisible && overlay.IsSelectionCornersVisible,
+                    "CHAR-OVR-AIM-01 production action continuation restores marker, health and selected corners");
+            }
+            finally
+            {
+                DestroyNow(inputObject);
+                DestroyNow(characterObject);
+                DestroyNow(teammateObject);
+                DestroyNow(teamObject);
+                DestroyNow(managerObject);
+                DestroyNow(levelObject);
+                if (levelXml != null)
+                    Object.DestroyImmediate(levelXml);
+            }
+        }
+
+        private static void VerifyAimCancelTouch(MutinyLevel1VerificationResult result)
+        {
+            GameObject managerObject = null;
+            GameObject teamObject = null;
+            GameObject characterObject = null;
+            GameObject inputObject = null;
+            GameObject launchedWeaponObject = null;
+            try
+            {
+                managerObject = new GameObject("AimCancelTouch_Manager");
+                teamObject = new GameObject("AimCancelTouch_Team");
+                characterObject = new GameObject("AimCancelTouch_Character");
+                inputObject = new GameObject("AimCancelTouch_Input");
+                MutinyTurnManager manager = managerObject.AddComponent<MutinyTurnManager>();
+                MutinyTeam team = teamObject.AddComponent<MutinyTeam>();
+                MutinyCharacter character = characterObject.AddComponent<MutinyCharacter>();
+                MutinyCharacterOverlay overlay = characterObject.AddComponent<MutinyCharacterOverlay>();
+                MutinyPlayerInput input = inputObject.AddComponent<MutinyPlayerInput>();
+                team.TeamNumber = 1;
+                team.RegisterCharacter(character);
+                team.SelectCharacter(character);
+                manager.CurrentTeam = team;
+                manager.CurrentPhase = TurnPhase.TurnActive;
+                input.TurnManager = manager;
+                PhysicsBodyState state = character.PhysicsBody.State;
+                state.X = 120f;
+                state.Y = 160f;
+                character.PhysicsBody.State = state;
+                character.transform.position = MutinyPhysics.PixelToUnity(state.X, state.Y);
+                character.AddWeapon("cherryBomb");
+                int ammunition = character.GetAmmunition("cherryBomb");
+                Vector2 cross = new Vector2(state.X, state.Y + 33f);
+
+                bool selected = input.SelectWeapon("cherryBomb");
+                MutinyWeapon cancelCandidate = input.EquippedWeapon;
+                Vector2 weaponPosition = cancelCandidate != null
+                    ? new Vector2(cancelCandidate.PhysicsBody.State.X, cancelCandidate.PhysicsBody.State.Y)
+                    : Vector2.zero;
+                bool started = input.TryBeginAimFromPrimaryPointerForVerification(character, weaponPosition);
+                overlay.RefreshVisualStateForVerification();
+                bool visibleDuringWeaponAim = overlay.IsCancelWeaponVisible;
+                bool offCrossIgnored = !input.TryCancelAimFromSecondaryTouchForVerification(
+                    cross + new Vector2(40f, 0f));
+                bool secondTouchCancelled = input.TryCancelAimFromSecondaryTouchForVerification(cross);
+                input.ResolveAimReleaseForVerification(character, weaponPosition + new Vector2(20f, 10f));
+                result.Assert(selected && started && visibleDuringWeaponAim && offCrossIgnored &&
+                              secondTouchCancelled && input.IsActionMenuOpen && input.EquippedWeapon == null &&
+                              cancelCandidate != null && !cancelCandidate.IsFired &&
+                              character.GetAmmunition("cherryBomb") == ammunition &&
+                              character.CanThrow && character.CanShoot,
+                    "EXT-AIM-CAN-02 weapon aiming cross cancels via second touch; later first-finger release is inert");
+
+                bool selectedJump = input.SelectCharacterThrow();
+                bool startedJump = input.TryBeginAimFromPrimaryPointerForVerification(
+                    character, new Vector2(state.X, state.Y));
+                overlay.RefreshVisualStateForVerification();
+                bool visibleDuringJumpAim = overlay.IsCancelWeaponVisible;
+                bool pressedJumpCross = input.TryHandleCancelOverlayPrimaryPointerForVerification(character, cross, true);
+                result.Assert(selectedJump && startedJump && visibleDuringJumpAim && pressedJumpCross &&
+                              input.IsActionMenuOpen && !character.IsSelfThrown && character.CanThrow,
+                    "WPN-CAN-PRESS-01 new press on jump aiming cross cancels without spending throw");
+
+                bool selectedJumpAgain = input.SelectCharacterThrow();
+                bool startedJumpAgain = input.TryBeginAimFromPrimaryPointerForVerification(
+                    character, new Vector2(state.X, state.Y));
+                bool secondTouchCancelledJump = input.TryCancelAimFromSecondaryTouchForVerification(cross);
+                input.ResolveAimReleaseForVerification(character, cross + new Vector2(40f, 0f));
+                result.Assert(selectedJumpAgain && startedJumpAgain && secondTouchCancelledJump &&
+                              input.IsActionMenuOpen && !character.IsSelfThrown && character.CanThrow,
+                    "EXT-AIM-CAN-02 second touch also cancels jump aim; later first-finger release is inert");
+
+                input.SelectWeapon("cherryBomb");
+                MutinyWeapon retained = input.EquippedWeapon;
+                Vector2 retainedPosition = new Vector2(retained.PhysicsBody.State.X, retained.PhysicsBody.State.Y);
+                bool startedAgain = input.TryBeginAimFromPrimaryPointerForVerification(character, retainedPosition);
+                bool rightCancelled = input.TryCancelAimFromSecondaryPointerForVerification();
+                result.Assert(startedAgain && rightCancelled && input.IsWeaponReady &&
+                              input.EquippedWeapon == retained && character.GetAmmunition("cherryBomb") == ammunition,
+                    "EXT-JUMP-CAN-01 desktop right-click still returns to ready without unequipping");
+
+                bool startedToFire = input.TryBeginAimFromPrimaryPointerForVerification(character, retainedPosition);
+                launchedWeaponObject = retained.gameObject;
+                input.ResolveAimReleaseForVerification(character, retainedPosition + new Vector2(20f, 10f));
+                result.Assert(startedToFire && retained.IsFired && input.EquippedWeapon == null &&
+                              character.GetAmmunition("cherryBomb") == ammunition - 1,
+                    "EXT-AIM-CAN-02 release away from cross still uses production weapon launch");
+            }
+            finally
+            {
+                DestroyNow(launchedWeaponObject);
+                DestroyNow(inputObject);
+                DestroyNow(characterObject);
+                DestroyNow(teamObject);
+                DestroyNow(managerObject);
+            }
+        }
+
         private static void VerifyWeaponReadyAndCancel(MutinyLevel1VerificationResult result)
         {
             GameObject managerObject = null;
@@ -841,15 +1146,18 @@ namespace Mutiny.Verification
                 overlay.RefreshVisualStateForVerification();
                 bool readyShowsCancel = input.InteractionState == MutinyPlayerInteractionState.WeaponReady &&
                                         overlay.IsCancelWeaponVisible;
-                input.BeginAimForVerification(character);
+                Vector2 readyWeaponPosition = new Vector2(
+                    retained.PhysicsBody.State.X, retained.PhysicsBody.State.Y);
+                bool startedWeaponAim = input.TryBeginAimFromPrimaryPointerForVerification(
+                    character, readyWeaponPosition);
                 overlay.RefreshVisualStateForVerification();
-                bool aimingHidesCancel = input.IsAiming && !overlay.IsCancelWeaponVisible;
+                bool aimingShowsCancel = input.IsAiming && overlay.IsCancelWeaponVisible;
                 input.CancelCurrentAim();
                 overlay.RefreshVisualStateForVerification();
-                result.Assert(readyShowsCancel && aimingHidesCancel &&
+                result.Assert(readyShowsCancel && startedWeaponAim && aimingShowsCancel &&
                               input.InteractionState == MutinyPlayerInteractionState.WeaponReady &&
                               input.EquippedWeapon == retained && overlay.IsCancelWeaponVisible,
-                    "WRDY-T02/EXT-WRDY-01 aiming hides the cross and right-cancel returns to the same ready instance");
+                    "EXT-AIM-CAN-02 aiming retains the cross; right-cancel still returns to the same ready weapon");
 
                 bool crossCancelled = input.TryCancelWeaponFromOverlayForVerification(
                     character, new Vector2(ownerState.X, ownerState.Y + 33f));
@@ -858,15 +1166,46 @@ namespace Mutiny.Verification
                     "WRDY-T02 clicking the original 20px cross unequips without consuming ammunition");
 
                 input.SelectWeapon("cherryBomb");
+                MutinyWeapon touchCancelledWeapon = input.EquippedWeapon;
+                Vector2 touchWeaponPosition = new Vector2(
+                    touchCancelledWeapon.PhysicsBody.State.X, touchCancelledWeapon.PhysicsBody.State.Y);
+                bool touchAimStarted = input.TryBeginAimFromPrimaryPointerForVerification(
+                    character, touchWeaponPosition);
+                overlay.RefreshVisualStateForVerification();
+                bool offCrossIgnored = !input.TryCancelAimFromSecondaryTouchForVerification(
+                    new Vector2(ownerState.X + 40f, ownerState.Y + 33f));
+                bool secondTouchCancelled = input.TryCancelAimFromSecondaryTouchForVerification(
+                    new Vector2(ownerState.X, ownerState.Y + 33f));
+                input.ResolveAimReleaseForVerification(character, touchWeaponPosition + new Vector2(30f, 10f));
+                result.Assert(touchAimStarted && overlay.IsCancelWeaponVisible && offCrossIgnored &&
+                              secondTouchCancelled && input.IsActionMenuOpen && input.EquippedWeapon == null &&
+                              !touchCancelledWeapon.IsFired &&
+                              character.GetAmmunition("cherryBomb") == ammoBeforeCancel &&
+                              character.CanThrow && character.CanShoot,
+                    "EXT-AIM-CAN-02 second touch on cross cancels weapon aim; later primary release cannot fire or spend action");
+
+                input.SelectCharacterThrow();
+                bool jumpAimStarted = input.TryBeginAimFromPrimaryPointerForVerification(
+                    character, new Vector2(ownerState.X, ownerState.Y));
+                overlay.RefreshVisualStateForVerification();
+                bool jumpCrossVisible = overlay.IsCancelWeaponVisible;
+                bool newJumpCrossPress = input.TryHandleCancelOverlayPrimaryPointerForVerification(character,
+                    new Vector2(ownerState.X, ownerState.Y + 33f), true);
+                result.Assert(jumpAimStarted && jumpCrossVisible && newJumpCrossPress && input.IsActionMenuOpen &&
+                              !character.IsSelfThrown && character.CanThrow,
+                    "WPN-CAN-PRESS-01 new press on cross cancels jump aim without throwing");
+
+                input.SelectWeapon("cherryBomb");
                 MutinyWeapon launchedInstance = input.EquippedWeapon;
                 launchedWeaponObject = launchedInstance.gameObject;
                 Vector2 start = new Vector2(
                     launchedInstance.PhysicsBody.State.X, launchedInstance.PhysicsBody.State.Y);
-                bool launched = input.TryLaunchWeaponForVerification(
-                    character, start, start + new Vector2(20f, 10f));
+                bool releaseAimStarted = input.TryBeginAimFromPrimaryPointerForVerification(character, start);
+                input.ResolveAimReleaseForVerification(character, start + new Vector2(20f, 10f));
+                bool launched = releaseAimStarted && launchedInstance.IsFired;
                 result.Assert(launched && launchedInstance.IsFired && input.EquippedWeapon == null &&
                               character.GetAmmunition("cherryBomb") == ammoBeforeCancel - 1,
-                    "WRDY-T04 release fires the already equipped instance and consumes ammunition only on commit");
+                    "WRDY-T04 production non-cross release fires the already equipped instance and consumes ammunition only on commit");
             }
             finally
             {
@@ -1208,6 +1547,73 @@ namespace Mutiny.Verification
                 DestroyNow(teamObject);
                 foreach (MutinyPiecesOfEight coins in Object.FindObjectsByType<MutinyPiecesOfEight>())
                     DestroyNow(coins != null ? coins.gameObject : null);
+            }
+        }
+
+        private static void VerifyPiecesOfEightPresentation(MutinyLevel1VerificationResult result)
+        {
+            GameObject ownerObject = null;
+            MutinyPiecesOfEight coins = null;
+            try
+            {
+                ownerObject = new GameObject("PiecesOfEightPresentation_Owner");
+                MutinyCharacter owner = ownerObject.AddComponent<MutinyCharacter>();
+                PhysicsBodyState ownerState = PhysicsBodyState.CreateDefault(64f, 64f);
+                ownerState.Weight = 0f;
+                owner.PhysicsBody.State = ownerState;
+                owner.PhysicsBody.SetTerrain(new string[32, 32], 32, 32);
+                owner.transform.position = MutinyPhysics.PixelToUnity(64f, 64f);
+
+                coins = MutinyWeaponFactory.SpawnWeapon("piecesOfEight", owner) as MutinyPiecesOfEight;
+                MutinyPhysicsBody body = coins.PhysicsBody;
+                body.SetTerrain(new string[32, 32], 32, 32);
+                body.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                body.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep * 0.5f);
+                body.ApplyPresentationPoseForVerification();
+                float firstMidpoint = MutinyPhysics.UnityToPixel(coins.transform.position).y;
+                body.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep * 0.5f);
+                body.ApplyPresentationPoseForVerification();
+                float secondStart = MutinyPhysics.UnityToPixel(coins.transform.position).y;
+                result.Assert(!coins.IsFired && Mathf.Approximately(body.State.Y, 70f) &&
+                              Mathf.Approximately(firstMidpoint, 70f) &&
+                              Mathf.Approximately(secondStart, 70f) &&
+                              Mathf.Approximately(MutinyPhysics.UnityToPixel(body.SamplePresentationPosition(0f)).y, 70f) &&
+                              Mathf.Approximately(MutinyPhysics.UnityToPixel(body.SamplePresentationPosition(0.99f)).y, 70f),
+                    "POE-PRES-01 consecutive ready ticks retain original +1 gravity result without interpolating a repeated one-pixel fall");
+
+                owner.PhysicsBody.SetVelocity(10f, 0f);
+                owner.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                owner.PhysicsBody.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep * 0.5f);
+                body.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                body.ApplyPresentationPoseForVerification();
+                Vector2 movingCoin = MutinyPhysics.UnityToPixel(coins.transform.position);
+                result.Assert(Mathf.Approximately(owner.PhysicsBody.State.X, 74f) &&
+                              Mathf.Approximately(body.State.X, 74f) &&
+                              Mathf.Approximately(movingCoin.x, 69f) &&
+                              Mathf.Approximately(movingCoin.y, 70f),
+                    "POE-PRES-01 ready coin follows the owner's smooth presentation displacement without falling sawtooth");
+
+                coins.SetAimingState(true);
+                body.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                float aimingStart = MutinyPhysics.UnityToPixel(body.SamplePresentationPosition(0f)).y;
+                float aimingMiddle = MutinyPhysics.UnityToPixel(body.SamplePresentationPosition(0.5f)).y;
+                float aimingEnd = MutinyPhysics.UnityToPixel(body.SamplePresentationPosition(1f)).y;
+                result.Assert(coins.IsBeingAimed && aimingStart < aimingMiddle && aimingMiddle < aimingEnd,
+                    "POE-PRES-01 aiming coin restores ordinary gravity-path interpolation");
+
+                coins.SetAimingState(false);
+                coins.Fire(new Vector2(10f, -5f));
+                body.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                Vector2 flightStart = MutinyPhysics.UnityToPixel(body.SamplePresentationPosition(0f));
+                Vector2 flightMiddle = MutinyPhysics.UnityToPixel(body.SamplePresentationPosition(0.5f));
+                Vector2 flightEnd = MutinyPhysics.UnityToPixel(body.SamplePresentationPosition(1f));
+                result.Assert(coins.IsFired && flightStart.x < flightMiddle.x && flightMiddle.x < flightEnd.x,
+                    "POE-PRES-01 fired coin keeps high-frame-rate flight interpolation");
+            }
+            finally
+            {
+                DestroyNow(coins != null ? coins.gameObject : null);
+                DestroyNow(ownerObject);
             }
         }
 
@@ -5503,6 +5909,40 @@ namespace Mutiny.Verification
             }
         }
 
+        private static void VerifyGMUnlockAllLevels(MutinyGMManager gm, MutinyLevel1VerificationResult result)
+        {
+            int savedUnlock = Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel;
+            try
+            {
+                Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel = 1;
+                bool succeeded = gm.ExecuteCommand("unlockalllevels");
+                bool allUnlocked = true;
+                for (int level = 1; level <= Mutiny.Persistence.MutinySaveSystem.MaxLevel; level++)
+                    allUnlocked &= Mutiny.Persistence.MutinySaveSystem.IsLevelUnlocked(level);
+                result.Assert(succeeded && allUnlocked &&
+                              Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel ==
+                                  Mutiny.Persistence.MutinySaveSystem.MaxLevel &&
+                              PlayerPrefs.GetInt("mutiny_highest_unlocked_level", 1) ==
+                                  Mutiny.Persistence.MutinySaveSystem.MaxLevel &&
+                              gm.RecentSuccessfulCommands.Count > 0 &&
+                              gm.RecentSuccessfulCommands[0] == "unlockalllevels",
+                    "GM-03 lowercase unlockalllevels unlocks every level, persists progress and enters recent history");
+
+                Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel = 1;
+                bool replaySucceeded = gm.RunRecentCommand(0);
+                result.Assert(replaySucceeded &&
+                              Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel ==
+                                  Mutiny.Persistence.MutinySaveSystem.MaxLevel &&
+                              gm.RecentSuccessfulCommands.Count > 0 &&
+                              gm.RecentSuccessfulCommands[0] == "unlockalllevels",
+                    "GM-03 recent command button repeats the production all-level unlock");
+            }
+            finally
+            {
+                Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel = savedUnlock;
+            }
+        }
+
         private static void VerifyGMManager(MutinyLevel1VerificationResult result, bool includeLegacyChecks = true)
         {
             GameObject gmObject = new GameObject("GM_Verification_Host");
@@ -5514,6 +5954,7 @@ namespace Mutiny.Verification
             try
             {
                 MutinyGMManager gm = gmObject.AddComponent<MutinyGMManager>();
+                VerifyGMUnlockAllLevels(gm, result);
                 MutinyCharacter character = characterObject.AddComponent<MutinyCharacter>();
                 character.TeamIndex = 1;
                 character.IsSelected = true;
@@ -5531,12 +5972,13 @@ namespace Mutiny.Verification
                         "GM-03 UnlockWeapons sets ammunition to -1 (infinite) for all weapons");
                     result.Assert(character.CanShoot,
                         "GM-04 UnlockWeapons enables CanShoot on target character");
-                    result.Assert(Mathf.Approximately(MutinyGMManager.ButtonSize, 60f) &&
-                                  RectApproximately(MutinyGMManager.ResolveButtonRect(400f), new Rect(8f, 170f, 60f, 60f)),
-                        "GM-05 GM button size is 60px (reduced to 1/3 from 180px) and centered on screen height");
+                    result.Assert(Mathf.Approximately(MutinyGMManager.BaseButtonSize, 30f) &&
+                                  RectApproximately(MutinyGMManager.ResolveButtonRect(400f), new Rect(4f, 185f, 30f, 30f)),
+                        "GM-05 GM button size is 30px on 550x400 reference canvas and scales relative to canvas size");
                     result.Assert(RectApproximately(MutinyGMManager.ResolveButtonRect(1100f, 800f), new Rect(8f, 370f, 60f, 60f)) &&
-                                  RectApproximately(MutinyGMManager.ResolveButtonRect(1920f, 1080f), new Rect(225.5f, 510f, 60f, 60f)),
-                        "GM-06 GM button anchors to the left edge of the visible letterboxed 550x400 game canvas");
+                                  RectApproximately(MutinyGMManager.ResolveButtonRect(1920f, 1080f), new Rect(228.3f, 499.5f, 81f, 81f)) &&
+                                  RectApproximately(MutinyGMManager.ResolveButtonRect(3840f, 2160f), new Rect(456.6f, 999f, 162f, 162f)),
+                        "GM-06 GM button anchors to the left edge of the visible letterboxed game canvas and scales dynamically with resolution");
                 }
 
                 aiTeamObject = new GameObject("GM_ForceAiTeam");
@@ -5641,6 +6083,36 @@ namespace Mutiny.Verification
                 }
                 result.Assert(allIdsMapToMenuWeapons,
                     "GM-07 IDs 1..15 map to the 15 selectable weapons in menu order");
+
+                bool sixSucceeded = gm.ExecuteCommand("Help") &&
+                                    gm.ExecuteCommand("aiforceusewaepon 1") &&
+                                    gm.ExecuteCommand("aiforceusewaepon 2") &&
+                                    gm.ExecuteCommand("Help") &&
+                                    gm.ExecuteCommand("aiforceusewaepon 3") &&
+                                    gm.ExecuteCommand("  hElP  ");
+                result.Assert(sixSucceeded && gm.RecentSuccessfulCommands.Count == 5 &&
+                              gm.RecentSuccessfulCommands[0] == "hElP" &&
+                              gm.RecentSuccessfulCommands[1] == "aiforceusewaepon 3" &&
+                              gm.RecentSuccessfulCommands[2] == "Help" &&
+                              gm.RecentSuccessfulCommands[3] == "aiforceusewaepon 2" &&
+                              gm.RecentSuccessfulCommands[4] == "aiforceusewaepon 1",
+                    "GM-UI-02 keeps the five most recent successful executions, including repeats");
+
+                bool invalidSucceeded = gm.ExecuteCommand("aiforceusewaepon 16") ||
+                                        gm.ExecuteCommand("UnknownGM");
+                result.Assert(!invalidSucceeded && gm.RecentSuccessfulCommands.Count == 5 &&
+                              gm.RecentSuccessfulCommands[0] == "hElP" &&
+                              gm.RecentSuccessfulCommands[4] == "aiforceusewaepon 1",
+                    "GM-UI-02 excludes failed commands without changing the history");
+
+                bool replaySucceeded = gm.RunRecentCommand(3);
+                result.Assert(replaySucceeded && MutinyAIController.ForcedWeaponId == 2 &&
+                              gm.RecentSuccessfulCommands.Count == 5 &&
+                              gm.RecentSuccessfulCommands[0] == "aiforceusewaepon 2" &&
+                              gm.RecentSuccessfulCommands[1] == "hElP" &&
+                              gm.RecentSuccessfulCommands[4] == "aiforceusewaepon 2" &&
+                              !gm.RunRecentCommand(-1) && !gm.RunRecentCommand(5),
+                    "GM-UI-02 recent button reruns the production command and moves that execution to the front");
             }
             finally
             {
@@ -5822,6 +6294,135 @@ namespace Mutiny.Verification
             finally
             {
                 Object.DestroyImmediate(transitionObject);
+            }
+        }
+
+        private static void VerifyCameraInitialization(MutinyLevel1VerificationResult result)
+        {
+            GameObject host = null;
+            GameObject cameraObject = null;
+            GameObject oldWeaponObject = null;
+            MutinyFrontendController frontend = Object.FindAnyObjectByType<MutinyFrontendController>();
+            bool frontendWasActive = frontend != null && frontend.gameObject.activeSelf;
+            try
+            {
+                // Keep the title-page gate out of this gameplay-entry test without
+                // modifying speech flags or replacing its state machine.
+                if (frontendWasActive)
+                    frontend.gameObject.SetActive(false);
+                cameraObject = new GameObject("CameraInitialization_Camera");
+                Camera unityCamera = cameraObject.AddComponent<Camera>();
+                unityCamera.orthographic = true;
+                unityCamera.orthographicSize = 6.25f;
+                cameraObject.transform.position = new Vector3(25f, -20f, -10f);
+                MutinyCameraController camera = cameraObject.AddComponent<MutinyCameraController>();
+                host = new GameObject("CameraInitialization_LevelHost");
+                MutinyLevelController loader = host.AddComponent<MutinyLevelController>();
+                loader.ConfigureSession(MutinyGameMode.SinglePlayer);
+
+                int[] indices = { 1, 7, 13, 30 };
+                float[] centreYPixels = { 200f, 168f, 8f, 168f };
+                for (int i = 0; i < indices.Length; i++)
+                {
+                    MutinyLevelRoot oldLevel = loader.CurrentLevel;
+                    if (oldLevel != null)
+                    {
+                        oldWeaponObject = new GameObject("CameraInitialization_OldWeapon");
+                        MutinyCherryBomb weapon = oldWeaponObject.AddComponent<MutinyCherryBomb>();
+                        weapon.Initialize(oldLevel.Characters[0]);
+                        camera.TrackWeapon(weapon);
+                        camera.PanToTarget(oldLevel.Characters[0].transform);
+                    }
+                    cameraObject.transform.position = new Vector3(25f, -20f, -10f);
+                    bool loaded = loader.TryLoadLevel(indices[i]);
+                    MutinyLevelRoot level = loader.CurrentLevel;
+                    Vector2 centre = MutinyPhysics.UnityToPixel(cameraObject.transform.position);
+                    result.Assert(loaded && Mathf.Abs(centre.x - 275f) < 0.001f &&
+                                  Mathf.Abs(centre.y - centreYPixels[i]) < 0.001f &&
+                                  cameraObject.transform.position.z == -10f,
+                        $"CAM-INIT-01/02 production load {indices[i]} resets arbitrary old position with original water clamp");
+                    result.Assert(level != null && camera.TurnManager == level.GetComponent<MutinyTurnManager>() &&
+                                  camera.PlayerInput == level.GetComponent<MutinyPlayerInput>() &&
+                                  camera.SpeechForVerification == level.GetComponent<MutinySpeechController>() &&
+                                  !camera.IsPanningToTurnTarget && camera.TrackedWeaponForVerification == null,
+                        $"CAM-INIT-01 load {indices[i]} binds the new level and clears old turn/weapon targets before deferred destruction");
+                    // Verify before destroying the old root: Unity Destroy really
+                    // does leave it alive for the remainder of this frame.
+                    DestroyNow(oldWeaponObject);
+                    oldWeaponObject = null;
+                    if (oldLevel != null)
+                        DestroyNow(oldLevel.gameObject);
+                }
+
+                MutinyLevelRoot previous = loader.CurrentLevel;
+                cameraObject.transform.position = new Vector3(20f, -15f, -10f);
+                loader.RestartCurrentLevel();
+                result.Assert(loader.CurrentLevel != previous &&
+                              Vector2.Distance(MutinyPhysics.UnityToPixel(cameraObject.transform.position),
+                                  new Vector2(275f, 168f)) < 0.001f,
+                    "CAM-INIT-01 RestartCurrentLevel resets the level-30 water-limited starting camera");
+                DestroyNow(previous.gameObject);
+
+                previous = loader.CurrentLevel;
+                cameraObject.transform.position = new Vector3(20f, -15f, -10f);
+                loader.LoadNextLevel();
+                result.Assert(loader.CurrentLevel != previous && loader.CurrentLevelIndex == 31 &&
+                              Vector2.Distance(MutinyPhysics.UnityToPixel(cameraObject.transform.position),
+                                  new Vector2(275f, 200f)) < 0.001f,
+                    "CAM-INIT-01 LoadNextLevel does not carry the previous camera into level 31");
+                DestroyNow(previous.gameObject);
+
+                previous = loader.CurrentLevel;
+                loader.ClearLevel();
+                DestroyNow(previous.gameObject);
+                cameraObject.transform.position = new Vector3(20f, -15f, -10f);
+                bool reentered = loader.TryLoadLevel(1);
+                result.Assert(reentered && Vector2.Distance(
+                                  MutinyPhysics.UnityToPixel(cameraObject.transform.position),
+                                  new Vector2(275f, 200f)) < 0.001f,
+                    "CAM-INIT-01 explicit unload followed by re-entry restores the canonical camera origin");
+
+                MutinyTurnManager turn = loader.CurrentLevel.GetComponent<MutinyTurnManager>();
+                MutinySpeechController speech = loader.CurrentLevel.GetComponent<MutinySpeechController>();
+                turn.StartGame();
+                speech.AdvanceSpeechForVerification(1f / 120f);
+                Vector3 start = cameraObject.transform.position;
+                Vector3 target = speech.BubbleWorldPosition;
+                camera.AdvanceCameraForVerification(1f / 120f);
+                Vector2 displacement = cameraObject.transform.position - start;
+                result.Assert(speech.HasActiveBubble && !speech.IsBubbleVisible &&
+                              displacement.magnitude > 0f &&
+                              displacement.magnitude <= 50f / 32f / 0.04f / 120f + 0.0001f &&
+                              Vector2.Dot(displacement, (Vector2)(target - start)) > 0f &&
+                              Vector2.Distance(cameraObject.transform.position, target) < Vector2.Distance(start, target),
+                    $"CAM-INIT-03 production opening speech moves from reset origin at the 50px/tick render-frame limit before reveal (active={speech.HasActiveBubble}, visible={speech.IsBubbleVisible}, start={start}, target={target}, delta={displacement}, transition={MutinyTransitionManager.IsTransitionActive})");
+
+                previous = loader.CurrentLevel;
+                loader.ClearLevel();
+                DestroyNow(previous.gameObject);
+                TextAsset bakedXml = Resources.Load<TextAsset>("Data/Levels/level_07");
+                GameObject baked = MutinyLevelBuilder.BuildLevel(
+                    MutinyLevelXmlParser.Parse(bakedXml.text), host.transform, 7, MutinyGameMode.SinglePlayer);
+                // Adding the controller drives its real Awake adoption branch;
+                // Start must reset a baked level that did not call BuildLevel.
+                MutinyLevelController bakedLoader = baked.AddComponent<MutinyLevelController>();
+                cameraObject.transform.position = new Vector3(20f, -15f, -10f);
+                typeof(MutinyLevelController).GetMethod("Start",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    .Invoke(bakedLoader, null);
+                result.Assert(bakedLoader.CurrentLevel == baked.GetComponent<MutinyLevelRoot>() &&
+                              camera.TurnManager == baked.GetComponent<MutinyTurnManager>() &&
+                              Vector2.Distance(MutinyPhysics.UnityToPixel(cameraObject.transform.position),
+                                  new Vector2(275f, 168f)) < 0.001f,
+                    "CAM-INIT-01 baked-level Awake adoption and Start reset the canonical water-limited origin");
+            }
+            finally
+            {
+                DestroyNow(oldWeaponObject);
+                DestroyNow(host);
+                DestroyNow(cameraObject);
+                if (frontendWasActive && frontend != null)
+                    frontend.gameObject.SetActive(true);
             }
         }
 

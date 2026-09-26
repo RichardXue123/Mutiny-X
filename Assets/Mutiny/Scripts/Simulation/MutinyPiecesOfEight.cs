@@ -85,6 +85,7 @@ namespace Mutiny.Simulation
             m_AiTickAccumulator = 0f;
             PhysicsBody.OnBeforeSimulationStep -= PrepareUnfiredOwnerHold;
             PhysicsBody.OnBeforeSimulationStep += PrepareUnfiredOwnerHold;
+            PhysicsBody.PresentationPositionOverride = SampleReadyPresentationPosition;
         }
 
         public override void PrepareForEquip()
@@ -247,6 +248,21 @@ namespace Mutiny.Simulation
                 HoldAtOwner();
         }
 
+        private Vector3? SampleReadyPresentationPosition()
+        {
+            if (IsFired || IsFinished || IsBeingAimed || Owner == null || Owner.PhysicsBody == null)
+                return null;
+
+            // Flash presents only the pose after its owner reset and gravity
+            // step. Interpolating that repeated +5 -> +6 step makes the coin
+            // fall one pixel and jump back every 25 Hz tick. Keep its settled
+            // authoritative pose, but inherit the owner's smooth display delta.
+            Vector3 coinPosition = MutinyPhysics.PixelToUnity(PhysicsBody.State.X, PhysicsBody.State.Y);
+            PhysicsBodyState ownerState = Owner.PhysicsBody.State;
+            Vector3 ownerAuthoritative = MutinyPhysics.PixelToUnity(ownerState.X, ownerState.Y);
+            return coinPosition + Owner.PhysicsBody.PresentationPosition - ownerAuthoritative;
+        }
+
         private void AdvanceAiWait()
         {
             if (m_AiWaitTicks <= 0 || !IsAwaitingNextCoin || Owner == null || !Owner.IsAlive)
@@ -369,7 +385,11 @@ namespace Mutiny.Simulation
         private void OnDestroy()
         {
             if (PhysicsBody != null)
+            {
                 PhysicsBody.OnSimulationStep -= AdvanceOriginalPostMotionTick;
+                PhysicsBody.OnBeforeSimulationStep -= PrepareUnfiredOwnerHold;
+                PhysicsBody.PresentationPositionOverride = null;
+            }
         }
     }
 }

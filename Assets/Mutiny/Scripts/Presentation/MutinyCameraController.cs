@@ -39,8 +39,6 @@ namespace Mutiny.Presentation
         private Vector2 m_EdgeVelocityPixelsPerSecond;
         private bool m_AirDropCameraWasLocked;
         private Vector2 m_DesktopScrollDirection;
-        private Vector2 m_MobileScrollDirection;
-        private int m_LastMobileScrollFrame = -1;
         private bool m_DesktopScrollCursorWasVisible;
         private Texture2D m_ScrollCardinalTexture;
         private Texture2D m_ScrollDiagonalTexture;
@@ -62,7 +60,6 @@ namespace Mutiny.Presentation
                 Cursor.visible = PlayerInput == null || !PlayerInput.HasVisibleSpecialCursor;
             m_DesktopScrollCursorWasVisible = false;
             m_DesktopScrollDirection = Vector2.zero;
-            m_LastMobileScrollFrame = -1;
         }
 
         private void OnDestroy()
@@ -80,6 +77,51 @@ namespace Mutiny.Presentation
 
         public bool IsTrackingAirDrop => FindFallingChest() != null;
         public bool IsPanningToTurnTarget => m_TurnPanTarget != null;
+
+        public static void ResetCamerasForLevel(MutinyLevelRoot level)
+        {
+            if (level == null || !Application.isPlaying)
+                return;
+
+            Camera mainCamera = Camera.main;
+            if (mainCamera != null && mainCamera.GetComponent<MutinyCameraController>() == null)
+                mainCamera.gameObject.AddComponent<MutinyCameraController>();
+
+            foreach (MutinyCameraController controller in FindObjectsByType<MutinyCameraController>())
+                controller.ResetForLevel(level);
+        }
+
+        public void ResetForLevel(MutinyLevelRoot level)
+        {
+            if (level == null)
+                return;
+
+            if (m_DesktopScrollCursorWasVisible)
+                Cursor.visible = PlayerInput == null || !PlayerInput.HasVisibleSpecialCursor;
+            m_DesktopScrollCursorWasVisible = false;
+            m_DesktopScrollDirection = Vector2.zero;
+            m_EdgeVelocityPixelsPerSecond = Vector2.zero;
+            m_PreviousTeam = null;
+            m_TurnPanTarget = null;
+            m_TrackedWeapon = null;
+            m_AirDropCameraWasLocked = false;
+
+            // Bind synchronously: the previous root may survive until end-of-frame
+            // Destroy, so a scene search can still return the old turn/speech.
+            m_LevelRoot = level;
+            TurnManager = level.GetComponent<MutinyTurnManager>();
+            PlayerInput = level.GetComponent<MutinyPlayerInput>();
+            m_Speech = level.GetComponent<MutinySpeechController>();
+            ApplyViewportLetterbox();
+
+            // TileSystem.readXML always calls panCamera(0, 0, true). Flash stores
+            // the viewport top-left, whereas Unity stores its centre (Y is up).
+            // Use the normal clamp, including water.y - 320, before any speech pan.
+            SetClampedPosition(new Vector3(
+                OriginalHorizontalPixels * 0.5f / MutinyPhysics.PixelsPerUnit,
+                -OriginalVerticalPixels * 0.5f / MutinyPhysics.PixelsPerUnit,
+                transform.position.z));
+        }
 
         public void PanToTarget(Transform target)
         {
@@ -344,6 +386,7 @@ namespace Mutiny.Presentation
 
         internal Transform FindActionTargetForVerification() => FindActionTarget();
         internal MutinyWeapon TrackedWeaponForVerification => m_TrackedWeapon;
+        internal MutinySpeechController SpeechForVerification => m_Speech;
         internal void SetLevelRootForVerification(MutinyLevelRoot root) => m_LevelRoot = root;
         internal void AdvanceCameraForVerification(float deltaTime) => AdvanceCamera(deltaTime);
         internal void AdvanceCameraForVerification()
@@ -491,11 +534,10 @@ namespace Mutiny.Presentation
 
         internal bool CanUseManualScrollingForVerification() => CanUseManualScrolling();
         internal bool IsDesktopScrollArrowVisible =>
-            !Application.isMobilePlatform && m_DesktopScrollDirection.sqrMagnitude > 0f;
+            ShouldDrawScrollArrow(Application.isMobilePlatform, m_DesktopScrollDirection);
         internal Vector2 DesktopScrollDirectionForVerification => m_DesktopScrollDirection;
-        internal Vector2 MobileScrollDirectionForVerification => m_MobileScrollDirection;
-        internal bool IsMobileScrollArrowVisibleForVerification =>
-            m_LastMobileScrollFrame == Time.frameCount && m_MobileScrollDirection.sqrMagnitude > 0f;
+        internal static bool ShouldDrawScrollArrow(bool isMobilePlatform, Vector2 desktopDirection) =>
+            !isMobilePlatform && desktopDirection.sqrMagnitude > 0f;
         internal Texture2D ScrollArrowTextureForVerification(bool diagonal)
         {
             EnsureScrollArrowTextures();
@@ -572,25 +614,10 @@ namespace Mutiny.Presentation
                 screenDelta, viewportWidth, viewportHeight,
                 m_Camera.orthographicSize, m_Camera.aspect);
             m_EdgeVelocityPixelsPerSecond = Vector2.zero;
-            Vector3 previous = transform.position;
-            Vector3 next = previous;
+            Vector3 next = transform.position;
             next.x -= worldDelta.x;
             next.y -= worldDelta.y;
             SetClampedPosition(next);
-            // Use the movement that survived level clamping. A blocked pan
-            // cannot claim a direction or display an arrow.
-            Vector2 cameraScreenDirection = new Vector2(
-                transform.position.x - previous.x,
-                previous.y - transform.position.y);
-            if (cameraScreenDirection.sqrMagnitude > Mathf.Epsilon)
-            {
-                m_MobileScrollDirection = cameraScreenDirection;
-                m_LastMobileScrollFrame = Time.frameCount;
-            }
-            else
-            {
-                m_LastMobileScrollFrame = -1;
-            }
         }
 
         internal static Vector2 ScreenDeltaToWorldDelta(
@@ -771,19 +798,6 @@ namespace Mutiny.Presentation
             return true;
         }
 
-        internal static Vector2 MobileScrollArrowPosition(Vector2 screenDirection,
-            Rect viewportGuiRect, float margin)
-        {
-            Vector2 centre = viewportGuiRect.center;
-            float insetX = Mathf.Min(margin, viewportGuiRect.width * 0.5f);
-            float insetY = Mathf.Min(margin, viewportGuiRect.height * 0.5f);
-            return new Vector2(
-                screenDirection.x > 0f ? viewportGuiRect.xMax - insetX :
-                    screenDirection.x < 0f ? viewportGuiRect.xMin + insetX : centre.x,
-                screenDirection.y > 0f ? viewportGuiRect.yMax - insetY :
-                    screenDirection.y < 0f ? viewportGuiRect.yMin + insetY : centre.y);
-        }
-
         private void EnsureScrollArrowTextures()
         {
             if (m_ScrollCardinalTexture == null)
@@ -808,15 +822,10 @@ namespace Mutiny.Presentation
 
         private void DrawScrollArrow()
         {
-            bool mobile = Application.isMobilePlatform;
-            if (!mobile && !IsDesktopScrollArrowVisible)
-                return;
-            if (mobile && !IsMobileScrollArrowVisibleForVerification)
+            if (!IsDesktopScrollArrowVisible)
                 return;
 
-            Vector2 screenDirection = mobile
-                ? m_MobileScrollDirection
-                : new Vector2(m_DesktopScrollDirection.x, -m_DesktopScrollDirection.y);
+            Vector2 screenDirection = new Vector2(m_DesktopScrollDirection.x, -m_DesktopScrollDirection.y);
             if (!ResolveScrollArrow(screenDirection, out bool diagonal, out float rotation))
                 return;
             EnsureScrollArrowTextures();
@@ -826,24 +835,11 @@ namespace Mutiny.Presentation
 
             float scale = Mathf.Min(Screen.width / OriginalHorizontalPixels,
                 Screen.height / OriginalVerticalPixels);
-            Vector2 centre;
-            if (mobile)
-            {
-                Rect pixelRect = m_Camera != null ? m_Camera.pixelRect :
-                    new Rect(0f, 0f, Screen.width, Screen.height);
-                Rect viewportGui = new Rect(pixelRect.xMin, Screen.height - pixelRect.yMax,
-                    pixelRect.width, pixelRect.height);
-                centre = MobileScrollArrowPosition(screenDirection, viewportGui,
-                    18f * scale);
-            }
-            else
-            {
-                Mouse mouse = Mouse.current;
-                if (mouse == null)
-                    return;
-                Vector2 pointer = mouse.position.ReadValue();
-                centre = new Vector2(pointer.x, Screen.height - pointer.y);
-            }
+            Mouse mouse = Mouse.current;
+            if (mouse == null)
+                return;
+            Vector2 pointer = mouse.position.ReadValue();
+            Vector2 centre = new Vector2(pointer.x, Screen.height - pointer.y);
 
             Rect arrowRect = new Rect(centre.x - 15f * scale,
                 centre.y - 11f * scale, texture.width * scale, texture.height * scale);

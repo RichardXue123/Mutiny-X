@@ -65,6 +65,9 @@
 | --- | --- | --- | --- | --- |
 | JUMP-CAN-01 | 选择 Throw Self/跳跃但尚未拉线时，角色下方显示与武器相同的取消叉；点击回到行动菜单且不消耗跳跃 | `Character.as::updateOverlay` 的 `weaponSelected` 条件；`CancelWeaponButton.as::onPress` | `ShouldShowCancelWeapon`、`TryCancelWeaponFromOverlay` | 已实现；待运行验证 |
 | EXT-JUMP-CAN-01 | Throw Self 蓄力时右键只撤销当前拉线，返回跳跃待命且不消耗行动 | 用户授权扩展；原版 AS2 无右键输入规则 | `TryCancelAimFromSecondaryPointer`、`CancelCurrentAim` | 已实现；待运行验证 |
+| CHAR-OVR-AIM-01 | Throw Self 拉线是 `twanging` 而非 `dragging`，P1/P2 标记、选择框、血条及取消叉保持可见；正式起跳才按 `thrown` 隐藏 | `Character.as::Character/updateOverlay/twang`、`TileSystem.as::mouseDown/mouseUp`、用户原版截图 | `MutinyCharacterOverlay.LateUpdate`、`ShouldShowCancelWeapon` | 原版静态确认；已实现；隔离 Unity Play Mode 共 25/25 通过；主工程画面待验收 |
+| WPN-CAN-PRESS-01 | 取消叉只在按钮上新按下才响应；蓄力手势按住移入/在叉上松开不取消，松开仍正常提交 | `CancelWeaponButton.as::onPress`、`TileSystem.as::mouseUp`；用户明确要求 | `TryHandleCancelOverlayPrimaryPointer`、`ResolveAimRelease` | 已实现；隔离 Play Mode 31/31 组合专项通过；实机待验收 |
+| EXT-AIM-CAN-02 | 第二指在叉上新按下，清除轨迹与待命装备并回到行动菜单，后续主指松开不得迟发射 | 用户授权的安卓输入适配；叉可见是原版规则 `CHAR-OVR-AIM-01`，按下触发遵循 `WPN-CAN-PRESS-01` | `TryCancelWeaponFromOverlay`、`UpdateSecondaryMobileCameraTouch` | 已实现；隔离 Play Mode 31/31 组合专项通过；安卓真机待验收 |
 
 | ID | 可观察行为 | 来源 | Unity 状态 |
 | --- | --- | --- | --- |

@@ -81,7 +81,7 @@ namespace Mutiny.Simulation
         protected override void OnContact(CollisionSide side)
         {
             if (IsFired && !IsFinished)
-                Explode(playPop: true);
+                Explode();
         }
 
         private void AdvanceOriginalTick()
@@ -133,16 +133,17 @@ namespace Mutiny.Simulation
                         target.Y - target.TopExtent <= ball.Y + ball.BottomExtent &&
                         target.Y + target.BottomExtent >= ball.Y - ball.TopExtent)
                     {
-                        // Cannonball.advance's character branch creates the explosion
-                        // without the contact branch's pop sound.
-                        Explode(playPop: false);
+                        // The original character branch is silent. User-requested
+                        // feedback now routes both impact kinds through the same
+                        // one-shot completion gate, avoiding duplicate pops.
+                        Explode();
                         return;
                     }
                 }
             }
         }
 
-        public void Explode(bool playPop = true)
+        public void Explode()
         {
             if (IsFinished)
                 return;
@@ -151,13 +152,12 @@ namespace Mutiny.Simulation
             if (SpriteRenderer != null)
                 SpriteRenderer.enabled = false;
             Finish();
-            // Explosion.hit only applies damage in the original. The contact
-            // branch itself owns the sole pop; direct character overlap is mute.
+            // The impact owns the one pop. Explosion.hit only applies damage,
+            // so its frame-3 callback must never emit a second sound.
             MutinyExplosion.Spawn(position, ExplosionSize, ExplosionDamage, Owner,
                 playPopOnHit: false);
-            if (playPop)
-                Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("pop");
-            MutinyDebugLog.Info("Cannonball", $"exploded x={position.x:F1} y={position.y:F1} pop={playPop}", this);
+            Mutiny.Presentation.MutinyAudioManager.Instance?.PlaySFX("pop");
+            MutinyDebugLog.Info("Cannonball", $"exploded x={position.x:F1} y={position.y:F1} pop=once", this);
         }
 
         private void FinishWithoutExplosion(string reason)
