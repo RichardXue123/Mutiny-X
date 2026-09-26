@@ -14,6 +14,7 @@ namespace Mutiny.Persistence
         private const string KeySfxVolume = "mutiny_sfx_volume";
         private const string KeyMusicVolume = "mutiny_music_volume";
         private const string KeyCompletedScores = "mutiny_completed_scores_v1";
+        private const string KeyLanguage = "mutiny_language_v1";
 
         public const int MaxLevel = 18;
         public const int MaxCompletedScores = 5;
@@ -167,6 +168,12 @@ namespace Mutiny.Persistence
                 }
             }
             s_MockPrefs[key] = value;
+        }
+
+        public static string LanguageCode
+        {
+            get => GetPrefString(KeyLanguage, string.Empty);
+            set => SetPrefString(KeyLanguage, value ?? string.Empty);
         }
 
         public readonly struct CompletedScoreEntry

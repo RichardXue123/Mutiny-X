@@ -1,0 +1,83 @@
+# key	English source	Simplified Chinese
+frontend.play	play	开始游戏
+frontend.scores	scores	成绩
+frontend.help	help	帮助
+frontend.credits	credits	制作人员
+frontend.back	back	返回
+frontend.select_game	select game	选择模式
+frontend.select_level	select level	选择关卡
+frontend.one_player	1 player	单人游戏
+frontend.two_players	2 players	双人游戏
+frontend.game_select_hint	click one of the buttons below.||play against the computer or|against a friend!	选择下方按钮：\n与电脑对战，或与朋友对战！
+frontend.help_fire	use your weapons to fire at your opponents|click and drag and then let go to throw them	使用武器攻击对手。\n按住并拖动，松开后投掷。
+frontend.help_move	click on a character and throw him to move him	选中角色并投掷，让他移动。
+frontend.scores_empty	no completed records yet| |defeat all 15 campaign levels|to record your high score!	还没有通关记录。\n完成全部十五关，留下你的最高分！
+frontend.points	{0} pts	{0} 分
+frontend.versus	vs	对战
+frontend.level_unavailable	level {0:D2} data unavailable	第 {0:D2} 关数据不可用
+frontend.level_load_failed	level {0:D2} failed to load	第 {0:D2} 关加载失败
+frontend.credit_game_by	game by nitrome	Nitrome 原作
+frontend.credit_ported	Ported to Unity by Richard Xue	Richard Xue 移植至 Unity
+frontend.credit_programming	programming	程序
+frontend.credit_artwork	artwork	美术
+frontend.credit_music	music	音乐
+ending.congratulations	congratulations	恭喜通关
+ending.final_score	final score	最终得分
+ending.back_title	back to title	返回标题
+hud.quit_level	quit level	退出关卡
+hud.continue	continue	继续
+hud.back_menu	back to menu	返回菜单
+hud.restart_level	restart level	重开关卡
+hud.next_level	next level	下一关
+hud.submit_score	submit score	提交成绩
+hud.level_complete	level complete	关卡完成
+hud.level_failed	level failed	挑战失败
+hud.game_complete	game complete	游戏通关
+hud.draw	draw	平局
+hud.player1_wins	player 1 wins	玩家 1 获胜
+hud.player2_wins	player 2 wins	玩家 2 获胜
+hud.level_score	level score	本关得分
+hud.total_score	total score	总分
+hud.final_score	final score	最终得分
+hud.weapons	weapons	武器
+hud.throw_character	throw character	投掷角色
+hud.end_go	end go	结束回合
+hud.close	close	关闭
+hud.default_weapon_desc	Click one of the options above\nto select it.	请选择上方的武器或操作。
+hud.throw_desc	Click your character and drag\nwith the mouse to aim and set\nthe power.\nyou get to use this once per\nturn before you use a weapon.	按住角色并拖动，调整方向和力度。\n每回合使用武器前可以投掷一次角色。
+hud.end_go_desc	click here if you want to finish\nyour turn without using a\nweapon.	不使用武器，直接结束本回合。
+hud.close_desc	click here to cancel and select\nanother player.	取消当前选择，改选其他角色。
+event.turn_computer	Computer, take your turn	电脑回合
+event.turn_player	Player {0}, take your turn	玩家 {0}，轮到你了
+event.collected_weapon	collected {0}	获得{0}
+event.loading	loading	加载中
+weapon.cherryBomb.name	cherry bomb	樱桃炸弹
+weapon.cherryBomb.desc	Basic weak weapon which\nexplodes on impact.\nClick the cherry bomb and drag\nwith your mouse to aim and set\nthe power.	基础武器，碰撞后爆炸。\n按住炸弹并拖动，调整方向和力度。
+weapon.dynamite.name	dynamite	炸药
+weapon.dynamite.desc	This weapon explodes when it\ncomes to rest.\nClick the dynamite and drag\nwith your mouse to aim and set\nthe power.	停止移动后爆炸。\n按住并拖动，调整方向和力度。
+weapon.boulder.name	boulder	巨石
+weapon.boulder.desc	Large boulder which can bash\nother players out of the way.\nClick the boulder and drag\nwith your mouse to aim and set\nthe power.	巨石能撞开其他角色。\n按住并拖动，调整方向和力度。
+weapon.piecesOfEight.name	pieces of eight	八枚金币
+weapon.piecesOfEight.desc	Eight coins which inflict a small\namount of damage. You get\neight turns with this weapon.\nClick each one and drag to aim\nand set the power.	连续投出八枚金币，每枚造成少量伤害。\n逐枚拖动，调整方向和力度。
+weapon.rumBottle.name	rum bottle	朗姆酒瓶
+weapon.rumBottle.desc	This weapon explodes on impact\nand sets the nearby area on fire.\nClick it and drag\nwith your mouse to aim and set\nthe power.	碰撞后爆炸，并点燃周围区域。\n按住并拖动，调整方向和力度。
+weapon.banana.name	banana	香蕉
+weapon.banana.desc	This weapon is very bouncy.\nClick and drag with the mouse\nto aim and set the power.\nThen click your mouse again to\nmake it explode.	弹性十足。拖动瞄准并投出，\n再次点击即可引爆。
+weapon.parachuteBomb.name	parachute bomb	降落伞炸弹
+weapon.parachuteBomb.desc	Click and drag with the mouse\nto aim and set the power.\nAs it drifts down use\nyour cursor as a fan to push it\nleft or right.	拖动瞄准并投出。下落时移动光标，\n像扇子一样推它向左或向右。
+weapon.woodenCrate.name	crates	木箱
+weapon.woodenCrate.desc	Click anywhere on the stage to\nplace down three crates.\nuse these to form a wall to\nprotect your characters.	在场景中点击，放下三个木箱。\n用它们筑墙保护角色。
+weapon.gunpowderBarrel.name	gunpowder barrels	火药桶
+weapon.gunpowderBarrel.desc	Click anywhere on the stage to\nplace down two barrels.\nthese will explode when hit by\na weapon.	在场景中点击，放下两个火药桶。\n受到武器攻击时会爆炸。
+weapon.seagull.name	seagull	海鸥
+weapon.seagull.desc	Click on the screen to choose a\npath for the seagull to fly.\nThen click repeatedly to poop\non the enemy!	点击屏幕决定海鸥的飞行路线，\n再连续点击，让它攻击敌人！
+weapon.mine.name	mine	地雷
+weapon.mine.desc	Click the mine and drag\nwith the mouse to aim and\nset the power.\nIt will detonate when\nanother player moves nearby.	拖动地雷调整投掷方向和力度。\n其他角色靠近时会引爆。
+weapon.cannon.name	cannon	大炮
+weapon.cannon.desc	Drag the cannon into position\nwithin the circle.\nclick and drag the pin at the\nback to turn the cannon.\nrelease it to fire!	把大炮拖进圆形范围。\n拖动炮尾调整角度，松开后开火！
+weapon.anchor.name	anchor	船锚
+weapon.anchor.desc	Click anywhere in the stage to\ndrop a huge anchor down\nonto enemies!	点击场景，让巨大的船锚砸向敌人！
+weapon.voodooDoll.name	voodoo doll	巫毒娃娃
+weapon.voodooDoll.desc	choose an enemy player by\nclicking on them. then click\nand drag to throw the doll and\nwatch the enemy helplessly\nfly off in the same direction!	先点击选定敌人，再拖动投出娃娃。\n敌人会朝同一方向飞出去！
+weapon.tidalWave.name	tidal wave	海啸
+weapon.tidalWave.desc	click to send a huge tidal wave\nacross the bottom of the stage.\nIt will affect all players it\nhits.	点击后，巨浪席卷场景底部，\n波及途经的所有角色。

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Mutiny.Simulation;
 using UnityEngine;
@@ -17,11 +18,12 @@ namespace Mutiny.Presentation
         private const float HiddenY = 400f;
         private const float ShownY = 370f;
 
-        private readonly Queue<string> m_Lines = new Queue<string>();
+        private readonly Queue<Func<string>> m_Lines = new Queue<Func<string>>();
         private MutinyTurnManager m_TurnManager;
         private MutinySpeechController m_Speech;
         private float m_TickAccumulator;
         private string m_CurrentLine;
+        private Func<string> m_CurrentResolver;
         private int m_ThisLineFrame;
 
         public string VisibleText => m_CurrentLine;
@@ -39,18 +41,22 @@ namespace Mutiny.Presentation
             m_Speech = speech;
             m_Lines.Clear();
             m_CurrentLine = null;
+            m_CurrentResolver = null;
             m_ThisLineFrame = 0;
             m_TickAccumulator = 0f;
             ClipY = HiddenY;
 
             if (m_TurnManager != null)
                 m_TurnManager.OnTurnStarted += HandleTurnStarted;
+            MutinyLocalization.Changed -= HandleLanguageChanged;
+            MutinyLocalization.Changed += HandleLanguageChanged;
         }
 
         private void OnDestroy()
         {
             if (m_TurnManager != null)
                 m_TurnManager.OnTurnStarted -= HandleTurnStarted;
+            MutinyLocalization.Changed -= HandleLanguageChanged;
         }
 
         private void Update()
@@ -66,27 +72,40 @@ namespace Mutiny.Presentation
         public void Say(string line)
         {
             if (!string.IsNullOrEmpty(line))
-                m_Lines.Enqueue(line);
+                m_Lines.Enqueue(() => line);
         }
 
         public void SayCollected(string weaponType)
         {
             // WeaponSelectButton.hoverText["hover_" + type][0] supplies the
             // original display name. The HUD already keeps that same mapping.
-            MutinyGameHUD.GetOriginalActionCopy(weaponType, out string name, out _);
-            if (name == "weapons")
-                name = weaponType;
-            if (!string.IsNullOrEmpty(name))
-                Say("collected " + name);
+            if (string.IsNullOrEmpty(weaponType))
+                return;
+            m_Lines.Enqueue(() =>
+            {
+                MutinyGameHUD.GetOriginalActionCopy(weaponType, out string originalName, out _);
+                string name = weaponType;
+                if (originalName != "weapons")
+                    MutinyGameHUD.GetLocalizedActionCopy(weaponType, out name, out _);
+                return MutinyLocalization.Text("event.collected_weapon", "collected {0}", name);
+            });
         }
 
         private void HandleTurnStarted(MutinyTeam team)
         {
             if (team == null)
                 return;
-            Say(team.IsAiControlled
-                ? "Computer, take your turn"
-                : $"Player {team.TeamNumber}, take your turn");
+            bool computer = team.IsAiControlled;
+            int number = team.TeamNumber;
+            m_Lines.Enqueue(() => computer
+                ? MutinyLocalization.Text("event.turn_computer", "Computer, take your turn")
+                : MutinyLocalization.Text("event.turn_player", "Player {0}, take your turn", number));
+        }
+
+        private void HandleLanguageChanged()
+        {
+            if (m_CurrentResolver != null)
+                m_CurrentLine = m_CurrentResolver();
         }
 
         // The exported IngameTextArea class records thisLineFrame, a queue and _y,
@@ -106,7 +125,8 @@ namespace Mutiny.Presentation
             {
                 if (m_Lines.Count == 0)
                     return;
-                m_CurrentLine = m_Lines.Dequeue();
+                m_CurrentResolver = m_Lines.Dequeue();
+                m_CurrentLine = m_CurrentResolver();
                 m_ThisLineFrame = 0;
                 ClipY = HiddenY;
             }
@@ -123,6 +143,7 @@ namespace Mutiny.Presentation
             if (m_ThisLineFrame >= RiseTicks + HoldTicks + FallTicks)
             {
                 m_CurrentLine = null;
+                m_CurrentResolver = null;
                 ClipY = HiddenY;
             }
         }

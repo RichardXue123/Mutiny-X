@@ -720,9 +720,9 @@ namespace Mutiny.Presentation
             // Stage instance "text" is at (275,400); its textField's DangleFont
             // child is placed 10 px below the clip origin and centered on x=275.
             GUI.BeginGroup(new Rect(0f, 0f, OriginalCanvasWidth, OriginalCanvasHeight));
-            MutinyBitmapFont.DrawDangleText(
+            MutinyLocalizedText.Dangle(
                 new Rect(25f, IngameText.ClipY + 10f, 500f, 13f),
-                IngameText.VisibleText, Color.white, TextAnchor.MiddleCenter, 0, 13);
+                null, IngameText.VisibleText, Color.white, TextAnchor.MiddleCenter, 0, 13);
             GUI.EndGroup();
             GUI.matrix = oldMatrix;
         }
@@ -756,9 +756,8 @@ namespace Mutiny.Presentation
             // DefineSprite 465: textHolder at (-75,-21), DangleFont at (-25,-10)
             // relative to the clip registration point. Keep the same visible field
             // for typing and click-to-complete (the Flash mouseDown used a wrong path).
-            MutinyBitmapFont.DrawSpeechText(
-                new Rect(x - 100f, y - 31f, 220f, 92f), Speech.VisibleText,
-                TextAnchor.UpperLeft, 0, 13);
+            MutinyLocalizedText.Speech(
+                new Rect(x - 100f, y - 31f, 220f, 92f), null, Speech.VisibleText);
 
             Event evt = Event.current;
             if (evt != null && evt.type == EventType.MouseDown && evt.button == 0 &&
@@ -917,8 +916,8 @@ namespace Mutiny.Presentation
             DrawPopupSolid(panel, new Color32(51, 51, 51, 255));
             DrawPopupOutline(panel, new Color32(239, 49, 28, 255));
             DrawPopupOutline(new Rect(panel.x + 3f, panel.y + 3f, panel.width - 6f, panel.height - 6f), Color.black);
-            MutinyBitmapFont.DrawPirateText(new Rect(panel.x, 95f, panel.width, 23f),
-                "quit level", false, true, -3);
+            MutinyLocalizedText.Pirate(new Rect(panel.x, 95f, panel.width, 23f),
+                "hud.quit_level", "quit level");
 
             // The original continue_game MovieClip is a 280x24 button placed at
             // popup y=45.  Back to menu is the user-authorized companion action,
@@ -953,7 +952,7 @@ namespace Mutiny.Presentation
                 GUI.DrawTexture(rect, tex, ScaleMode.StretchToFill, true);
             else
                 DrawCornerButton(rect, label, hovered);
-            MutinyBitmapFont.DrawPirateText(rect, label, hovered, true, -3);
+            MutinyLocalizedText.Pirate(rect, HudLabelKey(label), label, hovered);
         }
 
         private void DrawPopupSolid(Rect rect, Color color)
@@ -1550,17 +1549,17 @@ namespace Mutiny.Presentation
                     PlayerInput.SelectWeapon(weaponType);
             }
 
-            GetOriginalActionCopy(hoveredAction, out string title, out string description);
+            GetLocalizedActionCopy(hoveredAction, out string title, out string description);
             GUI.enabled = previousEnabled;
             Matrix4x4 textSavedMatrix = GUI.matrix;
             GUI.matrix = panelMatrix;
             Color textColor = new Color(1f, 1f, 1f, Mathf.Clamp01(m_ActionPanelAlpha));
-            MutinyBitmapFont.DrawDangleText(
+            MutinyLocalizedText.Dangle(
                 new Rect(10.35f, 1f, 200f, 16f),
-                title, textColor, TextAnchor.MiddleLeft);
-            MutinyBitmapFont.DrawDangleText(
+                null, title, textColor, TextAnchor.MiddleLeft);
+            MutinyLocalizedText.Dangle(
                 new Rect(20f, 166f, 238f, 66f),
-                description, textColor, TextAnchor.UpperLeft, 0, 12);
+                null, description, textColor, TextAnchor.UpperLeft, 0, 12);
             GUI.matrix = textSavedMatrix;
             GUI.color = previousColor;
             GUI.enabled = previousEnabled;
@@ -1681,6 +1680,40 @@ namespace Mutiny.Presentation
             }
         }
 
+        public static void GetLocalizedActionCopy(string action, out string title, out string description)
+        {
+            GetOriginalActionCopy(action, out title, out description);
+            if (title == "weapons" && action != null)
+                return;
+            string titleKey;
+            string descriptionKey;
+            switch (action)
+            {
+                case "throw character":
+                    titleKey = "hud.throw_character";
+                    descriptionKey = "hud.throw_desc";
+                    break;
+                case "end turn":
+                    titleKey = "hud.end_go";
+                    descriptionKey = "hud.end_go_desc";
+                    break;
+                case "cancel character":
+                    titleKey = "hud.close";
+                    descriptionKey = "hud.close_desc";
+                    break;
+                case null:
+                    titleKey = "hud.weapons";
+                    descriptionKey = "hud.default_weapon_desc";
+                    break;
+                default:
+                    titleKey = "weapon." + action + ".name";
+                    descriptionKey = "weapon." + action + ".desc";
+                    break;
+            }
+            title = MutinyLocalization.Text(titleKey, title);
+            description = MutinyLocalization.Text(descriptionKey, description);
+        }
+
         private void DrawOriginalGameEndPopup()
         {
             if (!m_GameEndPopupShow && m_GameEndPopupAlpha <= 0f)
@@ -1720,7 +1753,11 @@ namespace Mutiny.Presentation
             // Title is at popup y=-105 (= -2100 twips); score labels are at
             // y=-40/-10 for complete and y=-44 for failed.  These are stage
             // coordinates after the popup's (275,200) registration point.
-            MutinyBitmapFont.DrawPirateText(new Rect(panel.x, 95f, panel.width, 23f), title, false, true, -3);
+            string titleKey = m_GameEndPopupKind == MutinyGameEndPopupKind.VersusPlayer1Wins ? "hud.player1_wins" :
+                m_GameEndPopupKind == MutinyGameEndPopupKind.VersusPlayer2Wins ? "hud.player2_wins" :
+                m_GameEndPopupKind == MutinyGameEndPopupKind.VersusDraw ? "hud.draw" :
+                complete ? "hud.level_complete" : finalComplete ? "hud.game_complete" : "hud.level_failed";
+            MutinyLocalizedText.Pirate(new Rect(panel.x, 95f, panel.width, 23f), titleKey, title);
 
             if (versus)
             {
@@ -1796,7 +1833,8 @@ namespace Mutiny.Presentation
             // Both source DynamicText instances use align="left".  Keeping
             // separate fields at x=-100 and x=20 avoids a long score colliding
             // with its label.
-            MutinyBitmapFont.DrawDangleText(new Rect(x, y, 112f, 13f), label, textColor, TextAnchor.MiddleLeft, 0, 13);
+            MutinyLocalizedText.Dangle(new Rect(x, y, 112f, 15f), HudLabelKey(label), label,
+                textColor, TextAnchor.MiddleLeft, 0, 13);
             MutinyBitmapFont.DrawDangleText(new Rect(295f, y, 90f, 13f), score.ToString(), textColor, TextAnchor.MiddleLeft, 0, 13);
         }
 
@@ -1812,8 +1850,24 @@ namespace Mutiny.Presentation
                 GUI.DrawTexture(rect, tex, ScaleMode.StretchToFill, true);
             else
                 DrawGameEndSolid(rect, hovered ? new Color32(112, 60, 37, 255) : new Color32(57, 43, 34, 255), alpha);
-            MutinyBitmapFont.DrawPirateText(rect, label, hovered, true, -3);
+            MutinyLocalizedText.Pirate(rect, HudLabelKey(label), label, hovered);
             GUI.color = previous;
+        }
+
+        private static string HudLabelKey(string label)
+        {
+            switch (label)
+            {
+                case "continue": return "hud.continue";
+                case "back to menu": return "hud.back_menu";
+                case "restart level": return "hud.restart_level";
+                case "next level": return "hud.next_level";
+                case "submit score": return "hud.submit_score";
+                case "level score": return "hud.level_score";
+                case "total score": return "hud.total_score";
+                case "final score": return "hud.final_score";
+                default: return null;
+            }
         }
 
         private static void DrawGameEndSolid(Rect rect, Color color, float alpha)

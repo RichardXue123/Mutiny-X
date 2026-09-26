@@ -246,9 +246,9 @@ namespace Mutiny.Presentation
             if (IsLoadingVisible && CurrentAlpha >= 0.99f)
             {
                 GUI.color = Color.white;
-                MutinyBitmapFont.DrawPirateText(
+                MutinyLocalizedText.Pirate(
                     new Rect(0f, 178f, OriginalCanvasWidth, 24f),
-                    "loading", false, centered: true, tracking: -3);
+                    "event.loading", "loading", false, centered: true, tracking: -3);
             }
 
             GUI.color = oldColor;

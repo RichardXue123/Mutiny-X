@@ -1,0 +1,475 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9620f8c34305754d8cc9a7e49e852d9, type: 3}
+  m_Name: Mutiny_en
+  m_EditorClassIdentifier: Unity.Localization::UnityEngine.Localization.Tables.StringTable
+  m_LocaleId:
+    m_Code: en
+  m_SharedData: {fileID: 11400000, guid: cea828f9cdadb9c4d93af55c6cf1ab9e, type: 2}
+  m_Metadata:
+    m_Items: []
+  m_TableData:
+  - m_Id: 1194319872
+    m_Localized: play
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1232068608
+    m_Localized: scores
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1232068609
+    m_Localized: help
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1232068610
+    m_Localized: credits
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262912
+    m_Localized: back
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262913
+    m_Localized: select game
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262914
+    m_Localized: select level
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262915
+    m_Localized: 1 player
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262916
+    m_Localized: 2 players
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262917
+    m_Localized: click one of the buttons below.||play against the computer or|against a friend!
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262918
+    m_Localized: use your weapons to fire at your opponents|click and drag and then let go to throw them
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262919
+    m_Localized: click on a character and throw him to move him
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262920
+    m_Localized: no completed records yet| |defeat all 15 campaign levels|to record your high score!
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262921
+    m_Localized: '{0} pts'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262922
+    m_Localized: vs
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262923
+    m_Localized: level {0:D2} data unavailable
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262924
+    m_Localized: level {0:D2} failed to load
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262925
+    m_Localized: game by nitrome
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262926
+    m_Localized: Ported to Unity by Richard Xue
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262927
+    m_Localized: programming
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262928
+    m_Localized: artwork
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262929
+    m_Localized: music
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262930
+    m_Localized: congratulations
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262931
+    m_Localized: final score
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262932
+    m_Localized: back to title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262933
+    m_Localized: quit level
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262934
+    m_Localized: continue
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262935
+    m_Localized: back to menu
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262936
+    m_Localized: restart level
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262937
+    m_Localized: next level
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262938
+    m_Localized: submit score
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262939
+    m_Localized: level complete
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262940
+    m_Localized: level failed
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262941
+    m_Localized: game complete
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262942
+    m_Localized: draw
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262943
+    m_Localized: player 1 wins
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262944
+    m_Localized: player 2 wins
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262945
+    m_Localized: level score
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262946
+    m_Localized: total score
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262947
+    m_Localized: final score
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262948
+    m_Localized: weapons
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262949
+    m_Localized: throw character
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262950
+    m_Localized: end go
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262951
+    m_Localized: close
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262952
+    m_Localized: 'Click one of the options above
+
+      to select it.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262953
+    m_Localized: 'Click your character and drag
+
+      with the mouse to aim and set
+
+      the power.
+
+      you get to use this once per
+
+      turn before you use a weapon.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262954
+    m_Localized: 'click here if you want to finish
+
+      your turn without using a
+
+      weapon.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262955
+    m_Localized: 'click here to cancel and select
+
+      another player.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262956
+    m_Localized: Computer, take your turn
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262957
+    m_Localized: Player {0}, take your turn
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262958
+    m_Localized: collected {0}
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262959
+    m_Localized: loading
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262960
+    m_Localized: cherry bomb
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262961
+    m_Localized: 'Basic weak weapon which
+
+      explodes on impact.
+
+      Click the cherry bomb and drag
+
+      with your mouse to aim and set
+
+      the power.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262962
+    m_Localized: dynamite
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262963
+    m_Localized: 'This weapon explodes when it
+
+      comes to rest.
+
+      Click the dynamite and drag
+
+      with your mouse to aim and set
+
+      the power.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262964
+    m_Localized: boulder
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262965
+    m_Localized: 'Large boulder which can bash
+
+      other players out of the way.
+
+      Click the boulder and drag
+
+      with your mouse to aim and set
+
+      the power.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262966
+    m_Localized: pieces of eight
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262967
+    m_Localized: 'Eight coins which inflict a small
+
+      amount of damage. You get
+
+      eight turns with this weapon.
+
+      Click each one and drag to aim
+
+      and set the power.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262968
+    m_Localized: rum bottle
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262969
+    m_Localized: 'This weapon explodes on impact
+
+      and sets the nearby area on fire.
+
+      Click it and drag
+
+      with your mouse to aim and set
+
+      the power.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262970
+    m_Localized: banana
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262971
+    m_Localized: 'This weapon is very bouncy.
+
+      Click and drag with the mouse
+
+      to aim and set the power.
+
+      Then click your mouse again to
+
+      make it explode.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262972
+    m_Localized: parachute bomb
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262973
+    m_Localized: 'Click and drag with the mouse
+
+      to aim and set the power.
+
+      As it drifts down use
+
+      your cursor as a fan to push it
+
+      left or right.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262974
+    m_Localized: crates
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262975
+    m_Localized: 'Click anywhere on the stage to
+
+      place down three crates.
+
+      use these to form a wall to
+
+      protect your characters.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262976
+    m_Localized: gunpowder barrels
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262977
+    m_Localized: 'Click anywhere on the stage to
+
+      place down two barrels.
+
+      these will explode when hit by
+
+      a weapon.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262978
+    m_Localized: seagull
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262979
+    m_Localized: 'Click on the screen to choose a
+
+      path for the seagull to fly.
+
+      Then click repeatedly to poop
+
+      on the enemy!'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262980
+    m_Localized: mine
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262981
+    m_Localized: 'Click the mine and drag
+
+      with the mouse to aim and
+
+      set the power.
+
+      It will detonate when
+
+      another player moves nearby.'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262982
+    m_Localized: cannon
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262983
+    m_Localized: 'Drag the cannon into position
+
+      within the circle.
+
+      click and drag the pin at the
+
+      back to turn the cannon.
+
+      release it to fire!'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262984
+    m_Localized: anchor
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262985
+    m_Localized: 'Click anywhere in the stage to
+
+      drop a huge anchor down
+
+      onto enemies!'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262986
+    m_Localized: voodoo doll
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262987
+    m_Localized: 'choose an enemy player by
+
+      clicking on them. then click
+
+      and drag to throw the doll and
+
+      watch the enemy helplessly
+
+      fly off in the same direction!'
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262988
+    m_Localized: tidal wave
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262989
+    m_Localized: 'click to send a huge tidal wave
+
+      across the bottom of the stage.
+
+      It will affect all players it
+
+      hits.'
+    m_Metadata:
+      m_Items: []
+  references:
+    version: 2
+    RefIds: []

@@ -1,0 +1,356 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5b11a58205ec3474ca216360e9fa74a8, type: 3}
+  m_Name: Mutiny Shared Data
+  m_EditorClassIdentifier: Unity.Localization::UnityEngine.Localization.Tables.SharedTableData
+  m_TableCollectionName: Mutiny
+  m_TableCollectionNameGuidString: cea828f9cdadb9c4d93af55c6cf1ab9e
+  m_Entries:
+  - m_Id: 1194319872
+    m_Key: frontend.play
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1232068608
+    m_Key: frontend.scores
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1232068609
+    m_Key: frontend.help
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1232068610
+    m_Key: frontend.credits
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262912
+    m_Key: frontend.back
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262913
+    m_Key: frontend.select_game
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262914
+    m_Key: frontend.select_level
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262915
+    m_Key: frontend.one_player
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262916
+    m_Key: frontend.two_players
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262917
+    m_Key: frontend.game_select_hint
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262918
+    m_Key: frontend.help_fire
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262919
+    m_Key: frontend.help_move
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262920
+    m_Key: frontend.scores_empty
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262921
+    m_Key: frontend.points
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262922
+    m_Key: frontend.versus
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262923
+    m_Key: frontend.level_unavailable
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262924
+    m_Key: frontend.level_load_failed
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262925
+    m_Key: frontend.credit_game_by
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262926
+    m_Key: frontend.credit_ported
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262927
+    m_Key: frontend.credit_programming
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262928
+    m_Key: frontend.credit_artwork
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262929
+    m_Key: frontend.credit_music
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262930
+    m_Key: ending.congratulations
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262931
+    m_Key: ending.final_score
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262932
+    m_Key: ending.back_title
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262933
+    m_Key: hud.quit_level
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262934
+    m_Key: hud.continue
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262935
+    m_Key: hud.back_menu
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262936
+    m_Key: hud.restart_level
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262937
+    m_Key: hud.next_level
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262938
+    m_Key: hud.submit_score
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262939
+    m_Key: hud.level_complete
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262940
+    m_Key: hud.level_failed
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262941
+    m_Key: hud.game_complete
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262942
+    m_Key: hud.draw
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262943
+    m_Key: hud.player1_wins
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262944
+    m_Key: hud.player2_wins
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262945
+    m_Key: hud.level_score
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262946
+    m_Key: hud.total_score
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262947
+    m_Key: hud.final_score
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262948
+    m_Key: hud.weapons
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262949
+    m_Key: hud.throw_character
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262950
+    m_Key: hud.end_go
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262951
+    m_Key: hud.close
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262952
+    m_Key: hud.default_weapon_desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262953
+    m_Key: hud.throw_desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262954
+    m_Key: hud.end_go_desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262955
+    m_Key: hud.close_desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262956
+    m_Key: event.turn_computer
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262957
+    m_Key: event.turn_player
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262958
+    m_Key: event.collected_weapon
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262959
+    m_Key: event.loading
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262960
+    m_Key: weapon.cherryBomb.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262961
+    m_Key: weapon.cherryBomb.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262962
+    m_Key: weapon.dynamite.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262963
+    m_Key: weapon.dynamite.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262964
+    m_Key: weapon.boulder.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262965
+    m_Key: weapon.boulder.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262966
+    m_Key: weapon.piecesOfEight.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262967
+    m_Key: weapon.piecesOfEight.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262968
+    m_Key: weapon.rumBottle.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262969
+    m_Key: weapon.rumBottle.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262970
+    m_Key: weapon.banana.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262971
+    m_Key: weapon.banana.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262972
+    m_Key: weapon.parachuteBomb.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262973
+    m_Key: weapon.parachuteBomb.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262974
+    m_Key: weapon.woodenCrate.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262975
+    m_Key: weapon.woodenCrate.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262976
+    m_Key: weapon.gunpowderBarrel.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262977
+    m_Key: weapon.gunpowderBarrel.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262978
+    m_Key: weapon.seagull.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262979
+    m_Key: weapon.seagull.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262980
+    m_Key: weapon.mine.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262981
+    m_Key: weapon.mine.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262982
+    m_Key: weapon.cannon.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262983
+    m_Key: weapon.cannon.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262984
+    m_Key: weapon.anchor.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262985
+    m_Key: weapon.anchor.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262986
+    m_Key: weapon.voodooDoll.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262987
+    m_Key: weapon.voodooDoll.desc
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262988
+    m_Key: weapon.tidalWave.name
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1236262989
+    m_Key: weapon.tidalWave.desc
+    m_Metadata:
+      m_Items: []
+  m_Metadata:
+    m_Items: []
+  m_KeyGenerator:
+    rid: 6285658983634567168
+  references:
+    version: 2
+    RefIds:
+    - rid: 6285658983634567168
+      type: {class: DistributedUIDGenerator, ns: UnityEngine.Localization.Tables, asm: Unity.Localization}
+      data:
+        m_CustomEpoch: 1790410930853
