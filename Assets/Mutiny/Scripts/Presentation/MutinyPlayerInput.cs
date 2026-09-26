@@ -1127,7 +1127,10 @@ namespace Mutiny.Presentation
 
         internal void PrepareControllerCharacterFocus(MutinyInputHub hub)
         {
-            if (hub == null || !hub.IsControllerActive || !CanProcessCurrentTurnInput() ||
+            // Frontend pages can coexist with a live or retained battle input.
+            // Their UI pointer must not be repositioned by board character focus.
+            if (hub == null || !hub.IsControllerActive || hub.CurrentContext != "board" ||
+                !CanProcessCurrentTurnInput() ||
                 TurnManager.CurrentTeam == null || TurnManager.CurrentTeam.IsAiControlled ||
                 MutinyTransitionManager.IsTransitionActive) return;
             MutinyGameHUD hud = FindAnyObjectByType<MutinyGameHUD>();

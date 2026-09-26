@@ -16,7 +16,7 @@
 
   本次共享 `MutinyPhysicsBody` 显示入口修改后，现有 `Validate Camera Movement` 11/11、`Validate Pieces Of Eight Presentation Play Mode` 4/4 复跑通过，未修改既有断言标准。
 
-- [手柄验证（2026-09-26）](CONTROLLER_VERIFICATION.md)：真实 Input System 虚拟设备驱动生产 Update / OnGUI / Twang；大炮部署/瞄准/开炮、其他特殊武器、连续放置、飞行期控制及双扳机累计力度，最新 278/278 断言通过（含原大炮/AI/效果 24/24）。实物与 Android 手柄待验收。
+- [手柄验证（2026-09-26）](CONTROLLER_VERIFICATION.md)：真实 Input System 虚拟设备驱动生产 Update / OnGUI / Twang；修复后台角色聚焦干扰主菜单十字键高亮，修复前 299/301、修复后最新 301/301 通过，含新增前端/战斗并存 7 条、自动角色焦点 16 条及原大炮/AI/效果 24/24；主菜单实际悬停截图已检查。实物与 Android 手柄待验收。
 
 - 2026-09-26：GM-08 `aitakeover 1` 隔离 Unity 6000.6.0f1 Play Mode 回归，最新 `RunGM()` 24/24 断言通过，含新增 12 条接管规则。真实玩家跳跃与正式回合结算、AI 候选/执行入口覆盖空中/落地后接管、只评价原角色、武器完整生命周期期间保持接管、换队/重开/GameOver 恢复控制及非法参数。实际鼠标、手机、拾取空投现场和全部武器画面待验收；详情见 [GM 工具矩阵](../05-GMTools/README.md)。
 - GM-08 同轮额外实际协程 smoke 2/2 通过：未跳跃接管自动射击并换队恢复；真实玩家跳跃飞行中接管，落地后同角色自动射击并在 GameOver 恢复。自然驱动 AI、物理、回合 `Update`，不直接调用 AI 求值/执行测试入口；验证环境仍为隔离工程，不代表主工程目视验收。

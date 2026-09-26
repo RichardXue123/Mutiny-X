@@ -80,6 +80,7 @@ namespace Mutiny.Verification
                 "GP-NAV-01 B returns GameSelect to Title");
             DestroyImmediate(m_Frontend.gameObject);
             m_Frontend = null;
+            yield return VerifyFrontendFocusWithBattle();
             yield return VerifyTurnFocusUI();
             yield return VerifyBattleUI();
             yield return VerifyCannonUI();
@@ -107,6 +108,60 @@ namespace Mutiny.Verification
                 Finished = true;
                 Debug.Log($"[Mutiny Controller] Verification finished: {Result.PassedAssertions}/{Result.TotalAssertions} passed.");
             }
+        }
+
+        private IEnumerator VerifyFrontendFocusWithBattle()
+        {
+            using (var rig = new Rig(withTeammate: true))
+            {
+                rig.Turn.enabled = false;
+                foreach (MutinyPhysicsBody body in rig.Turn.GetComponentsInChildren<MutinyPhysicsBody>())
+                    body.enabled = false;
+                Sample(rig, new GamepadState());
+                MutinyCharacter turnFocus = rig.Input.ControllerFocusedCharacter;
+                Result.Assert(turnFocus == rig.Teammate,
+                    "GP-NAV-02 production background turn already has a controller character focus");
+                MutinyFrontendController frontend = new GameObject("FrontendWithBattleVerification")
+                    .AddComponent<MutinyFrontendController>();
+                frontend.Initialize(null);
+                try
+                {
+                    yield return new WaitForSecondsRealtime(0.15f);
+                    yield return Press(GamepadButton.DpadUp);
+                    Result.Assert(FrontendPointerIn(new Rect(193f, 187f, 163f, 24f)),
+                        "GP-NAV-02 title Play hover survives neutral frames while a player turn exists in the background");
+                    yield return Press(GamepadButton.DpadDown);
+                    Result.Assert(FrontendPointerIn(new Rect(193f, 216f, 163f, 24f)),
+                        "GP-NAV-02 title Dpad moves to Scores and background character focus cannot steal its pointer");
+                    yield return Press(GamepadButton.DpadDown);
+                    Result.Assert(FrontendPointerIn(new Rect(193f, 245f, 163f, 24f)),
+                        "GP-NAV-02 title Help remains hovered after releasing Dpad");
+                    ScreenCapture.CaptureScreenshot(Path.Combine(Application.dataPath, "../controller-front-focus.png"));
+                    yield return Press(GamepadButton.South);
+                    yield return new WaitForSecondsRealtime(0.8f);
+                    Result.Assert(frontend.CurrentPage == MutinyFrontendPage.Help &&
+                        rig.Team.SelectedCharacter == null,
+                        "GP-NAV-02 A invokes actual Help transition without selecting a background character");
+                    yield return Press(GamepadButton.East);
+                    yield return new WaitForSecondsRealtime(0.8f);
+                    yield return Press(GamepadButton.DpadUp);
+                    Result.Assert(frontend.CurrentPage == MutinyFrontendPage.Title &&
+                        FrontendPointerIn(new Rect(193f, 187f, 163f, 24f)),
+                        "GP-NAV-02 B returns to Title and Dpad restores visible Play focus with background input alive");
+                }
+                finally { DestroyImmediate(frontend.gameObject); }
+                yield return Press(GamepadButton.South);
+                Result.Assert(rig.Team.SelectedCharacter == turnFocus && rig.Input.IsActionMenuOpen,
+                    "GP-NAV-02 returning to the board restores character confirmation after frontend UI ownership");
+            }
+        }
+
+        private static bool FrontendPointerIn(Rect canvasRect)
+        {
+            Vector2 pointer = MutinyInputHub.Instance.PointerPosition;
+            Vector2 canvasPoint = MutinyGameHUD.ScreenToCanvasPoint(
+                new Vector2(pointer.x, Screen.height - pointer.y), Screen.width, Screen.height);
+            return canvasRect.Contains(canvasPoint);
         }
 
         private IEnumerator VerifyBattleUI()
