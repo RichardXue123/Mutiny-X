@@ -42,7 +42,7 @@ GM 是当前 Unity 工程的调试扩展，不是 Flash 原版玩法规则。以
 | `GM-04` | `ResetLevels` / `ResetProgress` / `LockAll`：删除最高已解锁关卡键，下次读取返回默认值 1；完成分数和音频设置不受影响。 | `ExecuteCommand` → `MutinySaveSystem.ResetProgress` | 当前没有独立 GM 命令回归，待验收。 |
 | `GM-05` | `Help` / `?`：状态文字变为命令简表，不修改战斗与存档。简表只列推荐命令，不覆盖所有别名。 | `MutinyGMManager.ExecuteCommand` | 当前没有独立面板文字回归，待验收。 |
 | `GM-07` | `aiforceusewaepon 1..15`：全局 AI 武器候选只含对应菜单武器，按无限弹药执行且不扣真实库存；跳跃、Pass 与通常 `CanShoot` 门仍有效。`0` 清除覆盖。非法输入保持原值。 | `ExecuteCommand` → `MutinyAIController.ForcedWeaponId` → 决策候选 → `AIMove.UsesForcedWeaponSupply` → `ExecuteMove` | 2026-09-25 当前工程 Play Mode 专项回归历史结果 7/7；本轮未重新运行。完整战斗画面与“有候选但收益非正”的续行动分支待验收。 |
-| `GM-08` | `aitakeover 1`：当前人类回合剩余行动交给 AI；允许真实跳跃飞行中/落地后接管，不重置资格；完整回合结束恢复人类控制。 | `ExecuteCommand` → `TryTakeOverCurrentPlayerTurn` → 通常 AI 流程；`RestorePlayerControl` | 2026-09-26 隔离 Play Mode 新增 12 条生产入口断言通过；专项详情见下文。 |
+| `GM-08` | `aitakeoverwithluck {luck}`：以指定有限 Luck `0..100` 接管当前人类回合剩余行动；真实跳跃飞行中/落地后合法，不改角色 Luck 或行动资格；完整回合结束清除覆盖并恢复人类控制。旧 `aitakeover 1` 拒绝。 | `ExecuteCommand` → `TryTakeOverCurrentPlayerTurn(luck)` → `MutinyAIController.TakeoverLuckOverride` → 通常 AI 流程；`RestorePlayerControl` | 2026-09-27 隔离 Play Mode `RunGM()` 35/35 通过，含旧命令拒绝、分数 Luck 采样及清理；详情见下文。 |
 
 ### 单目标选择顺序
 
@@ -57,7 +57,7 @@ GM 是当前 Unity 工程的调试扩展，不是 Flash 原版玩法规则。以
 | GM-01/02 武器库存与无限标记 | 当前 `MutinyCharacter` 对象 | 对象随场景销毁时消失；新关角色不继承 | 重置 |
 | GM-03/04 最高关卡进度 | `MutinySaveSystem` 的 `mutiny_highest_unlocked_level` | 保留 | 保留；除非再次重置 |
 | GM-07 强制武器编号 | `MutinyAIController` 静态字段 | 保留 | `SubsystemRegistration` 重置为 0 |
-| GM-08 当前人类回合接管 | `MutinyTurnManager.m_AiTakeoverTeam`，临时队伍 AI 标记 | 管理器销毁即恢复；不转移至新关 | 重置；同一场景完整回合结束、GameOver 或 StartGame 也恢复 |
+| GM-08 当前人类回合接管及 Luck | `MutinyTurnManager.m_AiTakeoverTeam`、临时队伍 AI 标记、`MutinyAIController.TakeoverLuckOverride` | 管理器销毁即恢复和清空；不转移至新关 | 重置；同一场景完整回合结束、GameOver 或 StartGame 也恢复 |
 
 GM-07 在决策开始时把武器类型复制到工作对象；已选射击动作另存是否使用强制供给。因此在决策或执行途中改变命令，不追溯改写那次动作。GM-01/02 则直接修改角色的 `WeaponInventory`、`InfiniteWeapons` 和 `CanShoot`；`GetAmmunition()` 对无限武器返回 `-1`，底层库存值为 `int.MaxValue`。`cannonball` 是大炮内部库存别名，不占第 16 个菜单编号。
 
@@ -76,24 +76,25 @@ GM-07 在决策开始时把武器类型复制到工作对象；已选射击动�
 
 ## 验收状态与缺口
 
-### GM-08 · 单回合接管（2026-09-26）
+### GM-08 · 指定 Luck 的单回合接管（2026-09-27）
 
-原版来源：不适用，用户授权扩展。规格与错误条件见 [命令说明](../GM_COMMANDS.md#gm-08--当前玩家单回合-ai-接管)。生产入口为 `ExecuteCommand` → `TryTakeOverCurrentPlayerTurn`；不调用 `StartTurn`，已跳跃者保留所选角色及剩余射击资格，飞行中等待正式结算；未提交的玩家瞄准、武器和光标经输入生产清理入口撤销。现有 AI 组件负责候选/评分/镜头与武器分支，回合管理器在完整回合结束、GameOver、重新初始化和销毁时恢复人类控制。错误输入及重复请求不入成功历史，不延长接管。
+原版来源：不适用，用户授权扩展。规格与错误条件见 [命令说明](../GM_COMMANDS.md#gm-08--当前玩家单回合-ai-接管)。生产入口为 `ExecuteCommand` → `TryTakeOverCurrentPlayerTurn(luck)`；不调用 `StartTurn`，已跳跃者保留所选角色及剩余射击资格，飞行中等待正式结算；未提交的玩家瞄准、武器和光标经输入生产清理入口撤销。AI 控制器只在本次接管期间使用 `TakeoverLuckOverride` 计算每种普通武器/Anchor/Cannon 的候选数，原角色 `Luck` 保持不变。完整回合结束、GameOver、重新初始化和销毁时恢复人类控制并清除覆盖。旧 `aitakeover 1`、非法 Luck 及重复请求不入成功历史。
 
 - 静态确认与已实现：GM 解析、Help、输入清理、临时 AI 控制、自动恢复及通常两阶段流程已接入；`Assembly-CSharp-Editor` 连同运行时程序集编译通过，3 个原有警告、0 错误。
-- 实际测试通过：Unity 6000.6.0f1 隔离 Play Mode 执行 `RunGM()`，24/24 断言通过，其中新增 GM-08 12 条。覆盖错误参数、未提交武器清理、跳跃候选保留、重复拒绝、生产 Pass 后恢复、下一轮不继承、真实玩家跳跃空中接管、落地后仅原角色的武器候选、海啸正式生命周期期间维持接管及结束后恢复、重开和 GameOver。候选/执行使用生产测试入口，跳跃和换队没有在用例中手动重写行动布尔量。
-- 实际协程通过：同一隔离工程额外运行 `GmTakeoverLiveBatchRunner.Run`，自然驱动 AI `Start/Update` 协程、物理和回合 `Update`，2/2 场景通过：未跳跃接管自动开火并换队恢复；重开后真实玩家跳跃途中接管，落地后自动同角色射击并在 GameOver 恢复。该运行未直接调用 AI 求值/执行测试入口。日志与验证边界见 [GM-08 记录](Artifacts/GM-08-20260926.txt)。
+- 实际测试通过：2026-09-27 隔离 Unity 6000.6.0f1 Play Mode 执行新 `RunGM()`，35/35 断言通过，含旧命令拒绝、非法/分数 Luck、`7.5 → 7` 与 `9.25 → 9` 次真实武器候选、跳跃资格、完整结算、原角色 Luck 保持 3、下一轮恢复原采样数、`0/100` 边界及重开/GameOver 清理。详情见 [GM-08 新命令记录](Artifacts/GM-08-LUCK-20260927.txt)。2026-09-26 旧 `aitakeover 1` 的 24/24 只属历史，不作新规则依据。
+- 实际协程通过：2026-09-27 同一隔离工程运行 `GmLuckLiveBatchRunner.Run`，自然驱动 AI、物理与回合 `Update`，2/2 通过：`7.5` 的首次行动自动射击并恢复；真实玩家跳跃飞行中指定 `9.25`，落地后 AI 自动同角色射击并恢复。该场景用强制海啸稳定选择，Luck 采样次数由上面的生产候选专项验证；不是 15 种武器的实战验收。
+- 历史实际协程：2026-09-26 旧命令在隔离工程额外运行 `GmTakeoverLiveBatchRunner.Run`，2/2 场景通过；自然驱动了 AI/物理/回合 `Update`，但未使用新语法或验证 Luck 覆盖。旧日志与验证边界见 [GM-08 历史记录](Artifacts/GM-08-20260926.txt)。
 - 待运行验证：真实鼠标/触摸提交、双人模式玩家 2 的实际画面、拾取空投现场、15 种武器各自的接管画面；已实现不表示这些场景全部运行过。
-- 已知差异：此命令无 Flash 原版对应；仅接受参数 1，不接管未来多个回合，不在已经提交的武器序列中途转换操作者。复用/新增 AI 组件保持在队伍上，恢复后由通常 AI 资格门阻止求值。
+- 已知差异：此命令无 Flash 原版对应；新命令只接受有限 Luck `0..100`，不接管未来多个回合，不在已经提交的武器序列中途转换操作者。复用/新增 AI 组件保持在队伍上，恢复后由通常 AI 资格门阻止求值。
 
 - **静态确认**：上述入口、匹配顺序、写入位置和状态存活期均已按当前 C# 核对；原版来源不适用。
-- **已实现**：GM-UI-01/02、GM-PARSE-01、GM-01 至 GM-05、GM-07 的对应生产路径存在；GM-UI-02 已在打开面板时绘制最多五项历史、由同一解析入口重放。GM-03 精确小写 `unlockalllevels` 已支持，帮助文案也显示该拼写。2026-09-26 当前 `Assembly-CSharp.csproj` C# 编译通过（3 个已有警告，0 错误）。
-- **实际测试通过**：2026-09-26，Unity 6000.6.0f1 隔离工程 Play Mode 执行当前 `RunGM()`，`12/12` 断言通过，含 GM-07 的 7 条、GM-UI-02 的 3 条及 GM-03 的 2 条。最新验证复制当前生产文件与回归文件，没有屏蔽断言；此前历史按钮初次验证 `10/10` 时屏蔽过无关的未完成相机断言，仅为历史记录。GM-03 验证全部关卡资格、实际存档键、历史按钮同源重放；专项菜单没有执行 6 条旧 GM-01/按钮断言。隔离工程图形模式 701×531 Game View 截图确认历史五按钮可见、文字完整、与状态/输入区不重叠。
+- **已实现**：GM-UI-01/02、GM-PARSE-01、GM-01 至 GM-05、GM-07/08 的对应生产路径存在；GM-08 已替换为指定 Luck 的单回合接管，旧语法拒绝。GM-UI-02 与 GM-03 的既有入口保留。2026-09-27 当前 `Assembly-CSharp-Editor.csproj` 连同运行时程序集编译通过（11 个已有警告，0 错误）。
+- **实际测试通过**：2026-09-27，隔离 Unity 6000.6.0f1 Play Mode 的 `RunGM()` **35/35** 通过，另有新命令实际协程 **2/2** 通过；范围见 [GM-08 新验证](Artifacts/GM-08-LUCK-20260927.txt)。2026-09-26 的 `12/12`、`24/24` 及五按钮截图是对应旧基线/图形布局的历史结果，不能替代新命令验证。专项菜单没有执行 6 条旧 GM-01/按钮断言。
 - **待运行验证**：GM-UI-01/02 的鼠标悬停、按钮命中区域、键盘焦点、实际点击与时序，以及 GM-UI-02 的跨场景和重启存活期；GM-01 的目标优先级及错误分支；GM-02 的人数和全队边界；GM-03 的重启及实际选关 UI、GM-04 的完整存档流程；GM-05 与未知命令的实际文字；GM-07 在完整回合及非正收益续行动中的表现。
 - **已知差异与边界**：GM 系列整体为 Unity 扩展，不能计入 Flash 原版一致性。按钮视觉为圆形，`GUI.Button` 的命中区为矩形；GM-02 在零目标时仍显示成功；武器前缀匹配会接受任意后缀；公开 `ExecuteCommand(null)` 没有空值保护，正常 UI 提交路径不会传入 null。以上是当前行为，后续如决定调整，须先固定规格并补能检出缺陷的生产入口用例。
 
 ## 维护入口
 
-本轮运行日志摘录：[GM 专项 12 条断言结果（2026-09-26）](Artifacts/GM-12Assertions-20260926.txt)。保留 Unity 版本、精确小写命令执行和最终通过数；测试恢复原进度，不替用户实际解锁主工程存档。
+当前运行结果：[GM-08 指定 Luck 验证（2026-09-27）](Artifacts/GM-08-LUCK-20260927.txt)。旧 [GM 专项 12 条断言结果（2026-09-26）](Artifacts/GM-12Assertions-20260926.txt) 保留为历史；测试恢复原进度，不替用户实际解锁主工程存档。
 
 修改命令时同步核对 [玩家命令说明](../GM_COMMANDS.md)、`MutinyGMManager.ExecuteCommand` 中的 `Help` 文案及 [GM 回归](../../../Assets/Mutiny/Scripts/Verification/MutinyTurnActionUiVerificationTest.cs)。专项菜单 `Mutiny → Parity → Validate GM Commands` 见 [MutinyParityValidationMenu.cs](../../../Assets/Mutiny/Scripts/Verification/Editor/MutinyParityValidationMenu.cs)。新增命令先分配稳定 ID，写明输入、目标、前后态、持久化范围、错误行为、原版来源（扩展写不适用）、生产入口及实际验收结果；不得沿用旧断言标题充当命令 ID。

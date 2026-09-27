@@ -55,9 +55,14 @@ namespace Mutiny.Simulation
 
         // GM-08: temporarily hand the current human turn to the normal AI.
         // Do not StartTurn/ResetTurnActions: a player jump may already be committed.
-        public bool TryTakeOverCurrentPlayerTurn(out string error)
+        public bool TryTakeOverCurrentPlayerTurn(float luck, out string error)
         {
             error = null;
+            if (float.IsNaN(luck) || float.IsInfinity(luck) || luck < 0f || luck > 100f)
+            {
+                error = "Luck must be a finite number from 0 to 100.";
+                return false;
+            }
             if (IsAiTakeoverActive || CurrentTeam == null || CurrentTeam.IsAiControlled ||
                 CurrentTeam.IsDefeated || !HasPlayableTeams() ||
                 !isActiveAndEnabled || !CurrentTeam.gameObject.activeInHierarchy)
@@ -88,8 +93,9 @@ namespace Mutiny.Simulation
             MutinyAIController ai = CurrentTeam.GetComponent<MutinyAIController>();
             if (ai == null)
                 ai = CurrentTeam.gameObject.AddComponent<MutinyAIController>();
+            ai.SetTakeoverLuckOverride(luck);
             ai.enabled = true; // Start/Update use the usual turn gate, including jump settlement.
-            MutinyDebugLog.Info("Turn", $"GM-08 AI takeover team={TeamLabel(CurrentTeam)} phase={CurrentPhase} afterJump={afterJump}", this);
+            MutinyDebugLog.Info("Turn", $"GM-08 AI takeover team={TeamLabel(CurrentTeam)} phase={CurrentPhase} afterJump={afterJump} luck={luck}", this);
             return true;
         }
 
@@ -97,6 +103,7 @@ namespace Mutiny.Simulation
         {
             if (m_AiTakeoverTeam != null)
             {
+                m_AiTakeoverTeam.GetComponent<MutinyAIController>()?.SetTakeoverLuckOverride(null);
                 m_AiTakeoverTeam.IsAiControlled = false;
                 MutinyDebugLog.Info("Turn", $"GM-08 player control restored team={TeamLabel(m_AiTakeoverTeam)}", this);
             }

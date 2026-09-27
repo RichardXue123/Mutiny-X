@@ -6433,28 +6433,41 @@ namespace Mutiny.Verification
                 input.SelectWeapon("banana");
                 MutinyWeapon readyWeapon = input.EquippedWeapon;
                 int historyCount = gm.RecentSuccessfulCommands.Count;
-                result.Assert(!gm.ExecuteCommand("aitakeover") && !gm.ExecuteCommand("aitakeover 0") &&
-                              !gm.ExecuteCommand("aitakeover 2") && !gm.ExecuteCommand("aitakeover x") &&
-                              !gm.ExecuteCommand("aitakeover 1 extra") && !human.IsAiControlled &&
+                MutinyAIController.TrySetForcedWeaponId(0);
+                result.Assert(!gm.ExecuteCommand("aitakeover 1") &&
+                              !gm.ExecuteCommand("aitakeoverwithluck") &&
+                              !gm.ExecuteCommand("aitakeoverwithluck -1") &&
+                              !gm.ExecuteCommand("aitakeoverwithluck 100.1") &&
+                              !gm.ExecuteCommand("aitakeoverwithluck NaN") &&
+                              !gm.ExecuteCommand("aitakeoverwithluck Infinity") &&
+                              !gm.ExecuteCommand("aitakeoverwithluck x") &&
+                              !gm.ExecuteCommand("aitakeoverwithluck 1,5") &&
+                              !gm.ExecuteCommand("aitakeoverwithluck 1 extra") && !human.IsAiControlled &&
                               !manager.IsAiTakeoverActive && gm.RecentSuccessfulCommands.Count == historyCount,
-                    "GM-08 invalid takeover arguments do not change ownership or success history");
+                    "GM-08 retires aitakeover 1 and rejects invalid Luck without changing ownership or success history");
 
                 int turns = human.TotalTurnsTaken;
-                result.Assert(gm.ExecuteCommand("  AiTakeOver 1  ") && manager.IsAiTakeoverActive &&
+                result.Assert(gm.ExecuteCommand("  AiTakeOverWithLuck 7.5  ") && manager.IsAiTakeoverActive &&
                               human.IsAiControlled && owner.CanThrow && owner.CanShoot &&
                               human.TotalTurnsTaken == turns && input.EquippedWeapon == null &&
                               input.ActiveWeapon == null && !input.SelectWeapon("banana") &&
-                              owner.GetAmmunition("banana") == 2,
-                    "GM-08 production command takes over only the current turn and clears unfired player input without resetting actions/inventory");
+                              owner.GetAmmunition("banana") == 2 && owner.Luck == 3f,
+                    "GM-08 new command takes over only this turn and clears unfired input without changing character Luck/actions/inventory");
                 // Destroy is deferred in Play Mode; do not let the cancelled probe
                 // survive into subsequent independent checks in this synchronous suite.
                 if (readyWeapon != null) DestroyNow(readyWeapon.gameObject);
-                result.Assert(!gm.ExecuteCommand("aitakeover 1") && manager.IsAiTakeoverActive,
-                    "GM-08 repeated takeover is rejected instead of extending its lifetime");
+                result.Assert(!gm.ExecuteCommand("aitakeoverwithluck 20") && manager.IsAiTakeoverActive,
+                    "GM-08 repeated takeover cannot extend its lifetime or replace its Luck");
                 MutinyAIController ai = human.GetComponent<MutinyAIController>();
                 ai.UseFixedDecisionSeed = true;
                 ai.FixedDecisionSeed = 731;
                 ai.SaveDecisionTrace = false;
+                AIMove luckMove = ai.EvaluateCharacterWeaponsForVerification(
+                    owner, new List<MutinyCharacter> { target }, new List<MutinyCharacter> { owner },
+                    null, 0, 0, 1000f, out int luckCandidates);
+                result.Assert(ai.TakeoverLuckOverride == 7.5f && luckCandidates == 7 &&
+                              luckMove.WeaponType == "banana" && owner.Luck == 3f,
+                    "GM-08 fractional Luck controls production weapon sample count without mutating authored Luck");
                 MutinyAIController.TrySetForcedWeaponId(15);
                 ai.EvaluateBestMove();
                 bool hasJump = ai.LastDecisionTrace.Candidates.Exists(c => c.MoveType == nameof(AIMoveType.SelfThrow));
@@ -6465,13 +6478,20 @@ namespace Mutiny.Verification
                 for (int tick = 0; tick < 11; tick++) manager.AdvanceSimulationTick();
                 result.Assert(manager.CurrentTeam == opponent && !human.IsAiControlled &&
                               !manager.IsAiTakeoverActive && opponent.IsAiControlled &&
-                              !gm.ExecuteCommand("aitakeover 1"),
-                    "GM-08 production pass/settlement restores the human team and rejects native AI turns");
+                              ai.TakeoverLuckOverride == null && owner.Luck == 3f &&
+                              !gm.ExecuteCommand("aitakeoverwithluck 4"),
+                    "GM-08 production pass/settlement clears Luck override and rejects native AI turns");
                 manager.PassTurn();
                 for (int tick = 0; tick < 11; tick++) manager.AdvanceSimulationTick();
                 result.Assert(manager.CurrentTeam == human && !human.IsAiControlled &&
                               MutinyAIController.ResolveTurnGate(manager, human) == MutinyAITurnGate.Cancel,
                     "GM-08 takeover does not persist when the player receives the next turn");
+                MutinyAIController.TrySetForcedWeaponId(0);
+                ai.EvaluateCharacterWeaponsForVerification(
+                    owner, new List<MutinyCharacter> { target }, new List<MutinyCharacter> { owner },
+                    null, 0, 0, 1000f, out int restoredLuckCandidates);
+                result.Assert(restoredLuckCandidates == 3 && ai.TakeoverLuckOverride == null && owner.Luck == 3f,
+                    "GM-08 next player turn reverts weapon sampling to the character's original Luck");
 
                 string[,] terrain = new string[12, 12];
                 for (int y = 0; y < 12; y++)
@@ -6480,11 +6500,18 @@ namespace Mutiny.Verification
                 human.SelectCharacter(owner);
                 bool jumped = input.TryCommitCharacterThrow(owner, new Vector2(64f, 96f), new Vector2(64f, 146f));
                 Vector2 jumpVelocity = new Vector2(owner.PhysicsBody.State.VelocityX, owner.PhysicsBody.State.VelocityY);
-                result.Assert(jumped && gm.ExecuteCommand("aitakeover 1") && !owner.CanThrow && owner.CanShoot &&
+                result.Assert(jumped && gm.ExecuteCommand("aitakeoverwithluck 9.25") && !owner.CanThrow && owner.CanShoot &&
                               owner.IsSelfThrown && human.SelectedCharacter == owner &&
                               jumpVelocity == new Vector2(owner.PhysicsBody.State.VelocityX, owner.PhysicsBody.State.VelocityY) &&
-                              MutinyAIController.ResolveTurnGate(manager, human) == MutinyAITurnGate.Wait,
-                    "GM-08 accepts a real player jump in flight without resetting it and waits for the board");
+                              MutinyAIController.ResolveTurnGate(manager, human) == MutinyAITurnGate.Wait &&
+                              ai.TakeoverLuckOverride == 9.25f && owner.Luck == 3f,
+                    "GM-08 accepts a real player jump in flight with explicit Luck without resetting the jump");
+                ai.EvaluateCharacterWeaponsForVerification(
+                    owner, new List<MutinyCharacter> { target }, new List<MutinyCharacter> { owner },
+                    null, 0, 0, 1000f, out int continuationLuckCandidates);
+                result.Assert(continuationLuckCandidates == 9 && owner.Luck == 3f,
+                    "GM-08 post-jump weapon sampling uses the same requested Luck");
+                MutinyAIController.TrySetForcedWeaponId(15);
                 for (int tick = 0; tick < 400 && manager.CurrentPhase != TurnPhase.TurnActive; tick++)
                 {
                     owner.PhysicsBody.AdvanceSimulationTick();
@@ -6517,17 +6544,21 @@ namespace Mutiny.Verification
                     "GM-08 full AI weapon lifecycle restores human control only when the turn finishes");
                 if (wave != null) DestroyNow(wave.gameObject);
                 manager.StartGame();
-                bool takenAgain = gm.ExecuteCommand("aitakeover 1");
+                bool takenAgain = gm.ExecuteCommand("aitakeoverwithluck 0");
                 manager.StartGame();
-                result.Assert(takenAgain && !manager.IsAiTakeoverActive && !human.IsAiControlled,
-                    "GM-08 restarting the production game clears a pending takeover");
-                gm.ExecuteCommand("aitakeover 1");
+                result.Assert(takenAgain && !manager.IsAiTakeoverActive && !human.IsAiControlled &&
+                              ai.TakeoverLuckOverride == null && owner.Luck == 3f,
+                    "GM-08 accepts zero Luck and restarting the production game clears its override");
+                bool highLuckTaken = gm.ExecuteCommand("aitakeoverwithluck 100");
+                result.Assert(highLuckTaken && ai.TakeoverLuckOverride == 100f && owner.Luck == 3f,
+                    "GM-08 upper boundary Luck 100 is accepted without mutating character Luck");
                 target.TakeDamage(1000f);
                 target.ShownHealth = target.Health;
                 for (int tick = 0; tick < 11; tick++) manager.AdvanceSimulationTick();
                 result.Assert(manager.CurrentPhase == TurnPhase.GameOver && !human.IsAiControlled &&
-                              !manager.IsAiTakeoverActive && !gm.ExecuteCommand("aitakeover 1"),
-                    "GM-08 production GameOver restores ownership and rejects further takeover");
+                              !manager.IsAiTakeoverActive && ai.TakeoverLuckOverride == null &&
+                              owner.Luck == 3f && !gm.ExecuteCommand("aitakeoverwithluck 5"),
+                    "GM-08 production GameOver restores ownership/Luck and rejects further takeover");
             }
             finally
             {

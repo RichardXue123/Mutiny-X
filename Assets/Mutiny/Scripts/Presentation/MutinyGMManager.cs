@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Mutiny.Persistence;
 using Mutiny.Simulation;
 using UnityEngine;
@@ -391,18 +392,21 @@ namespace Mutiny.Presentation
                 m_StatusMessage = $"[RESET] Level progress reset to default.\nHighestUnlockedLevel is now {MutinySaveSystem.HighestUnlockedLevel}.";
                 succeeded = true;
             }
-            else if (lower.StartsWith("aitakeover", StringComparison.Ordinal))
+            else if (lower.StartsWith("aitakeoverwithluck", StringComparison.Ordinal))
             {
                 string[] parts = cmd.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
-                string error = "Usage: aitakeover 1 (current human turn only).";
+                string error = "Usage: aitakeoverwithluck {luck} (0..100, current human turn only).";
+                float luck = 0f;
                 MutinyTurnManager manager = FindAnyObjectByType<MutinyTurnManager>();
                 if (parts.Length == 2 &&
-                    string.Equals(parts[0], "aitakeover", StringComparison.OrdinalIgnoreCase) &&
-                    int.TryParse(parts[1], out int turns) && turns == 1 && manager != null)
-                    succeeded = manager.TryTakeOverCurrentPlayerTurn(out error);
+                    string.Equals(parts[0], "aitakeoverwithluck", StringComparison.OrdinalIgnoreCase) &&
+                    float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out luck) &&
+                    manager != null)
+                    succeeded = manager.TryTakeOverCurrentPlayerTurn(luck, out error);
                 m_StatusColor = succeeded ? new Color(0.35f, 1.0f, 0.45f) : new Color(1.0f, 0.45f, 0.45f);
                 m_StatusMessage = succeeded
-                    ? "[SUCCESS] AI controls the rest of this turn, including the weapon stage after a jump. Player control returns next turn."
+                    ? "[SUCCESS] AI controls the rest of this turn with Luck " +
+                      luck.ToString("0.###", CultureInfo.InvariantCulture) + ". Player control returns next turn."
                     : $"[ERROR] {error}";
             }
             else if (lower.StartsWith("aiforceusewaepon", StringComparison.Ordinal))
@@ -480,7 +484,7 @@ namespace Mutiny.Presentation
                                   $"• unlockalllevels - Unlocks all 1..{MutinySaveSystem.MaxLevel} levels\n" +
                                   "• ResetLevels     - Resets progress to level 1\n" +
                                   "• aiforceusewaepon 1..15 - Forces one infinite AI weapon; 0 disables\n" +
-                                  "• aitakeover 1    - AI plays the current human turn (also after a jump)\n" +
+                                  "• aitakeoverwithluck N - This turn's AI Luck (0..100)\n" +
                                   "• setlanguage zh-cn / en - Selects Simplified Chinese / English\n" +
                                   "• Help            - Shows this help message";
                 succeeded = true;

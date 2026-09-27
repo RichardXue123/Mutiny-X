@@ -88,6 +88,10 @@ namespace Mutiny.Simulation
         private MutinyAIRandomStream m_Random;
         private MutinyAIDecisionTrace m_ReplayOverride;
         public MutinyAIDecisionTrace LastDecisionTrace { get; private set; }
+        // GM-08 only: never mutate the level-authored per-character Luck.
+        internal float? TakeoverLuckOverride { get; private set; }
+
+        internal void SetTakeoverLuckOverride(float? luck) => TakeoverLuckOverride = luck;
 
         private sealed class DecisionWork
         {
@@ -587,7 +591,8 @@ namespace Mutiny.Simulation
                 m_Team = GetComponent<MutinyTeam>();
             Vector2 shooterPos = new Vector2(shooter.PhysicsBody.State.X, shooter.PhysicsBody.State.Y);
 
-            int samples = Mathf.FloorToInt(shooter.Luck * m_Team.Characters.Count / Mathf.Max(1, m_Team.AliveCount));
+            float effectiveLuck = TakeoverLuckOverride ?? shooter.Luck;
+            int samples = Mathf.FloorToInt(effectiveLuck * m_Team.Characters.Count / Mathf.Max(1, m_Team.AliveCount));
             List<PhysicsBoxObstacle> simulationBoxes = MutinyBoxRegistry.GetObstacles();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (string weaponType in EnumerateWeaponChoices(shooter, forcedWeaponType))
