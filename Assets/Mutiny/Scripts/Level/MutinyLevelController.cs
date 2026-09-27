@@ -76,6 +76,32 @@ namespace Mutiny.Levels
 
         public MutinyLevelRoot CurrentLevel => m_CurrentLevel;
 
+        // GM-12/13: the override belongs to this root's native AI, not the session.
+        public bool TrySetCurrentAiLuck(float? luck, out string error)
+        {
+            error = null;
+            if (luck.HasValue && !MutinyAIController.IsValidGmLuck(luck.Value))
+            {
+                error = "Luck must be a finite number from 0 to 99999.";
+                return false;
+            }
+            if (m_CurrentLevel == null || !m_CurrentLevel.gameObject.activeInHierarchy ||
+                ActiveGameMode != MutinyGameMode.SinglePlayer)
+            {
+                error = "Requires a loaded single-player level.";
+                return false;
+            }
+            MutinyTeam team = m_CurrentLevel.Team2;
+            MutinyAIController ai = team != null ? team.GetComponent<MutinyAIController>() : null;
+            if (ai == null || !team.IsAiControlled)
+            {
+                error = "The current level has no native enemy AI.";
+                return false;
+            }
+            ai.SetLevelLuckOverride(luck);
+            return true;
+        }
+
         private void Awake()
         {
             // Older versions of the scene tool attached this controller directly to an

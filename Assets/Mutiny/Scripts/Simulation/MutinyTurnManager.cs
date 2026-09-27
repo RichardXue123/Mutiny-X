@@ -58,9 +58,9 @@ namespace Mutiny.Simulation
         public bool TryTakeOverCurrentPlayerTurn(float luck, out string error)
         {
             error = null;
-            if (float.IsNaN(luck) || float.IsInfinity(luck) || luck < 0f || luck > 100f)
+            if (!MutinyAIController.IsValidGmLuck(luck))
             {
-                error = "Luck must be a finite number from 0 to 100.";
+                error = "Luck must be a finite number from 0 to 99999.";
                 return false;
             }
             if (IsAiTakeoverActive || CurrentTeam == null || CurrentTeam.IsAiControlled ||

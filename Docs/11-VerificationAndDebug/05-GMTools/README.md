@@ -46,7 +46,8 @@ GM 是当前 Unity 工程的调试扩展，不是 Flash 原版玩法规则。以
 | `GM-04` | `ResetLevels` / `ResetProgress` / `LockAll`：删除最高已解锁关卡键，下次读取返回默认值 1；完成分数和音频设置不受影响。 | `ExecuteCommand` → `MutinySaveSystem.ResetProgress` | 当前没有独立 GM 命令回归，待验收。 |
 | `GM-05` | `Help` / `?`：状态文字变为命令简表，不修改战斗与存档。简表只列推荐命令，不覆盖所有别名。 | `MutinyGMManager.ExecuteCommand` | 当前没有独立面板文字回归，待验收。 |
 | `GM-07` | `aiforceusewaepon 1..15`：全局 AI 武器候选只含对应菜单武器，按无限弹药执行且不扣真实库存；跳跃、Pass 与通常 `CanShoot` 门仍有效。`0` 清除覆盖。非法输入保持原值。 | `ExecuteCommand` → `MutinyAIController.ForcedWeaponId` → 决策候选 → `AIMove.UsesForcedWeaponSupply` → `ExecuteMove` | 2026-09-25 当前工程 Play Mode 专项回归历史结果 7/7；本轮未重新运行。完整战斗画面与“有候选但收益非正”的续行动分支待验收。 |
-| `GM-08` | `aitakeoverwithluck {luck}`：以指定有限 Luck `0..100` 接管当前人类回合剩余行动；真实跳跃飞行中/落地后合法，不改角色 Luck 或行动资格；完整回合结束清除覆盖并恢复人类控制。旧 `aitakeover 1` 拒绝。 | `ExecuteCommand` → `TryTakeOverCurrentPlayerTurn(luck)` → `MutinyAIController.TakeoverLuckOverride` → 通常 AI 流程；`RestorePlayerControl` | 2026-09-27 隔离 Play Mode `RunGM()` 35/35 通过，含旧命令拒绝、分数 Luck 采样及清理；详情见下文。 |
+| `GM-08` | `aitakeover {luck}`，保留 `aitakeoverwithluck` 别名：以指定有限 Luck `0..99999` 接管当前人类回合剩余行动；真实跳跃飞行中/落地后合法，不改角色 Luck 或行动资格；完整回合结束清除覆盖并恢复人类控制。 | `ExecuteCommand` → `TryTakeOverCurrentPlayerTurn(luck)` → `MutinyAIController.TakeoverLuckOverride` → 通常 AI 流程；`RestorePlayerControl` | 旧范围的 35/35 仅属历史；当前结果见 [扩展规格](AI_LUCK_COMMANDS_SPEC.md)。 |
+| `GM-12/13` | `aisetluck {luck}` 统一覆盖当前单人关卡敌方 Luck（0..99999）；`airesetluck` 恢复各角色原始默认；双人模式拒绝，重建不继承。 | `ExecuteCommand` → `MutinyLevelController.TrySetCurrentAiLuck` → `LevelLuckOverride` | 规格、生产入口验收及实际结果见 [Luck 扩展](AI_LUCK_COMMANDS_SPEC.md)。 |
 | `GM-10` | `ailog 1/0`：开关每次实际 AI 行动的一条详细参数与评分日志；无效参数不改状态，切关保留、重启重置。 | `ExecuteCommand` → `MutinyAIController.ActionLogEnabled` → 生产决策协程的行动／Pass 提交点 | 隔离 Play Mode `RunGM()` 39/39（含 3 条新断言），实际协程 5/5；[范围与剩余项](../04-Logging/AI_ACTION_LOG_SPEC.md)。 |
 
 ### 单目标选择顺序
@@ -84,14 +85,14 @@ GM-07 在决策开始时把武器类型复制到工作对象；已选射击动�
 
 ### GM-08 · 指定 Luck 的单回合接管（2026-09-27）
 
-原版来源：不适用，用户授权扩展。规格与错误条件见 [命令说明](../GM_COMMANDS.md#gm-08--当前玩家单回合-ai-接管)。生产入口为 `ExecuteCommand` → `TryTakeOverCurrentPlayerTurn(luck)`；不调用 `StartTurn`，已跳跃者保留所选角色及剩余射击资格，飞行中等待正式结算；未提交的玩家瞄准、武器和光标经输入生产清理入口撤销。AI 控制器只在本次接管期间使用 `TakeoverLuckOverride` 计算每种普通武器/Anchor/Cannon 的候选数，原角色 `Luck` 保持不变。完整回合结束、GameOver、重新初始化和销毁时恢复人类控制并清除覆盖。旧 `aitakeover 1`、非法 Luck 及重复请求不入成功历史。
+原版来源：不适用，用户授权扩展。规格与错误条件见 [命令说明](../GM_COMMANDS.md#gm-08--当前玩家单回合-ai-接管)。生产入口为 `ExecuteCommand` → `TryTakeOverCurrentPlayerTurn(luck)`；不调用 `StartTurn`，已跳跃者保留所选角色及剩余射击资格，飞行中等待正式结算；未提交的玩家瞄准、武器和光标经输入生产清理入口撤销。AI 控制器只在本次接管期间使用 `TakeoverLuckOverride` 计算每种普通武器/Anchor/Cannon 的候选数，原角色 `Luck` 保持不变。完整回合结束、GameOver、重新初始化和销毁时恢复人类控制并清除覆盖。非法 Luck 及重复请求不入成功历史；`aitakeover 1` 现在合法且 Luck=1。
 
 - 静态确认与已实现：GM 解析、Help、输入清理、临时 AI 控制、自动恢复及通常两阶段流程已接入；`Assembly-CSharp-Editor` 连同运行时程序集编译通过，3 个原有警告、0 错误。
-- 实际测试通过：2026-09-27 隔离 Unity 6000.6.0f1 Play Mode 执行新 `RunGM()`，35/35 断言通过，含旧命令拒绝、非法/分数 Luck、`7.5 → 7` 与 `9.25 → 9` 次真实武器候选、跳跃资格、完整结算、原角色 Luck 保持 3、下一轮恢复原采样数、`0/100` 边界及重开/GameOver 清理。详情见 [GM-08 新命令记录](Artifacts/GM-08-LUCK-20260927.txt)。2026-09-26 旧 `aitakeover 1` 的 24/24 只属历史，不作新规则依据。
+- 历史实际测试：2026-09-27 旧 `0..100` 规格在隔离 Unity 6000.6.0f1 Play Mode 执行 `RunGM()`，35/35 断言通过，含旧命令拒绝、非法/分数 Luck、`7.5 → 7` 与 `9.25 → 9` 次真实武器候选、跳跃资格、完整结算、原角色 Luck 保持 3、下一轮恢复原采样数、`0/100` 边界及重开/GameOver 清理。详情见 [GM-08 旧范围记录](Artifacts/GM-08-LUCK-20260927.txt)。2026-09-26 旧 `aitakeover 1` 的 24/24 也只属历史。当前扩大范围及关卡覆盖的实际结果见 [扩展规格](AI_LUCK_COMMANDS_SPEC.md)。
 - 实际协程通过：2026-09-27 同一隔离工程运行 `GmLuckLiveBatchRunner.Run`，自然驱动 AI、物理与回合 `Update`，2/2 通过：`7.5` 的首次行动自动射击并恢复；真实玩家跳跃飞行中指定 `9.25`，落地后 AI 自动同角色射击并恢复。该场景用强制海啸稳定选择，Luck 采样次数由上面的生产候选专项验证；不是 15 种武器的实战验收。
 - 历史实际协程：2026-09-26 旧命令在隔离工程额外运行 `GmTakeoverLiveBatchRunner.Run`，2/2 场景通过；自然驱动了 AI/物理/回合 `Update`，但未使用新语法或验证 Luck 覆盖。旧日志与验证边界见 [GM-08 历史记录](Artifacts/GM-08-20260926.txt)。
 - 待运行验证：真实鼠标/触摸提交、双人模式玩家 2 的实际画面、拾取空投现场、15 种武器各自的接管画面；已实现不表示这些场景全部运行过。
-- 已知差异：此命令无 Flash 原版对应；新命令只接受有限 Luck `0..100`，不接管未来多个回合，不在已经提交的武器序列中途转换操作者。复用/新增 AI 组件保持在队伍上，恢复后由通常 AI 资格门阻止求值。
+- 已知差异：此命令无 Flash 原版对应；当前只接受有限 Luck `0..99999`，不接管未来多个回合，不在已经提交的武器序列中途转换操作者。复用/新增 AI 组件保持在队伍上，恢复后由通常 AI 资格门阻止求值。旧 `0..100` 验证属于历史，扩大范围后当前结果见 [扩展规格](AI_LUCK_COMMANDS_SPEC.md)。
 
 - **静态确认**：上述入口、匹配顺序、写入位置和状态存活期均已按当前 C# 核对；原版来源不适用。
 - **已实现**：GM-UI-01/02、GM-PARSE-01、GM-01 至 GM-05、GM-07/08 的对应生产路径存在；GM-08 已替换为指定 Luck 的单回合接管，旧语法拒绝。GM-UI-02 与 GM-03 的既有入口保留。2026-09-27 当前 `Assembly-CSharp-Editor.csproj` 连同运行时程序集编译通过（11 个已有警告，0 错误）。

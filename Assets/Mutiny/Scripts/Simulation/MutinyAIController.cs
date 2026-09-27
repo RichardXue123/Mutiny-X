@@ -102,6 +102,14 @@ namespace Mutiny.Simulation
 
         internal void SetTakeoverLuckOverride(float? luck) => TakeoverLuckOverride = luck;
 
+        public const float MaxGmLuck = 99999f;
+        public float? LevelLuckOverride { get; private set; }
+        public static bool IsValidGmLuck(float luck) =>
+            !float.IsNaN(luck) && !float.IsInfinity(luck) && luck >= 0f && luck <= MaxGmLuck;
+        internal void SetLevelLuckOverride(float? luck) => LevelLuckOverride = luck;
+        internal float GetEffectiveLuck(MutinyCharacter character) =>
+            TakeoverLuckOverride ?? LevelLuckOverride ?? character.Luck;
+
         private sealed class DecisionWork
         {
             public int Id;
@@ -119,6 +127,7 @@ namespace Mutiny.Simulation
             public IEnumerator Steps;
             public bool ForceNextFrame;
             public string ForcedWeaponType;
+            public readonly Dictionary<MutinyCharacter, float> EffectiveLucks = new Dictionary<MutinyCharacter, float>();
         }
 
         private struct SelfThrowSample
@@ -409,6 +418,8 @@ namespace Mutiny.Simulation
 
             work.Enemies = enemies;
             work.Allies = allies;
+            foreach (MutinyCharacter character in allies)
+                work.EffectiveLucks[character] = GetEffectiveLuck(character);
 
             if (enemies.Count == 0 || allies.Count == 0 || !ContainsAlive(enemies) || !ContainsAlive(allies))
             {
@@ -515,7 +526,7 @@ namespace Mutiny.Simulation
                     int count = work.CandidateCount;
                     EvaluateCharacterWeapons(actor, work.Enemies, work.Allies, work.Terrain,
                         work.GridW, work.GridH, work.WaterY, ref best, ref count, weapon,
-                        work.ForcedWeaponType);
+                        work.ForcedWeaponType, work.EffectiveLucks[actor]);
                     work.Best = best;
                     work.CandidateCount = count;
                     yield return null;
@@ -611,7 +622,7 @@ namespace Mutiny.Simulation
 
             if (move.MoveType != AIMoveType.Pass)
             {
-                float luck = TakeoverLuckOverride ?? move.Character.Luck;
+                float luck = work.EffectiveLucks[move.Character];
                 line.Append(" luck=").Append(Number(luck))
                     .Append(" start=").Append(Point(PositionOf(move.Character)))
                     .Append(" forcedWeapon=").Append(work.ForcedWeaponType ?? "none")
@@ -659,7 +670,7 @@ namespace Mutiny.Simulation
                         .Append(" bestRejectedWeapon=")
                         .Append(string.IsNullOrEmpty(work.Best.WeaponType) ? "none" : work.Best.WeaponType)
                         .Append(" bestRejectedTarget=").Append(Point(work.Best.TargetPosition))
-                        .Append(" luck=").Append(Number(TakeoverLuckOverride ?? work.Best.Character.Luck));
+                        .Append(" luck=").Append(Number(work.EffectiveLucks[work.Best.Character]));
                 line.Append(" bestRejectedScore=")
                     .Append(work.Best.Character != null ? Number(work.Best.Score) : "NA")
                     .Append(" reason=")
@@ -744,13 +755,14 @@ namespace Mutiny.Simulation
             ref AIMove bestMove,
             ref int candidateCount,
             string onlyWeaponType = null,
-            string forcedWeaponType = null)
+            string forcedWeaponType = null,
+            float? decisionLuck = null)
         {
             if (m_Team == null)
                 m_Team = GetComponent<MutinyTeam>();
             Vector2 shooterPos = new Vector2(shooter.PhysicsBody.State.X, shooter.PhysicsBody.State.Y);
 
-            float effectiveLuck = TakeoverLuckOverride ?? shooter.Luck;
+            float effectiveLuck = decisionLuck ?? GetEffectiveLuck(shooter);
             int samples = Mathf.FloorToInt(effectiveLuck * m_Team.Characters.Count / Mathf.Max(1, m_Team.AliveCount));
             List<PhysicsBoxObstacle> simulationBoxes = MutinyBoxRegistry.GetObstacles();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

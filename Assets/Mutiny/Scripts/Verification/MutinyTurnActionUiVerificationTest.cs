@@ -6768,6 +6768,8 @@ namespace Mutiny.Verification
                 var enemies = new List<MutinyCharacter> { enemy };
                 var allies = new List<MutinyCharacter> { aiCharacter };
 
+                gm.ExecuteCommand("aiweapon 1");
+                result.Assert(MutinyAIController.ForcedWeaponId == 1, "GM-07 aiweapon alias sets forced weapon");
                 gm.ExecuteCommand("aiforceusewaepon 1");
                 AIMove forcedCherry = ai.EvaluateCharacterWeaponsForVerification(
                     aiCharacter, enemies, allies, null, 0, 0, 10000f, out int cherryCandidates);
@@ -6871,11 +6873,17 @@ namespace Mutiny.Verification
                               gm.RecentSuccessfulCommands[4] == "aiforceusewaepon 2" &&
                               !gm.RunRecentCommand(-1) && !gm.RunRecentCommand(5),
                     "GM-UI-02 recent button reruns the production command and moves that execution to the front");
+                result.Assert(gm.LockOpen && gm.IsPinned, "GM-UI-03 LockOpen defaults to true (keep open enabled by default)");
+                gm.LockOpen = false;
+                result.Assert(!gm.LockOpen && !gm.IsPinned, "GM-UI-03 LockOpen toggle works");
+                gm.LockOpen = true;
+
                 // The forced-shot check intentionally leaves a live projectile.
                 // Remove only that fixture before exercising a separate real board.
                 foreach (MutinyCherryBomb bomb in Object.FindObjectsByType<MutinyCherryBomb>())
                     if (bomb.Owner == aiCharacter) DestroyNow(bomb.gameObject);
                 VerifyGMAiTakeover(gm, result);
+                VerifyGMAiLevelLuck(gm, result);
                 VerifyGMSetLanguage(gm, result);
             }
             finally
@@ -6891,6 +6899,102 @@ namespace Mutiny.Verification
                 DestroyNow(aiTeamObject);
                 DestroyNow(characterObject);
                 DestroyNow(gmObject);
+            }
+        }
+
+        private static void VerifyGMAiLevelLuck(MutinyGMManager gm, MutinyLevel1VerificationResult result)
+        {
+            var host = new GameObject("GM_LevelLuck_Controller");
+            int savedForce = MutinyAIController.ForcedWeaponId;
+            MutinyLevelRoot oldRoot = null;
+            try
+            {
+                var controller = host.AddComponent<MutinyLevelController>();
+                int history = gm.RecentSuccessfulCommands.Count;
+                result.Assert(!gm.ExecuteCommand("aisetluck 5") && !gm.ExecuteCommand("airesetluck") &&
+                              gm.RecentSuccessfulCommands.Count == history,
+                    "GM-12/13 reject missing current level without recording success");
+                controller.ConfigureSession(MutinyGameMode.SinglePlayer);
+                controller.LevelXml = Resources.Load<TextAsset>("Data/Levels/level_05");
+                controller.BuildLevel();
+                MutinyLevelRoot root = controller.CurrentLevel;
+                MutinyAIController ai = root.Team2.GetComponent<MutinyAIController>();
+                var defaults = new Dictionary<MutinyCharacter, float>();
+                foreach (MutinyCharacter character in root.Team2.Characters)
+                    defaults[character] = character.Luck;
+                result.Assert(new HashSet<float>(defaults.Values).Count > 1,
+                    "GM-13 real level fixture contains distinct authored enemy Luck values");
+                MutinyCharacter shooter = root.Team2.Characters[0];
+                float playerLuck = root.Team1.Characters[0].Luck;
+                result.Assert(gm.ExecuteCommand("  AiSetLuck 101.5  ") && ai.LevelLuckOverride == 101.5f &&
+                              ai.GetEffectiveLuck(shooter) == 101.5f && shooter.Luck == defaults[shooter] &&
+                              root.Team1.Characters[0].Luck == playerLuck,
+                    "GM-12 changes effective native AI Luck above 100 without altering authored/player Luck");
+                gm.ExecuteCommand("aiweapon 1");
+                ai.SaveDecisionTrace = false;
+                ai.EvaluateCharacterWeaponsForVerification(shooter,
+                    new List<MutinyCharacter>(root.Team1.Characters), new List<MutinyCharacter>(root.Team2.Characters),
+                    null, 0, 0, 1000f, out int candidates);
+                result.Assert(candidates == 101,
+                    "GM-12 production weapon dispatcher uses level override for actual candidate count");
+                history = gm.RecentSuccessfulCommands.Count;
+                string[] invalid = { "aisetluck", "aisetluck -1", "aisetluck 99999.1", "aisetluck NaN",
+                    "aisetluck Infinity", "aisetluck x", "aisetluck 1,5", "aisetluck 1 extra", "airesetluck 1" };
+                bool rejected = true;
+                foreach (string command in invalid) rejected &= !gm.ExecuteCommand(command);
+                result.Assert(rejected && ai.LevelLuckOverride == 101.5f && gm.RecentSuccessfulCommands.Count == history,
+                    "GM-12/13 invalid commands retain override and success history");
+                result.Assert(gm.ExecuteCommand("aisetluck 0") && ai.LevelLuckOverride == 0f,
+                    "GM-12 zero is a valid override, not a reset");
+                ai.EvaluateCharacterWeaponsForVerification(shooter,
+                    new List<MutinyCharacter>(root.Team1.Characters), new List<MutinyCharacter>(root.Team2.Characters),
+                    null, 0, 0, 1000f, out int zeroCandidates);
+                result.Assert(zeroCandidates == 0, "GM-12 zero Luck reaches the production weapon sampler");
+                result.Assert(gm.ExecuteCommand("aisetluck 99999") && ai.LevelLuckOverride == 99999f,
+                    "GM-12 upper boundary Luck 99999 is accepted");
+                controller.ConfigureSession(MutinyGameMode.LocalTwoPlayer);
+                history = gm.RecentSuccessfulCommands.Count;
+                result.Assert(!gm.ExecuteCommand("aisetluck 3") && !gm.ExecuteCommand("airesetluck") &&
+                              ai.LevelLuckOverride == 99999f && gm.RecentSuccessfulCommands.Count == history,
+                    "GM-12/13 reject two-player session even if the XML was authored for single-player");
+                controller.ConfigureSession(MutinyGameMode.SinglePlayer);
+                bool reset = gm.ExecuteCommand("  AiResetLuck  ") && ai.LevelLuckOverride == null;
+                foreach (var entry in defaults)
+                    reset &= entry.Key.Luck == entry.Value && ai.GetEffectiveLuck(entry.Key) == entry.Value;
+                result.Assert(reset, "GM-13 restores every native character's level-authored default Luck");
+                ai.EvaluateCharacterWeaponsForVerification(shooter,
+                    new List<MutinyCharacter>(root.Team1.Characters), new List<MutinyCharacter>(root.Team2.Characters),
+                    null, 0, 0, 1000f, out int defaultCandidates);
+                result.Assert(defaultCandidates == Mathf.FloorToInt(defaults[shooter]),
+                    "GM-13 restores production candidate sampling after reset");
+                root.Team2.StartTurn();
+                gm.ExecuteCommand("aisetluck 2");
+                var steps = ai.EvaluateBestMoveStepsForVerification(move => { });
+                bool started = steps.MoveNext();
+                gm.ExecuteCommand("aisetluck 5");
+                while (steps.MoveNext()) { }
+                int frozenCount = ai.LastDecisionTrace.Candidates.FindAll(c => c.Weapon == "cherryBomb").Count;
+                result.Assert(started && frozenCount == 2 * root.Team2.Characters.Count,
+                    "GM-12 in-flight production decision keeps its starting Luck snapshot");
+                ai.EvaluateBestMove();
+                int nextCount = ai.LastDecisionTrace.Candidates.FindAll(c => c.Weapon == "cherryBomb").Count;
+                result.Assert(nextCount == 5 * root.Team2.Characters.Count,
+                    "GM-12 next production decision uses the updated level Luck");
+                gm.ExecuteCommand("aisetluck 7");
+                oldRoot = root;
+                controller.BuildLevel();
+                MutinyAIController rebuiltAi = controller.CurrentLevel.Team2.GetComponent<MutinyAIController>();
+                result.Assert(rebuiltAi != ai && rebuiltAi.LevelLuckOverride == null &&
+                              rebuiltAi.GetEffectiveLuck(controller.CurrentLevel.Team2.Characters[0]) == defaults[shooter],
+                    "GM-12 override is scoped to the current level and does not survive production rebuild");
+                DestroyNow(oldRoot.gameObject);
+                oldRoot = null;
+            }
+            finally
+            {
+                if (oldRoot != null) DestroyNow(oldRoot.gameObject);
+                DestroyNow(host);
+                MutinyAIController.TrySetForcedWeaponId(savedForce);
             }
         }
 
@@ -6919,8 +7023,12 @@ namespace Mutiny.Verification
                     RectApproximately(MutinyLocalizedText.ResolvePirateButtonTextRect(compactButton),
                         new Rect(193f, 185f, 163f, 24f)) &&
                     RectApproximately(MutinyLocalizedText.ResolvePirateButtonTextRect(wideButton),
-                        new Rect(135f, 243f, 280f, 24f)),
-                    "LOC-BTN-01 production Chinese button text moves down one canvas pixel from the previous layout without changing button width or height");
+                        new Rect(135f, 243f, 280f, 24f)) &&
+                    RectApproximately(MutinyGameHUD.ResolveActionPanelTitleRect(),
+                        new Rect(10.35f, -1f, 200f, 16f)) &&
+                    RectApproximately(MutinyGameHUD.ResolveActionPanelDescriptionRect(),
+                        new Rect(20f, 164f, 238f, 66f)),
+                    "LOC-BTN-01 production Chinese button text and action panel text move up by target offsets without changing button width or height");
                 Vector2 revisedTextPosition = MutinyLocalizedText.ResolvePirateButtonTextRect(compactButton).position;
                 Matrix4x4 doubledCanvas = Matrix4x4.Scale(new Vector3(2f, 2f, 1f));
                 result.Assert(Mathf.Approximately(revisedTextPosition.y - 184f, 1f) &&
@@ -6934,8 +7042,12 @@ namespace Mutiny.Verification
                     "GM-09 en restores English text, original font route and saved preference");
                 result.Assert(
                     RectApproximately(MutinyLocalizedText.ResolvePirateButtonTextRect(compactButton), compactButton) &&
-                    RectApproximately(MutinyLocalizedText.ResolvePirateButtonTextRect(wideButton), wideButton),
-                    "LOC-BTN-01 production English PirateFont button positions remain unchanged");
+                    RectApproximately(MutinyLocalizedText.ResolvePirateButtonTextRect(wideButton), wideButton) &&
+                    RectApproximately(MutinyGameHUD.ResolveActionPanelTitleRect(),
+                        new Rect(10.35f, 1f, 200f, 16f)) &&
+                    RectApproximately(MutinyGameHUD.ResolveActionPanelDescriptionRect(),
+                        new Rect(20f, 166f, 238f, 66f)),
+                    "LOC-BTN-01 production English PirateFont button and action panel text positions remain unchanged");
                 result.Assert(gm.ExecuteCommand("  SeTLaNgUaGe\tZH-CN  ") &&
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
                               MutinyLocalization.Text("frontend.play", "play") == "开始游戏" &&
@@ -7031,17 +7143,17 @@ namespace Mutiny.Verification
                 MutinyWeapon readyWeapon = input.EquippedWeapon;
                 int historyCount = gm.RecentSuccessfulCommands.Count;
                 MutinyAIController.TrySetForcedWeaponId(0);
-                result.Assert(!gm.ExecuteCommand("aitakeover 1") &&
+                result.Assert(!gm.ExecuteCommand("aitakeover") &&
                               !gm.ExecuteCommand("aitakeoverwithluck") &&
                               !gm.ExecuteCommand("aitakeoverwithluck -1") &&
-                              !gm.ExecuteCommand("aitakeoverwithluck 100.1") &&
+                              !gm.ExecuteCommand("aitakeoverwithluck 99999.1") &&
                               !gm.ExecuteCommand("aitakeoverwithluck NaN") &&
                               !gm.ExecuteCommand("aitakeoverwithluck Infinity") &&
                               !gm.ExecuteCommand("aitakeoverwithluck x") &&
                               !gm.ExecuteCommand("aitakeoverwithluck 1,5") &&
                               !gm.ExecuteCommand("aitakeoverwithluck 1 extra") && !human.IsAiControlled &&
                               !manager.IsAiTakeoverActive && gm.RecentSuccessfulCommands.Count == historyCount,
-                    "GM-08 retires aitakeover 1 and rejects invalid Luck without changing ownership or success history");
+                    "GM-08 rejects invalid Luck without changing ownership or success history");
 
                 int turns = human.TotalTurnsTaken;
                 result.Assert(gm.ExecuteCommand("  AiTakeOverWithLuck 7.5  ") && manager.IsAiTakeoverActive &&
@@ -7146,9 +7258,12 @@ namespace Mutiny.Verification
                 result.Assert(takenAgain && !manager.IsAiTakeoverActive && !human.IsAiControlled &&
                               ai.TakeoverLuckOverride == null && owner.Luck == 3f,
                     "GM-08 accepts zero Luck and restarting the production game clears its override");
-                bool highLuckTaken = gm.ExecuteCommand("aitakeoverwithluck 100");
-                result.Assert(highLuckTaken && ai.TakeoverLuckOverride == 100f && owner.Luck == 3f,
-                    "GM-08 upper boundary Luck 100 is accepted without mutating character Luck");
+                result.Assert(gm.ExecuteCommand("aitakeoverwithluck 10000") && ai.TakeoverLuckOverride == 10000f,
+                    "GM-08 legacy alias accepts Luck above the former 100 limit");
+                manager.StartGame();
+                bool highLuckTaken = gm.ExecuteCommand("aitakeover 99999");
+                result.Assert(highLuckTaken && ai.TakeoverLuckOverride == 99999f && owner.Luck == 3f,
+                    "GM-08 aitakeover accepts upper boundary Luck 99999 without mutating character Luck");
                 target.TakeDamage(1000f);
                 target.ShownHealth = target.Health;
                 for (int tick = 0; tick < 11; tick++) manager.AdvanceSimulationTick();

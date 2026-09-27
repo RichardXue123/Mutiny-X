@@ -224,6 +224,18 @@ namespace Mutiny.Presentation
             return new Rect(112f + column * 31f + 3f, 29f + row * 43f + 23f, 18f, 9f);
         }
 
+        public static Rect ResolveActionPanelTitleRect()
+        {
+            float cjkYOffset = MutinyLocalization.UseOriginalFont ? 0f : -2f;
+            return new Rect(10.35f, 1f + cjkYOffset, 200f, 16f);
+        }
+
+        public static Rect ResolveActionPanelDescriptionRect()
+        {
+            float cjkYOffset = MutinyLocalization.UseOriginalFont ? 0f : -2f;
+            return new Rect(20f, 166f + cjkYOffset, 238f, 66f);
+        }
+
         public static Rect ResolveOriginalCornerVisualRect(MutinyCornerControl control)
         {
             switch (control)
@@ -1696,10 +1708,10 @@ namespace Mutiny.Presentation
             GUI.matrix = panelMatrix;
             Color textColor = new Color(1f, 1f, 1f, Mathf.Clamp01(m_ActionPanelAlpha));
             MutinyLocalizedText.Dangle(
-                new Rect(10.35f, 1f, 200f, 16f),
+                ResolveActionPanelTitleRect(),
                 null, title, textColor, TextAnchor.MiddleLeft);
             MutinyLocalizedText.Dangle(
-                new Rect(20f, 166f, 238f, 66f),
+                ResolveActionPanelDescriptionRect(),
                 null, description, textColor, TextAnchor.UpperLeft, 0, 12);
             GUI.matrix = textSavedMatrix;
             GUI.color = previousColor;
