@@ -143,6 +143,22 @@ $global:LASTEXITCODE = 0
         $missingTagError -match 'v1.2.3' -and $missingTagError -notmatch 'Needed a single revision|NativeCommandError') 'Missing local tag has actionable diagnostics without Git 128 stack'
     Assert-Case (!(Test-Path -LiteralPath (Join-Path $fixture 'Builds\Release\v1.2.5'))) 'Missing local tag stops before creating build output'
     Assert-Throws { & $launcher -Tag v1.2.6 -BuildOnly } 'does not reference a commit' 'Non-commit tag has a separate diagnostic'
+    $missingNotesFixture = Join-Path $root 'Missing Notes Project'
+    $null = Invoke-ReleaseTool $git @('-c', 'core.longpaths=true', 'clone', '--quiet', $fixture, $missingNotesFixture)
+    Push-Location $missingNotesFixture
+    try {
+        $null = Invoke-ReleaseTool $git @('config', 'user.name', 'Release fixture')
+        $null = Invoke-ReleaseTool $git @('config', 'user.email', 'fixture@example.invalid')
+        $null = Invoke-ReleaseTool $git @('remote', 'set-url', 'origin', 'https://github.com/RichardXue123/Mutiny-X.git')
+        Write-TestFile (Join-Path $missingNotesFixture 'ProjectSettings\ProjectSettings.asset') "bundleVersion: 1.2.7`nAndroidBundleVersionCode: 43`n"
+        $null = Invoke-ReleaseTool $git @('add', 'ProjectSettings/ProjectSettings.asset')
+        $null = Invoke-ReleaseTool $git @('commit', '--quiet', '-m', 'Version without release notes')
+        $null = Invoke-ReleaseTool $git @('tag', '-a', 'v1.2.7', '-m', 'Missing notes fixture')
+    }
+    finally { Pop-Location }
+    $missingNotesLauncher = Join-Path $missingNotesFixture 'BuildTools\Release\Publish-Release.ps1'
+    Assert-Throws { & $missingNotesLauncher -Tag v1.2.7 -BuildOnly -UnityPath $fakeUnity } 'has no BuildTools/Release/Notes/v1\.2\.7\.md' 'Missing tagged release notes stop before building'
+    Assert-Case (!(Test-Path -LiteralPath (Join-Path $missingNotesFixture 'Builds\Release\v1.2.7'))) 'Missing notes create no build output'
     $assetPath = $manifest.assets[0].path
     $originalBytes = [IO.File]::ReadAllBytes($assetPath)
     [IO.File]::AppendAllText($assetPath, 'tamper')

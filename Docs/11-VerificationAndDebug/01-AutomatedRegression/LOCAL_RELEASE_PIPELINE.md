@@ -79,3 +79,12 @@
 - 发布内容：Windows ZIP、Windows Setup EXE、Android APK、`SHA256SUMS.txt`；更新说明为用户确认的“加入手柄支持 / 加入中英文界面与对白 / 加入本地一键发布流程”。[正式 Release](https://github.com/RichardXue123/Mutiny-X/releases/tag/v1.0.2)。
 - 摘要证据：[LOCAL-RELEASE-V1.0.2-20260926.json](Artifacts/LOCAL-RELEASE-V1.0.2-20260926.json)。完整构建报告、日志、manifest 和 GitHub 最终校验快照保存在 `Builds/Release/v1.0.2/`。本次临时源码 worktree 已自动移除。
 - 原版一致性规则未修改；本轮证明版本准备、生产构建及发布流水线通过，安装/卸载和 Android 真机运行仍未执行。
+
+### v1.0.3 漏提交更新说明的修复与发布
+
+- **静态确认**：用户首次执行时，本地及远端注解 tag `v1.0.3` 的对象为 `4df118bade4948a578747913bad8785f45ee1a7b`，指向提交 `694434cc7196a3acc76a9a6a81c967523d1aba2f`。该提交的 `bundleVersion` 已为 `1.0.3`，但 Android 构建号仍是已发布 v1.0.2 使用的 `6`，且提交树没有 `BuildTools/Release/Notes/v1.0.3.md`；工作目录也没有该文件。生产脚本在构建前拒绝缺说明的 tag，未生成错误产物。GitHub 已认证查询确认没有 v1.0.3 正式版或草稿。
+- **已实现**：补充与实际代码改动一致的三条说明，构建号改为 `7`，一并提交到 `679a2ac4b0d0166e131235f5e61ed5cedf2c40db` 并推送 main；在本地 `refs/backup/releases/v1.0.3-before-notes` 保留旧 tag 对象，使用远端 `--force-with-lease` 限定旧对象，将尚未发布的 tag 更新为 `410b1bb1c4ccd4c2922cd97eb1d6d6b010d3146a`，指向新提交。发布文档增加创建 tag 前核验已提交版本、构建号及说明的步骤。
+- **缺陷回归**：新增真实生产脚本用例：tag 指向版本匹配但缺 `Notes/<tag>.md` 的提交时，在启动 Unity 或创建构建目录之前给出准确诊断。Windows PowerShell 5.1、PowerShell 7.6.5 各 **42/42** 用例通过（原 40 项加本次 2 项），替身仅用于外部 Unity / Inno / GitHub CLI；本地 Git、脚本与失败路径均为生产入口。证据目录为 `Builds/ReleaseTests/3bbea18e83354e118a96a5097354e5d7/` 和 `Builds/ReleaseTests/efb0811dbbb34829a856b2dd8646b5e0/`。
+- **真实构建通过**：`Publish-Release.ps1 -Tag v1.0.3` 从修正后的固定提交启动独立 Unity 6000.6.0f1。Android、Windows 两个 BuildPipeline 报告均成功，耗时分别为 `269.199`、`83.840` 秒；Inno Setup 7 编译成功，耗时 `23.672` 秒。APK 实测 `com.RichardXue.MutinyX`、`versionName=1.0.3`、`versionCode=7`、ARM64、minSdk 26、targetSdk 36。安装包 ProductVersion `1.0.3`；ZIP 223 个条目，PDB / Unity 备份 / Burst 调试目录为 0。
+- **真实发布通过**：本地 manifest 记录 APK、Windows Setup EXE、Windows ZIP、`SHA256SUMS.txt` 四个文件的大小和 SHA256。GitHub CLI 首次只读 API 请求无响应后，保留 manifest 并使用 `-Resume`；后续网络连接重置，再次使用 `-Resume` 完成。最终 Release ID `397625827`，发布时间 `2026-09-27T11:42:05Z`，`draft=false`、`prerelease=false`；GitHub 上四个资产均为 uploaded，大小及 digest 与本地 manifest 一致。[正式 Release](https://github.com/RichardXue123/Mutiny-X/releases/tag/v1.0.3)。摘要证据见 [LOCAL-RELEASE-V1.0.3-20260927.json](Artifacts/LOCAL-RELEASE-V1.0.3-20260927.json)。
+- **待运行验证 / 已知差异**：本次没有执行 Windows 安装/卸载及 Android 真机运行；GitHub 发布只包含 Windows 和 Android。发布后工作目录里的未提交改动不在 v1.0.3 tag 快照内。原版玩法规则未因发布修复改变。

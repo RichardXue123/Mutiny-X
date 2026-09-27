@@ -37,6 +37,15 @@ git push origin v1.0.2
 
 首次采用时，先提交这次新增的流水线文件和文档。上面命令假设游戏改动已提交、当前分支为 main。脚本只接受 `v主.次.修订` 的正式版 tag。
 
+**创建 tag 前检查提交内容**（将下例 tag 换成本次版本）：
+
+```powershell
+git show HEAD:ProjectSettings/ProjectSettings.asset | Select-String 'bundleVersion:|AndroidBundleVersionCode:'
+git show HEAD:BuildTools/Release/Notes/v1.0.3.md
+```
+
+第一条必须显示本次版本和高于上一 Android 版本的构建号；第二条必须打印本次真实更新说明。如果第二条报 `exists on disk, but not in 'HEAD'`，先创建并提交说明文件，再创建 tag。只写在工作目录、没有提交的文件不会进入 tag。tag 已推送但尚未创建 GitHub Release 时，修复前先核验远端没有同名 Release；已发布的 tag 保持不动，改用下一版本。
+
 `-Tag v1.0.2` 是选择已有 tag，不会自动创建它。若直接复制示例命令而本地尚无该 tag，先完成上面的版本提交、创建及推送步骤。已发布的 `v1.0.0` / `v1.0.1` 不包含本次新增的批处理入口，不能用本流水线重新打包；首次采用应使用包含流水线文件的新发布提交和新 tag。
 
 4. 一条命令构建并发布：
