@@ -10,5 +10,6 @@
 | SCORE-EXT-01 | 单人第 15 关战斗结果确认为胜利并计入最终总分时，自动保存该次总分一次；不依赖结局页的按钮，失败、双人及非最终关不入榜 | 用户指定的新规则；Unity 现有单关计分与第 15 关完成入口 | `MutinyTurnManager` → `MutinyLevelController.AwardSinglePlayerLevelWin` → `MutinySaveSystem.RecordCompletedScore` | 经正式 GameOver/计分入口完成第 15 关，重复观察不得二次记录；失败、双人、非最终关不得记录 | 隔离 Unity 以生产 Award 入口验证最终分数只记录一次；完整第 15 关 GameOver 实战待运行 |
 | SCORE-EXT-02 | 历史成绩按总分从高到低排序，最多保留五次**通关记录**；同分的不同通关可分别占位，低于第五名的新分不挤出旧成绩；退出游戏后保留 | 用户指定的新规则 | `MutinySaveSystem.GetTopCompletedScores` / `RecordCompletedScore` | 依次写入超过五次分数，核对排序、同分、边界、重启后读取 | 隔离 Unity 生产持久化验证通过：降序、第五名淘汰和跨读取保留；实际用户存档重启待运行 |
 | SCORE-EXT-03 | 打开 Scores 时显示当前本地前五次记录（排名、精确到秒的通关时间 `yyyy-MM-dd HH:mm:ss`、分数）；无记录时显示空榜提示，不访问原版网络接口，不显示原版 Loading/分页/提交名字 | 用户明确要求不用原版逻辑 | `MutinyFrontendController.DrawScores` | 无记录、1 条、5 条、超过 5 条时核对可见行与内容；返回再进显示最新结果 | 绘制与空榜分支已实现；Main 场景四种数据量的画面对照待运行 |
+| SCORE-EXT-04 | 单人关卡失败弹窗不显示、不悬停、不可点击提交分数按钮；失败仅显示重试与返回。成绩只在单人第 15 关胜利计分完成后自动入榜 | 用户 2026-09-27 明确修正；原版失败弹窗第 21 帧含 `submitScoreButton`，此处是授权差异 | `MutinyGameHUD.DrawOriginalGameEndPopup`；`MutinyLevelController.AwardSinglePlayerLevelWin` | 通过生产失败结果打开弹窗，检查提交按钮三种 UI 状态及重试/返回；核对失败前后榜单不变，再通过生产最终胜利入口检查自动入榜一次 | 失败绘制/命中列表只保留重试、返回；隔离 Unity Play Mode 生产最终关失败流程与榜单不变 10/10 回归通过；主工程鼠标悬停/命中画面待运行，最终胜利完整回合流程待运行 |
 
 原版 `HiscoreBoard.as` 使用远端榜单，资源中有十行及分页箭头；本次只取原版外观元素。动态榜单行必须逐项绘制，不能把导出帧 PNG 当作最终 UI。原版静态导出的白色块是动态文字占位，不是目标文字外观。

@@ -902,7 +902,7 @@ namespace Mutiny.Presentation
                 MutinyCursorManager.NotifyHoverInteractable();
             DrawTexture(backRect, hovered && m_EndingBackButtonOver != null
                 ? m_EndingBackButtonOver : m_EndingBackButton);
-            MutinyLocalizedText.Pirate(backRect, "ending.back_title", "back to title", hovered);
+            MutinyLocalizedText.PirateButton(backRect, "ending.back_title", "back to title", hovered);
             if (canReturn && MutinyControllerUI.Button(backRect, GUIContent.none, GUIStyle.none, "ending-back", true))
                 MutinyTransitionManager.RequestTransition(() => ReturnFromEndingToTitle(), showLoading: false);
         }
@@ -983,7 +983,7 @@ namespace Mutiny.Presentation
 
             Texture2D texToDraw = (hovered && hoverTexture != null) ? hoverTexture : texture;
             DrawTexture(rect, texToDraw);
-            MutinyLocalizedText.Pirate(rect, key, english, hovered, true, -3);
+            MutinyLocalizedText.PirateButton(rect, key, english, hovered);
 
             bool clicked = !isTransitioning && MutinyControllerUI.Button(rect, GUIContent.none, GUIStyle.none,
                 "button:" + english, key == "frontend.back");

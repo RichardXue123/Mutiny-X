@@ -8,6 +8,8 @@ namespace Mutiny.Presentation
     {
         private static Font s_CjkFont;
         private static readonly HashSet<string> MissingGlyphs = new HashSet<string>();
+        // Optical correction for 18 px Noto CJK text inside 24 px Pirate buttons.
+        private const float ChinesePirateButtonYOffset = -3f;
         public const int SpeechFontSize = 15;
         public static readonly Color SpeechColor = new Color32(24, 29, 35, 255);
 
@@ -25,6 +27,20 @@ namespace Mutiny.Presentation
             }
             DrawCjk(rect, value, hovered ? Color.yellow : Color.white,
                 centered ? TextAnchor.MiddleCenter : TextAnchor.MiddleLeft, 18, true);
+        }
+
+        public static Rect ResolvePirateButtonTextRect(Rect buttonRect)
+        {
+            if (MutinyLocalization.UseOriginalFont)
+                return buttonRect;
+            buttonRect.y += ChinesePirateButtonYOffset;
+            return buttonRect;
+        }
+
+        public static void PirateButton(Rect buttonRect, string key, string english, bool hovered = false,
+            int tracking = -3)
+        {
+            Pirate(ResolvePirateButtonTextRect(buttonRect), key, english, hovered, true, tracking);
         }
 
         public static void Dangle(Rect rect, string key, string english, Color color,

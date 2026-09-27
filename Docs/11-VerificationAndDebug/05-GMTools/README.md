@@ -43,6 +43,7 @@ GM 是当前 Unity 工程的调试扩展，不是 Flash 原版玩法规则。以
 | `GM-05` | `Help` / `?`：状态文字变为命令简表，不修改战斗与存档。简表只列推荐命令，不覆盖所有别名。 | `MutinyGMManager.ExecuteCommand` | 当前没有独立面板文字回归，待验收。 |
 | `GM-07` | `aiforceusewaepon 1..15`：全局 AI 武器候选只含对应菜单武器，按无限弹药执行且不扣真实库存；跳跃、Pass 与通常 `CanShoot` 门仍有效。`0` 清除覆盖。非法输入保持原值。 | `ExecuteCommand` → `MutinyAIController.ForcedWeaponId` → 决策候选 → `AIMove.UsesForcedWeaponSupply` → `ExecuteMove` | 2026-09-25 当前工程 Play Mode 专项回归历史结果 7/7；本轮未重新运行。完整战斗画面与“有候选但收益非正”的续行动分支待验收。 |
 | `GM-08` | `aitakeoverwithluck {luck}`：以指定有限 Luck `0..100` 接管当前人类回合剩余行动；真实跳跃飞行中/落地后合法，不改角色 Luck 或行动资格；完整回合结束清除覆盖并恢复人类控制。旧 `aitakeover 1` 拒绝。 | `ExecuteCommand` → `TryTakeOverCurrentPlayerTurn(luck)` → `MutinyAIController.TakeoverLuckOverride` → 通常 AI 流程；`RestorePlayerControl` | 2026-09-27 隔离 Play Mode `RunGM()` 35/35 通过，含旧命令拒绝、分数 Luck 采样及清理；详情见下文。 |
+| `GM-10` | `ailog 1/0`：开关每次实际 AI 行动的一条详细参数与评分日志；无效参数不改状态，切关保留、重启重置。 | `ExecuteCommand` → `MutinyAIController.ActionLogEnabled` → 生产决策协程的行动／Pass 提交点 | 隔离 Play Mode `RunGM()` 39/39（含 3 条新断言），实际协程 5/5；[范围与剩余项](../04-Logging/AI_ACTION_LOG_SPEC.md)。 |
 
 ### 单目标选择顺序
 
@@ -58,6 +59,7 @@ GM 是当前 Unity 工程的调试扩展，不是 Flash 原版玩法规则。以
 | GM-03/04 最高关卡进度 | `MutinySaveSystem` 的 `mutiny_highest_unlocked_level` | 保留 | 保留；除非再次重置 |
 | GM-07 强制武器编号 | `MutinyAIController` 静态字段 | 保留 | `SubsystemRegistration` 重置为 0 |
 | GM-08 当前人类回合接管及 Luck | `MutinyTurnManager.m_AiTakeoverTeam`、临时队伍 AI 标记、`MutinyAIController.TakeoverLuckOverride` | 管理器销毁即恢复和清空；不转移至新关 | 重置；同一场景完整回合结束、GameOver 或 StartGame 也恢复 |
+| GM-10 AI 行动日志开关 | `MutinyAIController.ActionLogEnabled` 静态字段 | 保留 | `SubsystemRegistration` 重置为关闭 |
 
 GM-07 在决策开始时把武器类型复制到工作对象；已选射击动作另存是否使用强制供给。因此在决策或执行途中改变命令，不追溯改写那次动作。GM-01/02 则直接修改角色的 `WeaponInventory`、`InfiniteWeapons` 和 `CanShoot`；`GetAmmunition()` 对无限武器返回 `-1`，底层库存值为 `int.MaxValue`。`cannonball` 是大炮内部库存别名，不占第 16 个菜单编号。
 

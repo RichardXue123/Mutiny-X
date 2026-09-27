@@ -11,6 +11,8 @@
 4. **右上角音频控制（Corner Audio Controls）**：主菜单阶段显示并响应音乐（Music）和音效（SFX）开关，Quit 按钮仅在进入关卡后显示。
 5. **Credits 页面**：原版深灰红框、Nitrome 标志、署名与版权页脚；从标题页进入并由 Back 返回。[行为规格与验证状态](../../01-GameFlowAndProgression/01-FrontendNavigation/CREDITS_BEHAVIOR_SPEC.md)。
 
+简体中文按钮文字的垂直对齐与验证状态见 [LOC-BTN-01](LOCALIZED_BUTTON_ALIGNMENT.md)。
+
 ## 原版 Flash 对应
 
 | Unity 类 | Flash 对应 | 说明 |

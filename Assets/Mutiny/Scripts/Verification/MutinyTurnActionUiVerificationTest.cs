@@ -3993,10 +3993,23 @@ namespace Mutiny.Verification
 
             result.Assert(
                 RectApproximately(MutinyGameHUD.ResolveOriginalPopupPanelRect(), new Rect(100f, 70f, 350f, 260f)) &&
-                RectApproximately(MutinyGameHUD.ResolveOriginalPopupSubmitScoreButtonRect(), new Rect(135f, 209f, 280f, 24f)) &&
                 RectApproximately(MutinyGameHUD.ResolveOriginalPopupPrimaryButtonRect(), new Rect(135f, 245f, 280f, 24f)) &&
                 RectApproximately(MutinyGameHUD.ResolveOriginalPopupSecondaryButtonRect(), new Rect(135f, 280f, 280f, 24f)),
-                "END-POP-T07 popup panel and button bounds match DefineShape_326/328 and the 900/1600-twip timeline placements");
+                "END-POP-T07 popup panel and active button bounds match DefineShape_326/328 and the 900/1600-twip timeline placements");
+
+            IReadOnlyList<MutinyGameHUD.FailedPopupButton> failedButtons = MutinyGameHUD.FailedPopupButtons;
+            Rect formerSubmitArea = new Rect(135f, 209f, 280f, 24f);
+            bool failureHasOnlyRestartAndBack = failedButtons.Count == 2 &&
+                failedButtons[0].Action == MutinyFailedPopupAction.RestartLevel &&
+                failedButtons[0].Label == "restart level" &&
+                RectApproximately(failedButtons[0].Rect, MutinyGameHUD.ResolveOriginalPopupPrimaryButtonRect()) &&
+                failedButtons[1].Action == MutinyFailedPopupAction.BackToMenu &&
+                failedButtons[1].Label == "back to menu" &&
+                RectApproximately(failedButtons[1].Rect, MutinyGameHUD.ResolveOriginalPopupSecondaryButtonRect());
+            for (int i = 0; i < failedButtons.Count; i++)
+                failureHasOnlyRestartAndBack &= !failedButtons[i].Rect.Overlaps(formerSubmitArea);
+            result.Assert(failureHasOnlyRestartAndBack,
+                "SCORE-EXT-04 production failure popup registers only Restart and Back, leaving the former Submit Score area without a visible or clickable control");
 
             GameObject controllerObject = null;
             GameObject managerObject = null;
@@ -4005,6 +4018,7 @@ namespace Mutiny.Verification
             GameObject playerObject = null;
             GameObject enemyObject = null;
             GameObject hudObject = null;
+            GameObject failureHudObject = null;
             GameObject victoryCrateObject = null;
             GameObject victoryBarrelObject = null;
             GameObject victoryMineObject = null;
@@ -4104,6 +4118,9 @@ namespace Mutiny.Verification
                 enemy.ShownHealth = enemy.Health;
                 enemy.IsAlive = true;
                 enemy.IsDrowned = false;
+                controller.CurrentLevelIndex = MutinyFrontendController.SinglePlayerLevelCount;
+                MutinySaveSystem.CompletedScoreEntry[] scoresBeforeFailure =
+                    MutinySaveSystem.GetTopCompletedScoreEntries();
                 manager.StartGame();
                 MutinyWoodenCrate defeatCrate =
                     MutinyWeaponFactory.SpawnWeapon("woodenCrate", player) as MutinyWoodenCrate;
@@ -4129,6 +4146,21 @@ namespace Mutiny.Verification
                 player.ShownHealth = player.Health;
                 for (int tick = 0; tick <= MutinyTurnManager.InactivitySettlingThreshold; tick++)
                     manager.AdvanceSimulationTick();
+                failureHudObject = new GameObject("GameEndVerification_FailureHud");
+                MutinyGameHUD failureHud = failureHudObject.AddComponent<MutinyGameHUD>();
+                failureHud.TurnManager = manager;
+                failureHud.LevelController = controller;
+                bool failurePopupOpened = failureHud.SynchronizeGameEndPopup();
+                MutinySaveSystem.CompletedScoreEntry[] scoresAfterFailure =
+                    MutinySaveSystem.GetTopCompletedScoreEntries();
+                bool historyUnchanged = scoresBeforeFailure.Length == scoresAfterFailure.Length;
+                for (int scoreIndex = 0; scoreIndex < scoresBeforeFailure.Length && historyUnchanged; scoreIndex++)
+                    historyUnchanged = scoresBeforeFailure[scoreIndex].Score == scoresAfterFailure[scoreIndex].Score &&
+                        scoresBeforeFailure[scoreIndex].Timestamp == scoresAfterFailure[scoreIndex].Timestamp;
+                result.Assert(failurePopupOpened &&
+                              failureHud.GameEndPopupKind == MutinyGameEndPopupKind.LevelFailed &&
+                              historyUnchanged,
+                    "SCORE-EXT-04 production final-level defeat opens failure popup and leaves completed-score history unchanged");
                 bool defeatObjectsPersist = defeatBarrelPlaced && defeatMine != null && defeatMine.IsStored &&
                     MutinyBoxRegistry.Count == 5 &&
                     MutinyBoxRegistry.GetObstacles().Count == 5 &&
@@ -4168,6 +4200,7 @@ namespace Mutiny.Verification
             }
             finally
             {
+                DestroyNow(failureHudObject);
                 DestroyNow(unloadMineObject);
                 DestroyNow(unloadCrateObject);
                 DestroyNow(defeatMineObject);
@@ -6146,6 +6179,17 @@ namespace Mutiny.Verification
             {
                 MutinyGMManager gm = gmObject.AddComponent<MutinyGMManager>();
                 VerifyGMUnlockAllLevels(gm, result);
+                bool logEnabled = gm.ExecuteCommand("  AiLoG 1  ") && MutinyAIController.ActionLogEnabled;
+                result.Assert(logEnabled, "GM-10 production GM parser enables AI action logging with case and outer whitespace tolerance");
+                int logHistoryCount = gm.RecentSuccessfulCommands.Count;
+                bool invalidLogCommandsRejected = !gm.ExecuteCommand("ailog") &&
+                    !gm.ExecuteCommand("ailog 2") && !gm.ExecuteCommand("ailog -1") &&
+                    !gm.ExecuteCommand("ailog 1 extra") && !gm.ExecuteCommand("ailog nope") &&
+                    MutinyAIController.ActionLogEnabled && gm.RecentSuccessfulCommands.Count == logHistoryCount;
+                result.Assert(invalidLogCommandsRejected,
+                    "GM-10 invalid AI log commands preserve the production toggle and successful command history");
+                bool logDisabled = gm.ExecuteCommand("ailog 0") && !MutinyAIController.ActionLogEnabled;
+                result.Assert(logDisabled, "GM-10 production GM parser disables AI action logging");
                 MutinyCharacter character = characterObject.AddComponent<MutinyCharacter>();
                 character.TeamIndex = 1;
                 character.IsSelected = true;
@@ -6313,6 +6357,7 @@ namespace Mutiny.Verification
             }
             finally
             {
+                MutinyAIController.SetActionLogEnabled(false);
                 MutinyAIController.TrySetForcedWeaponId(0);
                 foreach (MutinyCherryBomb bomb in Object.FindObjectsByType<MutinyCherryBomb>())
                     if (bomb != null && bomb.Owner != null && bomb.Owner.name == "GM_ForceAiCharacter")
@@ -6345,12 +6390,24 @@ namespace Mutiny.Verification
                               !MutinyLocalization.UseOriginalFont &&
                               MutinyLocalization.Text("frontend.play", "play") == "开始游戏",
                     "GM-09 zh-cn changes production text, dynamic font route and saved preference");
+                Rect compactButton = new Rect(193f, 187f, 163f, 24f);
+                Rect wideButton = new Rect(135f, 245f, 280f, 24f);
+                result.Assert(
+                    RectApproximately(MutinyLocalizedText.ResolvePirateButtonTextRect(compactButton),
+                        new Rect(193f, 184f, 163f, 24f)) &&
+                    RectApproximately(MutinyLocalizedText.ResolvePirateButtonTextRect(wideButton),
+                        new Rect(135f, 242f, 280f, 24f)),
+                    "LOC-BTN-01 production Chinese button text moves up three canvas pixels without changing button width or height");
                 result.Assert(gm.ExecuteCommand("setlanguage en") &&
                               MutinyLocalization.Code == MutinyLocalization.English &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.English &&
                               MutinyLocalization.UseOriginalFont &&
                               MutinyLocalization.Text("frontend.play", "play") == "play",
                     "GM-09 en restores English text, original font route and saved preference");
+                result.Assert(
+                    RectApproximately(MutinyLocalizedText.ResolvePirateButtonTextRect(compactButton), compactButton) &&
+                    RectApproximately(MutinyLocalizedText.ResolvePirateButtonTextRect(wideButton), wideButton),
+                    "LOC-BTN-01 production English PirateFont button positions remain unchanged");
                 result.Assert(gm.ExecuteCommand("  SeTLaNgUaGe\tZH-CN  ") &&
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
                               MutinyLocalization.Text("frontend.play", "play") == "开始游戏" &&

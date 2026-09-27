@@ -1,7 +1,9 @@
 using System.Collections;
 using System.Collections.Generic;
 using System;
+using System.Globalization;
 using System.IO;
+using System.Text;
 using Stopwatch = System.Diagnostics.Stopwatch;
 using Mutiny.Diagnostics;
 using Mutiny.Levels;
@@ -57,9 +59,16 @@ namespace Mutiny.Simulation
 
         public static int ForcedWeaponId { get; private set; }
         public static string ForcedWeaponType => ForcedWeaponId == 0 ? null : ForceableWeaponTypes[ForcedWeaponId - 1];
+        public static bool ActionLogEnabled { get; private set; }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForcedWeaponOnPlayStart() => ForcedWeaponId = 0;
+        private static void ResetForcedWeaponOnPlayStart()
+        {
+            ForcedWeaponId = 0;
+            ActionLogEnabled = false;
+        }
+
+        public static void SetActionLogEnabled(bool enabled) => ActionLogEnabled = enabled;
 
         public static bool TrySetForcedWeaponId(int weaponId)
         {
@@ -99,6 +108,7 @@ namespace Mutiny.Simulation
             public string Phase;
             public AIMove Best;
             public int CandidateCount;
+            public string TracePath;
             public List<MutinyCharacter> Enemies;
             public List<MutinyCharacter> Allies;
             public string[,] Terrain;
@@ -250,6 +260,8 @@ namespace Mutiny.Simulation
                 m_Random = null;
                 Debug.LogException(evaluationError, this);
                 MutinyDebugLog.Warning("AI", "move evaluation failed; passing the turn", this);
+                if (ActionLogEnabled)
+                    Debug.Log($"[Mutiny:AI-Action] team={m_Team?.TeamNumber ?? 0} decision={work?.Id ?? 0} phase={work?.Phase ?? "unprepared"} action=Pass score=NA reason=evaluation-error:{evaluationError.GetType().Name} candidates={work?.CandidateCount ?? 0}", this);
                 m_TurnManager.PassTurn();
                 m_TurnCoroutine = null;
                 yield break;
@@ -259,6 +271,7 @@ namespace Mutiny.Simulation
             if (bestMove.MoveType == AIMoveType.Pass || bestMove.Character == null)
             {
                 MutinyDebugLog.Info("AI", "no safe or rewarding action found; passing the turn", this);
+                LogCommittedAction(work, bestMove);
                 m_TurnManager.PassTurn();
                 m_TurnCoroutine = null;
                 yield break;
@@ -296,7 +309,11 @@ namespace Mutiny.Simulation
             }
 
             if (gate == MutinyAITurnGate.Execute)
+            {
+                if (bestMove.Character != null && bestMove.Character.IsAlive)
+                    LogCommittedAction(work, bestMove);
                 ExecuteMove(bestMove);
+            }
             else
                 MutinyDebugLog.Info("AI", "selected move cancelled because active turn changed", this);
 
@@ -533,6 +550,7 @@ namespace Mutiny.Simulation
                         string path = Path.Combine(directory,
                             $"team-{m_Team.TeamNumber}-decision-{work.Id}-{DateTime.UtcNow:yyyyMMddHHmmssfff}.json");
                         File.WriteAllText(path, JsonUtility.ToJson(m_Random.Trace, true));
+                        work.TracePath = path;
                         MutinyDebugLog.Info("AI-Decision", $"trace={path} seed={m_Random.Trace.Seed}", this);
                     }
                     catch (IOException exception)
@@ -572,6 +590,147 @@ namespace Mutiny.Simulation
             MutinyDebugLog.Info("AI-Decision",
                 $"id={decisionId} phase={phase} candidates={candidateCount} type={move.MoveType} character={character} weapon={weapon} score={move.Score:0.0000} velocity=({move.LaunchVelocity.x:0.00},{move.LaunchVelocity.y:0.00}) target=({move.TargetPosition.x:0.0},{move.TargetPosition.y:0.0})",
                 this);
+        }
+
+        private void LogCommittedAction(DecisionWork work, AIMove move)
+        {
+            if (!ActionLogEnabled)
+                return;
+
+            MutinyAIDecisionTrace trace = LastDecisionTrace;
+            var line = new StringBuilder(384);
+            line.Append("[Mutiny:AI-Action] team=").Append(m_Team.TeamNumber)
+                .Append(" decision=").Append(work.Id)
+                .Append(" seed=").Append(trace != null ? trace.Seed.ToString(CultureInfo.InvariantCulture) : "NA")
+                .Append(" phase=").Append(work.Phase)
+                .Append(" candidates=").Append(work.CandidateCount)
+                .Append(" action=").Append(move.MoveType)
+                .Append(" character=").Append(move.Character != null ? move.Character.name : "none")
+                .Append(" weapon=").Append(string.IsNullOrEmpty(move.WeaponType) ? "none" : move.WeaponType)
+                .Append(" score=").Append(Number(move.Score));
+
+            if (move.MoveType != AIMoveType.Pass)
+            {
+                float luck = TakeoverLuckOverride ?? move.Character.Luck;
+                line.Append(" luck=").Append(Number(luck))
+                    .Append(" start=").Append(Point(PositionOf(move.Character)))
+                    .Append(" forcedWeapon=").Append(work.ForcedWeaponType ?? "none")
+                    .Append(" forcedSupply=").Append(move.UsesForcedWeaponSupply);
+                bool usesArcSamples = move.MoveType == AIMoveType.ShootWeapon &&
+                    (MutinyWeaponFactoryCanFire(move.WeaponType) ||
+                     string.Equals(move.WeaponType, "anchor", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(move.WeaponType, "cannon", StringComparison.OrdinalIgnoreCase));
+                if (usesArcSamples)
+                {
+                    int samples = Mathf.FloorToInt(luck * m_Team.Characters.Count / Mathf.Max(1, m_Team.AliveCount));
+                    line.Append(" weaponSamples=").Append(samples);
+                }
+                bool hasVelocity = move.MoveType == AIMoveType.SelfThrow ||
+                    MutinyWeaponFactoryCanFire(move.WeaponType) ||
+                    string.Equals(move.WeaponType, "cannon", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(move.WeaponType, "voodooDoll", StringComparison.OrdinalIgnoreCase);
+                if (hasVelocity)
+                    line.Append(" velocity=").Append(Point(move.LaunchVelocity));
+                if (move.MoveType == AIMoveType.SelfThrow || hasVelocity ||
+                    string.Equals(move.WeaponType, "anchor", StringComparison.OrdinalIgnoreCase))
+                    line.Append(" predictedTarget=").Append(Point(move.TargetPosition));
+                if (move.TargetCharacter != null)
+                    line.Append(" targetCharacter=").Append(move.TargetCharacter.name);
+                if (string.Equals(move.WeaponType, "cannon", StringComparison.OrdinalIgnoreCase))
+                    line.Append(" cannonAngle=").Append(move.CannonRotationDegrees);
+                if (string.Equals(move.WeaponType, "seagull", StringComparison.OrdinalIgnoreCase))
+                    line.Append(" seagullFlightY=").Append(Number(move.SeagullFlightY))
+                        .Append(" seagullShotXs=").Append(Numbers(move.SeagullShotXs));
+                if (move.BoxPossibilities != null && move.BoxPossibilities.Length > 0)
+                    line.Append(" boxPositions=").Append(Points(move.BoxPossibilities));
+                if (string.Equals(move.WeaponType, "tidalWave", StringComparison.OrdinalIgnoreCase))
+                    line.Append(" waveStart=(-550,")
+                        .Append(Number(move.Character.PhysicsBody.WaterPixelY)).Append(')');
+            }
+
+            line.Append(" bestByAction=").Append(BestScoresByAction(trace));
+            if (!string.IsNullOrEmpty(work.TracePath))
+                line.Append(" trace=").Append(work.TracePath);
+            if (move.MoveType == AIMoveType.Pass)
+            {
+                if (work.Best.Character != null)
+                    line.Append(" bestRejectedAction=").Append(work.Best.MoveType)
+                        .Append(" bestRejectedCharacter=").Append(work.Best.Character.name)
+                        .Append(" bestRejectedWeapon=")
+                        .Append(string.IsNullOrEmpty(work.Best.WeaponType) ? "none" : work.Best.WeaponType)
+                        .Append(" bestRejectedTarget=").Append(Point(work.Best.TargetPosition))
+                        .Append(" luck=").Append(Number(TakeoverLuckOverride ?? work.Best.Character.Luck));
+                line.Append(" bestRejectedScore=")
+                    .Append(work.Best.Character != null ? Number(work.Best.Score) : "NA")
+                    .Append(" reason=")
+                    .Append(work.Phase == "continuation" && work.Best.Character != null
+                        ? "continuation-best-score-not-positive"
+                        : "no-valid-candidate");
+            }
+            else
+            {
+                line.Append(" reason=").Append(work.Phase == "continuation"
+                    ? "highest-score-above-zero"
+                    : "highest-score-first-action-no-positive-threshold")
+                    .Append(" tieRule=first-candidate-wins");
+            }
+            // GM-10 must remain visible in a player build; the ordinary debug
+            // logger is intentionally disabled outside Editor/development builds.
+            Debug.Log(line.ToString(), this);
+        }
+
+        private static string BestScoresByAction(MutinyAIDecisionTrace trace)
+        {
+            if (trace == null || trace.Candidates == null || trace.Candidates.Count == 0)
+                return "[]";
+            var order = new List<string>();
+            var best = new Dictionary<string, float>(StringComparer.Ordinal);
+            foreach (MutinyAICandidateRecord candidate in trace.Candidates)
+            {
+                string action = candidate.MoveType == nameof(AIMoveType.SelfThrow)
+                    ? "jump" : string.IsNullOrEmpty(candidate.Weapon) ? candidate.MoveType : candidate.Weapon;
+                if (!best.TryGetValue(action, out float previous))
+                {
+                    order.Add(action);
+                    best.Add(action, candidate.Score);
+                }
+                else if (candidate.Score > previous)
+                    best[action] = candidate.Score;
+            }
+            var result = new StringBuilder("[");
+            for (int i = 0; i < order.Count; i++)
+            {
+                if (i > 0) result.Append(',');
+                result.Append(order[i]).Append(':').Append(Number(best[order[i]]));
+            }
+            return result.Append(']').ToString();
+        }
+
+        private static string Number(float value) => value.ToString("R", CultureInfo.InvariantCulture);
+        private static string Point(Vector2 point) => "(" + Number(point.x) + "," + Number(point.y) + ")";
+
+        private static string Numbers(float[] values)
+        {
+            if (values == null || values.Length == 0) return "[]";
+            var result = new StringBuilder("[");
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (i > 0) result.Append(',');
+                result.Append(Number(values[i]));
+            }
+            return result.Append(']').ToString();
+        }
+
+        private static string Points(Vector2[] values)
+        {
+            if (values == null || values.Length == 0) return "[]";
+            var result = new StringBuilder("[");
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (i > 0) result.Append(',');
+                result.Append(Point(values[i]));
+            }
+            return result.Append(']').ToString();
         }
 
         private void EvaluateCharacterWeapons(

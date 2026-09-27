@@ -191,6 +191,18 @@ Unity 6000.6.0f1 隔离工程 Play Mode 实际 13/13 断言通过；现有 `Vali
 - `AND-PCB-FAN-01`：验证移动触点持续按住时 fan 输入为 active；短触摸只有 `Began` 锁存、在下一物理 tick 前已松开时仍 active 一次；脉冲消费后无持续触摸则恢复 inactive。方向与 `±0.2` 继续由现有 `PCB-FAN-01` 生产物理用例覆盖。
 - 当前状态：用例已加入 `VerifyParachuteBomb()`，覆盖持续触摸、短点击首 tick 生效及第二 tick 不重复消费；`Assembly-CSharp` 与 `Assembly-CSharp-Editor` 编译通过；尚未在 Android 真机实际执行，不能登记为通过。
 
+## 简中按钮文字垂直对齐回归（LOC-BTN-01）
+
+- 从生产 GM `setlanguage zh-cn/en` 切换后读取按钮文字绘制矩形：简中 163×24 和 280×24 两种按钮文字均上移 3 个原版画布像素，底图/命中区域尺寸保持不变；英文 PirateFont 不偏移。
+- 2026-09-27 隔离 Unity 6000.6.0f1 Play Mode `Mutiny/Localization/Validate Play Mode`：包含本缺陷的两条断言，语言专项 10/10，对白与提示 124/124 通过。主工程/玩家构建的实际像素画面待目视验收。
+
+## 失败结算提交按钮回归（SCORE-EXT-04）
+
+- 缺陷：失败结算页仍显示原版 `submitScoreButton`，与仅通关自动记录成绩的用户规则冲突。
+- 生产入口：`MutinyGameHUD.DrawOriginalGameEndPopup` 从 `FailedPopupButtons` 绘制并注册交互；`MutinyTurnManager` 进入最终关失败结果后，由 `MutinyGameHUD.SynchronizeGameEndPopup` 打开弹窗，并从 `MutinySaveSystem` 读取前后榜单。
+- 断言：失败页按钮列表只有重试与返回，原提交区域没有绘制或命中矩形；最终关失败后弹窗为 `LevelFailed`，历史分数及时间戳不变。
+- 实际结果：2026-09-27，Unity 6000.6.0f1 隔离工程 Play Mode 批处理 `Validate Level Lifecycle Play Mode` 通过 10/10 断言（含既有结算回归）。主工程实际鼠标悬停/点击画面与完整最终关胜利回合仍待运行。
+
 ## 双人关卡资源缺失回归（2P-ASSET-01）
 
 - 缺陷：双人选关第 19 关起显示 `data unavailable`。生产 `HasNumberedLevelData` 从 `Resources/Data/Levels/level_NN.xml` 查找，而该目录此前仅有 01–18。补入按原版哈希名取得的 19–33 原始 XML 后，用 `MutinyTwoPlayerVerificationTest` 从生产选择资格和 `TryLoadLevel` 逐关核对 16–33：关卡编号不串关、红蓝双方存在且存活、菜单双人会话下双方均为人类、天色按编号匹配；另断言第 34 关被拒绝且当前关保持不变。

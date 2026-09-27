@@ -43,6 +43,12 @@ namespace Mutiny.Presentation
         VersusDraw
     }
 
+    public enum MutinyFailedPopupAction
+    {
+        RestartLevel,
+        BackToMenu
+    }
+
     [DisallowMultipleComponent]
     public sealed class MutinyGameHUD : MonoBehaviour
     {
@@ -72,8 +78,32 @@ namespace Mutiny.Presentation
         // y=900 and y=1600 twips respectively.
         private static readonly Rect OriginalPopupPrimaryButtonRect = new Rect(135f, 245f, 280f, 24f);
         private static readonly Rect OriginalPopupSecondaryButtonRect = new Rect(135f, 280f, 280f, 24f);
-        // IngamePopup frame 21 places submitScoreButton at y=180 twips (9 px -> stage 209 px).
-        private static readonly Rect OriginalPopupSubmitScoreButtonRect = new Rect(135f, 209f, 280f, 24f);
+        // The local score history records only completed campaigns. Failure
+        // keeps the two usable actions and omits the Flash submitScoreButton.
+        public readonly struct FailedPopupButton
+        {
+            public readonly MutinyFailedPopupAction Action;
+            public readonly Rect Rect;
+            public readonly string Label;
+            public readonly string ControlId;
+
+            public FailedPopupButton(MutinyFailedPopupAction action, Rect rect, string label, string controlId)
+            {
+                Action = action;
+                Rect = rect;
+                Label = label;
+                ControlId = controlId;
+            }
+        }
+
+        private static readonly IReadOnlyList<FailedPopupButton> s_FailedPopupButtons =
+            Array.AsReadOnly(new[]
+            {
+                new FailedPopupButton(MutinyFailedPopupAction.RestartLevel,
+                    OriginalPopupPrimaryButtonRect, "restart level", "result-restartRect"),
+                new FailedPopupButton(MutinyFailedPopupAction.BackToMenu,
+                    OriginalPopupSecondaryButtonRect, "back to menu", "result-back")
+            });
         // Root-timeline placements are: quit (9818,359), music (10239,359),
         // sfx (10658,359) twips.  The exported frames retain the negative
         // shape bounds used by the original tooltip bubbles, so these visual
@@ -181,7 +211,7 @@ namespace Mutiny.Presentation
         public static Rect ResolveOriginalPopupPanelRect() => OriginalPopupPanelRect;
         public static Rect ResolveOriginalPopupPrimaryButtonRect() => OriginalPopupPrimaryButtonRect;
         public static Rect ResolveOriginalPopupSecondaryButtonRect() => OriginalPopupSecondaryButtonRect;
-        public static Rect ResolveOriginalPopupSubmitScoreButtonRect() => OriginalPopupSubmitScoreButtonRect;
+        public static IReadOnlyList<FailedPopupButton> FailedPopupButtons => s_FailedPopupButtons;
         public static Rect ResolveOriginalWeaponsPanelRect() => OriginalWeaponsPanelRect;
 
         public static Rect ResolveWeaponSlotAmmoNumberRect(int column, int row)
@@ -1000,7 +1030,7 @@ namespace Mutiny.Presentation
                 GUI.DrawTexture(rect, tex, ScaleMode.StretchToFill, true);
             else
                 DrawCornerButton(rect, label, hovered);
-            MutinyLocalizedText.Pirate(rect, HudLabelKey(label), label, hovered);
+            MutinyLocalizedText.PirateButton(rect, HudLabelKey(label), label, hovered);
         }
 
         private void DrawPopupSolid(Rect rect, Color color)
@@ -1912,19 +1942,21 @@ namespace Mutiny.Presentation
             else
             {
                 DrawGameEndScoreRow(175f, 156f, "final score", m_GameEndDisplayedTotalScore, alpha);
-                Rect submitRect = ResolveOriginalPopupSubmitScoreButtonRect();
-                Rect restartRect = ResolveOriginalPopupPrimaryButtonRect();
-                Rect backRect = ResolveOriginalPopupSecondaryButtonRect();
-                DrawGameEndButton(submitRect, "submit score", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
-                DrawGameEndButton(restartRect, "restart level", m_CornerButtonTexture, m_CornerButtonOverTexture, alpha);
-                DrawGameEndButton(backRect, "back to menu", m_CornerBackButtonTexture, m_CornerBackButtonOverTexture, alpha);
-                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && MutinyControllerUI.Button(restartRect, GUIContent.none, GUIStyle.none, "result-restartRect", controllerEnabled: alpha >= 1f))
+                foreach (FailedPopupButton button in FailedPopupButtons)
                 {
-                    MutinyTransitionManager.RequestTransition(() => RestartFromGameEndPopup(), showLoading: true);
-                }
-                if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f && MutinyControllerUI.Button(backRect, GUIContent.none, GUIStyle.none, "result-back", true, alpha >= 1f))
-                {
-                    MutinyTransitionManager.RequestTransition(() => BackToSinglePlayerMenu(), showLoading: false);
+                    bool restart = button.Action == MutinyFailedPopupAction.RestartLevel;
+                    DrawGameEndButton(button.Rect, button.Label,
+                        restart ? m_CornerButtonTexture : m_CornerBackButtonTexture,
+                        restart ? m_CornerButtonOverTexture : m_CornerBackButtonOverTexture, alpha);
+                    if (!MutinyTransitionManager.IsTransitionActive && alpha > 0f &&
+                        MutinyControllerUI.Button(button.Rect, GUIContent.none, GUIStyle.none,
+                            button.ControlId, !restart, alpha >= 1f))
+                    {
+                        if (restart)
+                            MutinyTransitionManager.RequestTransition(() => RestartFromGameEndPopup(), showLoading: true);
+                        else
+                            MutinyTransitionManager.RequestTransition(() => BackToSinglePlayerMenu(), showLoading: false);
+                    }
                 }
             }
 
@@ -1955,7 +1987,7 @@ namespace Mutiny.Presentation
                 GUI.DrawTexture(rect, tex, ScaleMode.StretchToFill, true);
             else
                 DrawGameEndSolid(rect, hovered ? new Color32(112, 60, 37, 255) : new Color32(57, 43, 34, 255), alpha);
-            MutinyLocalizedText.Pirate(rect, HudLabelKey(label), label, hovered);
+            MutinyLocalizedText.PirateButton(rect, HudLabelKey(label), label, hovered);
             GUI.color = previous;
         }
 
@@ -1967,7 +1999,6 @@ namespace Mutiny.Presentation
                 case "back to menu": return "hud.back_menu";
                 case "restart level": return "hud.restart_level";
                 case "next level": return "hud.next_level";
-                case "submit score": return "hud.submit_score";
                 case "level score": return "hud.level_score";
                 case "total score": return "hud.total_score";
                 case "final score": return "hud.final_score";

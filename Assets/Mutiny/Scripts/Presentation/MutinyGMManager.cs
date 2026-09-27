@@ -409,6 +409,26 @@ namespace Mutiny.Presentation
                       luck.ToString("0.###", CultureInfo.InvariantCulture) + ". Player control returns next turn."
                     : $"[ERROR] {error}";
             }
+            else if (lower.StartsWith("ailog", StringComparison.Ordinal))
+            {
+                string[] parts = cmd.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length != 2 ||
+                    !string.Equals(parts[0], "ailog", StringComparison.OrdinalIgnoreCase) ||
+                    (parts[1] != "0" && parts[1] != "1"))
+                {
+                    m_StatusColor = new Color(1.0f, 0.45f, 0.45f);
+                    m_StatusMessage = "[ERROR] Usage: ailog 1 | 0.";
+                }
+                else
+                {
+                    MutinyAIController.SetActionLogEnabled(parts[1] == "1");
+                    m_StatusColor = new Color(0.35f, 1.0f, 0.45f);
+                    m_StatusMessage = parts[1] == "1"
+                        ? "[SUCCESS] AI action decision log enabled. Read [Mutiny:AI-Action] in Player.log."
+                        : "[SUCCESS] AI action decision log disabled.";
+                    succeeded = true;
+                }
+            }
             else if (lower.StartsWith("aiforceusewaepon", StringComparison.Ordinal))
             {
                 string[] parts = cmd.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
@@ -485,6 +505,7 @@ namespace Mutiny.Presentation
                                   "• ResetLevels     - Resets progress to level 1\n" +
                                   "• aiforceusewaepon 1..15 - Forces one infinite AI weapon; 0 disables\n" +
                                   "• aitakeoverwithluck N - This turn's AI Luck (0..100)\n" +
+                                  "• ailog 1 / 0    - Enable / disable AI action decision logs\n" +
                                   "• setlanguage zh-cn / en - Selects Simplified Chinese / English\n" +
                                   "• Help            - Shows this help message";
                 succeeded = true;
