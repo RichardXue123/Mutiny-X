@@ -77,11 +77,8 @@ namespace Mutiny.Verification
                 yield break;
             }
 
-            string[] commands = s_Phase == "first"
-                ? new[] { "setlanguage en", "setlanguage zh-cn" }
-                : s_Phase == "saved-cn"
-                    ? new[] { "setlanguage en", "setlanguage zh-cn", "setlanguage en" }
-                    : new[] { "setlanguage zh-cn", "setlanguage en" };
+            string[] commands =
+                { "setlanguage en", "setlanguage zh-cn", "setlanguage en", "setlanguage zh-cn", "setlanguage en" };
             foreach (string command in commands)
             {
                 string target = command == "setlanguage zh-cn"
@@ -90,6 +87,8 @@ namespace Mutiny.Verification
                 if (!gm.ExecuteCommand(command) || MutinyLocalization.Code != target ||
                     MutinySaveSystem.LanguageCode != target ||
                     MutinyLocalization.Text("frontend.play", "play") != expected ||
+                    MutinyLocalization.Text("frontend.scores", "scores") !=
+                        (target == MutinyLocalization.English ? "scores" : "成绩") ||
                     MutinyLocalization.UseOriginalFont != (target == MutinyLocalization.English))
                 {
                     Finish(false, "GM switch or title text failed: " + command);

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Reflection;
 using UnityEngine;
 
@@ -15,6 +16,14 @@ namespace Mutiny.Persistence
         private const string KeyMusicVolume = "mutiny_music_volume";
         private const string KeyCompletedScores = "mutiny_completed_scores_v1";
         private const string KeyLanguage = "mutiny_language_v1";
+#if UNITY_ANDROID && !UNITY_EDITOR
+        // Android PlayerPrefs are SharedPreferences and can be restored after
+        // reinstall. Language is an installation-local choice, so store it in
+        // Android's no-backup directory while leaving progress prefs alone.
+        private const string AndroidLanguageFile = "mutiny_language_v2.txt";
+        private static string s_AndroidSessionLanguage;
+        private static bool s_AndroidLanguageErrorLogged;
+#endif
 
         public const int MaxLevel = 18;
         public const int MaxCompletedScores = 5;
@@ -172,9 +181,57 @@ namespace Mutiny.Persistence
 
         public static string LanguageCode
         {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            get
+            {
+                if (s_AndroidSessionLanguage != null)
+                    return s_AndroidSessionLanguage;
+                try
+                {
+                    string path = GetAndroidLanguagePath();
+                    return File.Exists(path) ? File.ReadAllText(path).Trim() : string.Empty;
+                }
+                catch (Exception exception)
+                {
+                    LogAndroidLanguageError(exception);
+                    return string.Empty;
+                }
+            }
+            set
+            {
+                s_AndroidSessionLanguage = value ?? string.Empty;
+                try
+                {
+                    File.WriteAllText(GetAndroidLanguagePath(), s_AndroidSessionLanguage);
+                }
+                catch (Exception exception)
+                {
+                    LogAndroidLanguageError(exception);
+                }
+            }
+#else
             get => GetPrefString(KeyLanguage, string.Empty);
             set => SetPrefString(KeyLanguage, value ?? string.Empty);
+#endif
         }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        private static string GetAndroidLanguagePath()
+        {
+            using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+            using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+            using (var directory = activity.Call<AndroidJavaObject>("getNoBackupFilesDir"))
+                return Path.Combine(directory.Call<string>("getAbsolutePath"), AndroidLanguageFile);
+        }
+
+        private static void LogAndroidLanguageError(Exception exception)
+        {
+            if (s_AndroidLanguageErrorLogged)
+                return;
+            s_AndroidLanguageErrorLogged = true;
+            Debug.LogError("[Localization] Android language preference could not be read or saved: " + exception);
+        }
+#endif
 
         public readonly struct CompletedScoreEntry
         {

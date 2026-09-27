@@ -29,9 +29,9 @@
 
 手动语言切换入口仅保留 GM 命令；主标题页不再显示语言选择按钮。
 
-原版来源：不适用，用户授权的 Unity 本地化和 GM 扩展。菜单及战斗均可输入 `setlanguage zh-cn` 或 `setlanguage en`，经唯一生产入口 `MutinyGMManager.ExecuteCommand` 调用 `MutinyLocalization.Initialize/Select`，刷新所接入的文本、字体路径，并保存 `mutiny_language_v1`。内部 Locale 与已有保存值仍为 `zh-Hans`。表尚未就绪时记录选择，载入完成后显示目标语言；控制台状态说明此时正在载入。合法命令计入最近成功命令，可重放；再次选择当前语言同样成功并保存。非法输入显示 `Usage: setlanguage zh-cn | en`，不改语言、偏好和成功历史。GM 面板自身保持开发英语。
+原版来源：不适用，用户授权的 Unity 本地化和 GM 扩展。菜单及战斗均可输入 `setlanguage zh-cn` 或 `setlanguage en`，经唯一生产入口 `MutinyGMManager.ExecuteCommand` 调用 `MutinyLocalization.Initialize/Select`，刷新所接入的文本和字体路径。内部语言代码仍为 `zh-Hans` / `en`；运行时 IMGUI 从随包双语文本读取，Unity String Table 保留作编辑器资源和内容核验。Windows 等平台沿用 `mutiny_language_v1`，Android 将语言偏好写入不备份的安装局部文件，避免卸载重装时恢复旧选择；游戏进度存档仍使用原路径。合法命令计入最近成功命令，可重放；再次选择当前语言同样成功并保存。非法输入显示 `Usage: setlanguage zh-cn | en`，不改语言、偏好和成功历史。GM 面板自身保持开发英语。
 
-验收用例：从菜单实际 GM 解析入口依次执行 `zh-cn → en → zh-cn → en → zh-cn`，检查每步本地化文本、Locale、字体路径和保存值；执行大小写/空白变化及重复命令；分别拒绝缺参、旧 `cn`、`jp`、额外参数；通过最近成功命令再次切换。2026-09-26 对旧 `cn` 命令的隔离 Play Mode **7/7** 仅为历史结果；新命令和打包版回切待用户运行验收，见 [本次修复规格](../09-PresentationAndFeedback/LOCALIZATION_RESELECT_FIX.md)。
+验收用例：从菜单实际 GM 解析入口依次执行 `zh-cn → en → zh-cn → en → zh-cn`，检查每步本地化文本、内部语言代码、字体路径和保存值；执行大小写/空白变化及重复命令；分别拒绝缺参、旧 `cn`、`jp`、额外参数；通过最近成功命令再次切换。2026-09-26 对旧 `cn` 命令的隔离 Play Mode **7/7** 仅为历史结果；新命令和 Android 回切待用户运行验收，见 [Android 修复规格](../09-PresentationAndFeedback/LOCALIZATION_ANDROID_FIX.md)。
 
 ## GM-08 · 当前玩家单回合 AI 接管
 

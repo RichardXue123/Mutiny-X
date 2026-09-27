@@ -374,7 +374,7 @@ namespace Mutiny.Presentation
                     m_StatusColor = new Color(0.35f, 1.0f, 0.45f);
                     m_StatusMessage = "[SUCCESS] Language set to " +
                         (code == MutinyLocalization.SimplifiedChinese ? "Simplified Chinese (zh-cn)." : "English (en).") +
-                        (MutinyLocalization.IsReady ? string.Empty : "\nLoading language tables...");
+                        (MutinyLocalization.IsReady ? string.Empty : "\nBundled translations unavailable; using English fallback.");
                     succeeded = true;
                 }
             }

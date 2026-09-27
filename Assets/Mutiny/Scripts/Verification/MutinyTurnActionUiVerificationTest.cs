@@ -4,7 +4,6 @@ using Mutiny.Persistence;
 using Mutiny.Presentation;
 using Mutiny.Simulation;
 using UnityEngine;
-using UnityEngine.Localization.Settings;
 
 namespace Mutiny.Verification
 {
@@ -6344,16 +6343,14 @@ namespace Mutiny.Verification
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.SimplifiedChinese &&
                               !MutinyLocalization.UseOriginalFont &&
-                              MutinyLocalization.Text("frontend.play", "play") == "开始游戏" &&
-                              LocalizationSettings.SelectedLocale.Identifier.Code == MutinyLocalization.SimplifiedChinese,
-                    "GM-09 zh-cn changes production text, locale, dynamic font route and saved preference");
+                              MutinyLocalization.Text("frontend.play", "play") == "开始游戏",
+                    "GM-09 zh-cn changes production text, dynamic font route and saved preference");
                 result.Assert(gm.ExecuteCommand("setlanguage en") &&
                               MutinyLocalization.Code == MutinyLocalization.English &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.English &&
                               MutinyLocalization.UseOriginalFont &&
-                              MutinyLocalization.Text("frontend.play", "play") == "play" &&
-                              LocalizationSettings.SelectedLocale.Identifier.Code == MutinyLocalization.English,
-                    "GM-09 en restores English text, locale, original font route and saved preference");
+                              MutinyLocalization.Text("frontend.play", "play") == "play",
+                    "GM-09 en restores English text, original font route and saved preference");
                 result.Assert(gm.ExecuteCommand("  SeTLaNgUaGe\tZH-CN  ") &&
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
                               MutinyLocalization.Text("frontend.play", "play") == "开始游戏" &&
@@ -6380,6 +6377,21 @@ namespace Mutiny.Verification
                               gm.RecentSuccessfulCommands[0] == "setlanguage zh-cn" &&
                               MutinyLocalization.Text("frontend.play", "play") == "开始游戏",
                     "GM-09 a recent command replays through the production parser and changes language again");
+
+                bool repeatedSwitchesWork = true;
+                foreach (string command in new[]
+                         { "setlanguage en", "setlanguage zh-cn", "setlanguage en", "setlanguage zh-cn", "setlanguage en" })
+                {
+                    bool english = command == "setlanguage en";
+                    repeatedSwitchesWork &= gm.ExecuteCommand(command) &&
+                        MutinyLocalization.Code == (english ? MutinyLocalization.English : MutinyLocalization.SimplifiedChinese) &&
+                        MutinySaveSystem.LanguageCode == MutinyLocalization.Code &&
+                        MutinyLocalization.UseOriginalFont == english &&
+                        MutinyLocalization.Text("frontend.play", "play") == (english ? "play" : "开始游戏") &&
+                        MutinyLocalization.Text("frontend.scores", "scores") == (english ? "scores" : "成绩");
+                }
+                result.Assert(repeatedSwitchesWork,
+                    "LOC-ANDROID-01 repeated production GM switches keep title translations, font route and saved choice usable");
             }
             finally
             {

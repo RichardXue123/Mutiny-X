@@ -341,43 +341,48 @@ namespace Mutiny.Presentation
             float top = (Screen.height - CanvasHeight * scale) * 0.5f;
             GUI.matrix = Matrix4x4.TRS(new Vector3(left, top, 0f), Quaternion.identity, new Vector3(scale, scale, 1f));
 
-            GUI.color = Color.black;
-            GUI.DrawTexture(new Rect(-left / scale, -top / scale, Screen.width / scale, Screen.height / scale), Texture2D.whiteTexture);
-            GUI.color = Color.white;
-            DrawAnimatedBackground();
-
-            switch (m_Flow.CurrentPage)
+            try
             {
-                case MutinyFrontendPage.Title:
-                    DrawTitle();
-                    break;
-                case MutinyFrontendPage.GameSelect:
-                    DrawGameSelect();
-                    break;
-                case MutinyFrontendPage.LevelSelect:
-                    DrawLevelSelect();
-                    break;
-                case MutinyFrontendPage.TwoPlayerLevelSelect:
-                    DrawTwoPlayerLevelSelect();
-                    break;
-                case MutinyFrontendPage.Help:
-                    DrawHelp();
-                    break;
-                case MutinyFrontendPage.Credits:
-                    DrawCredits();
-                    break;
-                case MutinyFrontendPage.Scores:
-                    DrawScores();
-                    break;
-                case MutinyFrontendPage.Ending:
-                    DrawEnding();
-                    break;
+                GUI.color = Color.black;
+                GUI.DrawTexture(new Rect(-left / scale, -top / scale, Screen.width / scale, Screen.height / scale), Texture2D.whiteTexture);
+                GUI.color = Color.white;
+                DrawAnimatedBackground();
+
+                switch (m_Flow.CurrentPage)
+                {
+                    case MutinyFrontendPage.Title:
+                        DrawTitle();
+                        break;
+                    case MutinyFrontendPage.GameSelect:
+                        DrawGameSelect();
+                        break;
+                    case MutinyFrontendPage.LevelSelect:
+                        DrawLevelSelect();
+                        break;
+                    case MutinyFrontendPage.TwoPlayerLevelSelect:
+                        DrawTwoPlayerLevelSelect();
+                        break;
+                    case MutinyFrontendPage.Help:
+                        DrawHelp();
+                        break;
+                    case MutinyFrontendPage.Credits:
+                        DrawCredits();
+                        break;
+                    case MutinyFrontendPage.Scores:
+                        DrawScores();
+                        break;
+                    case MutinyFrontendPage.Ending:
+                        DrawEnding();
+                        break;
+                }
+
+                DrawCornerAudioControls();
             }
-
-            DrawCornerAudioControls();
-
-            GUI.color = oldColor;
-            GUI.matrix = oldMatrix;
+            finally
+            {
+                GUI.color = oldColor;
+                GUI.matrix = oldMatrix;
+            }
         }
 
         private void DrawTitle()
