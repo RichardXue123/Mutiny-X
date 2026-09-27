@@ -88,3 +88,11 @@
 - **真实构建通过**：`Publish-Release.ps1 -Tag v1.0.3` 从修正后的固定提交启动独立 Unity 6000.6.0f1。Android、Windows 两个 BuildPipeline 报告均成功，耗时分别为 `269.199`、`83.840` 秒；Inno Setup 7 编译成功，耗时 `23.672` 秒。APK 实测 `com.RichardXue.MutinyX`、`versionName=1.0.3`、`versionCode=7`、ARM64、minSdk 26、targetSdk 36。安装包 ProductVersion `1.0.3`；ZIP 223 个条目，PDB / Unity 备份 / Burst 调试目录为 0。
 - **真实发布通过**：本地 manifest 记录 APK、Windows Setup EXE、Windows ZIP、`SHA256SUMS.txt` 四个文件的大小和 SHA256。GitHub CLI 首次只读 API 请求无响应后，保留 manifest 并使用 `-Resume`；后续网络连接重置，再次使用 `-Resume` 完成。最终 Release ID `397625827`，发布时间 `2026-09-27T11:42:05Z`，`draft=false`、`prerelease=false`；GitHub 上四个资产均为 uploaded，大小及 digest 与本地 manifest 一致。[正式 Release](https://github.com/RichardXue123/Mutiny-X/releases/tag/v1.0.3)。摘要证据见 [LOCAL-RELEASE-V1.0.3-20260927.json](Artifacts/LOCAL-RELEASE-V1.0.3-20260927.json)。
 - **待运行验证 / 已知差异**：本次没有执行 Windows 安装/卸载及 Android 真机运行；GitHub 发布只包含 Windows 和 Android。发布后工作目录里的未提交改动不在 v1.0.3 tag 快照内。原版玩法规则未因发布修复改变。
+
+### v1.0.4 等待 UI 完成后的构建与发布
+
+- **静态确认**：用户要求先等待“主界面UI”任务完成。通过任务状态与最新完成轮确认该任务 idle、最新轮 completed，中文按钮下移修正的语言/缩放回归 11/11 已完成，再准备发布提交。发布范围包含当前 excamera 开关、空投/大炮高刷新率适配及已完成的 UI/bug 修复；本次发布流程不新增玩法规则。
+- **已实现**：Unity Version `1.0.4`、Android 构建号 `8`、`Notes/v1.0.4.md` 和待发布代码/资源一并提交到 `0bb8c0044046a9995fc143b2fb0cec114d7ef2c1`。核对提交树中的版本和说明后创建注解 tag；对象 `f940b7bb625d4185cd99b2049cb154d3bc16d765`，指向该提交，main 与 tag 已原子推送。说明按用户原文保存：增加excamera运镜开关；空投、大炮高刷新率适配；bug修复。
+- **实际构建通过**：生产 `Publish-Release.ps1 -Tag v1.0.4` 在独立 worktree 执行 Unity 6000.6.0f1。Android 与 Windows 报告均成功，BuildPipeline 耗时分别为 `310.377` 与 `87.261` 秒。Inno Setup 7 编译成功，耗时 `26.719` 秒。APK 实测包名 `com.RichardXue.MutinyX`、versionName `1.0.4`、versionCode `8`、ARM64、minSdk 26、targetSdk 36；安装包 ProductVersion `1.0.4`。Windows ZIP 223 条，PDB / Unity 备份 / Burst 调试内容为 0。
+- **实际发布通过**：安装包首次上传持续无响应，中断本次上传后由生产重试逻辑重新核验草稿、在第 2 次上传成功；未重建产物。所有资产上传后，GitHub 的大小和 SHA256 与本地 manifest 一致，随后草稿转正式版。Release ID `397683478`，`draft=false`、`prerelease=false`，发布时间 `2026-09-27T14:40:01Z`，目标源码提交与 tag 一致。[正式 Release](https://github.com/RichardXue123/Mutiny-X/releases/tag/v1.0.4)。摘要证据：[LOCAL-RELEASE-V1.0.4-20260927.json](Artifacts/LOCAL-RELEASE-V1.0.4-20260927.json)。
+- **待运行验证 / 已知差异**：此次执行验证了打包、版本、安装包生成与发布，没有重复所有游戏专项回归，也未执行 Windows 安装/卸载、完整场景目视验收或 Android 真机测试。仅发布 Windows ZIP / Setup、Android APK 和 SHA256，不发布 iOS。

@@ -4,6 +4,8 @@
 
 本指南根据 v1.0.2、v1.0.3 的实际报错和发布记录整理，更新日期：2026-09-27。
 
+**版本进展：v1.0.4 / 构建号 8 也已正式发布。** 下文保留 v1.0.4 作为完整操作示例；准备下一次发布时，请将示例版本换为 `v1.0.5 / 1.0.5`，构建号换为 `9`，并同步修改说明文件名、命令和输出路径。
+
 ## 1. 先理解发布顺序
 
 ```text
@@ -23,14 +25,14 @@
 
 ### 版本、tag 与文件名的对应关系
 
-| 项目 | v1.0.3 的实际值 | 下一版示例 |
+| 项目 | v1.0.3 的实际值 | 本指南示例（v1.0.4 已发布） |
 | --- | --- | --- |
 | Unity Version / `bundleVersion` | `1.0.3` | `1.0.4` |
 | Git tag | `v1.0.3` | `v1.0.4` |
 | Android Bundle Version Code | `7` | `8` |
 | 更新说明 | `BuildTools/Release/Notes/v1.0.3.md` | `BuildTools/Release/Notes/v1.0.4.md` |
 
-`v1.0.3` 已正式发布，正常下一次发布请使用新版本。Android 构建号应高于此前发布的值，不能只修改 Version；当前脚本检查其为正整数，不会替你检查所有历史版本的递增关系。
+`v1.0.3`、`v1.0.4` 已正式发布，正常下一次发布请使用新版本。Android 构建号应高于此前发布的值，不能只修改 Version；当前脚本检查其为正整数，不会替你检查所有历史版本的递增关系。
 
 ## 2. 首次环境准备
 
@@ -312,7 +314,7 @@ git show v1.0.4:BuildTools/Release/Notes/v1.0.4.md
 
 ### 6.4 Android 构建号没有递增
 
-只修改 `bundleVersion` 不会修改 `AndroidBundleVersionCode`。v1.0.3 初次准备时沿用了 v1.0.2 的 `6`，修复后使用 `7`；下一版示例使用 `8`。
+只修改 `bundleVersion` 不会修改 `AndroidBundleVersionCode`。v1.0.3 初次准备时沿用了 v1.0.2 的 `6`，修复后使用 `7`；本指南中的 v1.0.4 使用 `8`，之后新版本继续递增。
 
 在 Player Settings 保存新构建号，并确认提交及 tag 中的值也更新。流水线冻结构建号，不会在打包时自动加一。
 
@@ -414,5 +416,5 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\BuildTools\Release\Pub
 - 静态确认：按当前 `Publish-Release.ps1`、`ReleaseTools.psm1`、批处理入口与使用文档核对顺序、参数和恢复条件。
 - 已实现：发布流水线已支持固定 tag、独立 worktree、Windows / Android 构建、SHA256、GitHub 草稿上传、完整核验后发布与恢复。
 - 实际通过：v1.0.2、v1.0.3 的真实 Unity / Inno 构建及 GitHub 发布；v1.0.3 修复后的生产脚本回归在 PowerShell 5.1、7.6.5 各 42/42 通过。详情见 [验收记录](11-VerificationAndDebug/01-AutomatedRegression/LOCAL_RELEASE_PIPELINE.md)。
-- 待运行：本指南中的 v1.0.4 是下一版操作示例，编写文档时没有创建、构建或发布它。
+- 后续实际通过：v1.0.4 已按此流程完成真实构建和 GitHub 发布，记录见 [验收记录](11-VerificationAndDebug/01-AutomatedRegression/LOCAL_RELEASE_PIPELINE.md)。下一次新版本仍需单独构建、发布和验收。
 - 已知限制：当前流水线只支持 Windows 本地环境、正式语义版本 tag、Windows / Android；安装/卸载与真机功能验收另行执行。
