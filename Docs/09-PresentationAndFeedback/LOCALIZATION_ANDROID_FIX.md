@@ -18,6 +18,6 @@
 
 - **静态确认**：代码路径和随包文本已核对；Android 抛错栈尚未取得。
 - **已实现**：运行时 `Text` 只查随包资源，不进入 Addressables/String Table；切换只更新语言代码、安装偏好和对白刷新事件；前端 `OnGUI` 使用 `finally` 恢复矩阵和颜色。Unity Localization 的启动选择器只保留英语。Android 语言偏好使用 `getNoBackupFilesDir()`，不再读可能被系统恢复的旧 `PlayerPrefs` 语言键。生产 GM 回归和可选 Player 回归均新增五次来回切换断言。
-- **实际测试通过**：`Assembly-CSharp.csproj` 编译 0 错误（11 个既有警告）；`Assembly-CSharp-Editor.csproj` 编译 0 错误、0 警告。未执行游戏或 Android 真机运行。
+- **实际测试通过**：`Assembly-CSharp.csproj` 编译 0 错误（11 个既有警告）；`Assembly-CSharp-Editor.csproj` 编译 0 错误、0 警告。从代码提交 `03f303e` 的隔离 worktree 用 Unity `6000.6.0f1` 正式 Android `BuildPipeline.BuildPlayer` 构建成功，`BuildReport` 为 `success=true`。APK 大小 69,090,291 字节，SHA-256 `1d6e8bfd8323be179e587e7ea5f6d90be1165392b37f803c0002c003dabc633b`；包名 `com.RichardXue.MutinyX`，版本 `1.0.2+6`，证书 SHA-256 `7a5abcaf6fbb841a111a6b88cd9eed052ecf6d6c14f7e514cf8f3cce21e9d226` 与之前候选包一致。APK 的 `assets/bin/Data/c399df976a7a4fa8bfa5abac6f11aa31` 包含与源 `Mutiny.tsv` 完全相同的字节，字体名也存在于包内资源。APK 位于 `D:/My Project/Mutiny X/_android_localization_check/Builds/AndroidLocalizationCheck/MutinyX-1.0.2+6.apk`。未执行游戏或 Android 真机运行。
 - **待运行验证**：由用户执行 Android 首装、重启、反复 GM 切换及点击验收；开发侧遵照用户要求不启动游戏。
 - **已知差异**：安装局部语言偏好不随 Android 系统备份恢复；更新到本版时，旧 Android SharedPreferences 中的语言选择将不再生效，首次显示英语，之后的 GM 选择继续跨重启保存。
