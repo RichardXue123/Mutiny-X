@@ -96,3 +96,11 @@
 - **实际构建通过**：生产 `Publish-Release.ps1 -Tag v1.0.4` 在独立 worktree 执行 Unity 6000.6.0f1。Android 与 Windows 报告均成功，BuildPipeline 耗时分别为 `310.377` 与 `87.261` 秒。Inno Setup 7 编译成功，耗时 `26.719` 秒。APK 实测包名 `com.RichardXue.MutinyX`、versionName `1.0.4`、versionCode `8`、ARM64、minSdk 26、targetSdk 36；安装包 ProductVersion `1.0.4`。Windows ZIP 223 条，PDB / Unity 备份 / Burst 调试内容为 0。
 - **实际发布通过**：安装包首次上传持续无响应，中断本次上传后由生产重试逻辑重新核验草稿、在第 2 次上传成功；未重建产物。所有资产上传后，GitHub 的大小和 SHA256 与本地 manifest 一致，随后草稿转正式版。Release ID `397683478`，`draft=false`、`prerelease=false`，发布时间 `2026-09-27T14:40:01Z`，目标源码提交与 tag 一致。[正式 Release](https://github.com/RichardXue123/Mutiny-X/releases/tag/v1.0.4)。摘要证据：[LOCAL-RELEASE-V1.0.4-20260927.json](Artifacts/LOCAL-RELEASE-V1.0.4-20260927.json)。
 - **待运行验证 / 已知差异**：此次执行验证了打包、版本、安装包生成与发布，没有重复所有游戏专项回归，也未执行 Windows 安装/卸载、完整场景目视验收或 Android 真机测试。仅发布 Windows ZIP / Setup、Android APK 和 SHA256，不发布 iOS。
+
+### v1.0.5 GM 命令更新的构建与发布（2026-09-28）
+
+- **静态确认**：发布开始时 main 工作目录干净，最新游戏提交为 `1d852085e8e6bb60e072d3989cb5780586cf3ef1`（gm command add）。已提交的 GM 验证证据记录 66/66 命令回归和 5/5 实际 AI 协程验证；本次发布未重复运行这些专项测试。
+- **已实现**：Unity 版本 `1.0.5`、Android 构建号 `9`、更新说明 `1 更新gm命令` 一并提交到 `3fd775c4edf0cfee4bdf0592a1020fea4b5a245b`。核对提交树后创建注解 tag `v1.0.5`，对象为 `19df3f32f0e8a5c87a87cbad7660e5b29ab0a2b6`，main 和 tag 原子推送；发布记录提交不移动该 tag。
+- **实际构建通过**：生产发布入口在独立 worktree 执行 Unity 6000.6.0f1，Android、Windows 报告均成功，BuildPipeline 用时分别为 `279.892`、`84.810` 秒。Inno Setup 编译成功，用时 `24.781` 秒；安装包 ProductVersion 为 `1.0.5`。APK 实测包名 `com.RichardXue.MutinyX`、versionName `1.0.5`、versionCode `9`、ARM64、minSdk 26、targetSdk 36。Windows ZIP 223 条，禁止发布的调试/备份条目为 0。
+- **实际发布通过**：首次读取 GitHub API 遇到 `unexpected EOF` 后，使用生产 `-Resume` 校验并复用完整 manifest，无重新构建。四个资产上传、大小与 SHA256 核验后正式发布；Release ID `397719200`，发布时间 `2026-09-27T16:21:50Z`，`draft=false`、`prerelease=false`，源码提交与 tag 一致。临时源码目录已清理。[正式 Release](https://github.com/RichardXue123/Mutiny-X/releases/tag/v1.0.5)。摘要证据：[LOCAL-RELEASE-V1.0.5-20260928.json](Artifacts/LOCAL-RELEASE-V1.0.5-20260928.json)。
+- **待运行验证 / 已知差异**：仅发布 Windows ZIP、Setup EXE、Android APK 和 SHA256，不发布 iOS。本轮未执行 Windows 安装/卸载、Android 真机运行及完整游戏目视验收；发布流程没有修改原版玩法规格。
