@@ -21,3 +21,10 @@
 - **实际测试通过**：`Assembly-CSharp.csproj` 编译 0 错误（11 个既有警告）；`Assembly-CSharp-Editor.csproj` 编译 0 错误、0 警告。从代码提交 `03f303e` 的隔离 worktree 用 Unity `6000.6.0f1` 正式 Android `BuildPipeline.BuildPlayer` 构建成功，`BuildReport` 为 `success=true`。APK 大小 69,090,291 字节，SHA-256 `1d6e8bfd8323be179e587e7ea5f6d90be1165392b37f803c0002c003dabc633b`；包名 `com.RichardXue.MutinyX`，版本 `1.0.2+6`，证书 SHA-256 `7a5abcaf6fbb841a111a6b88cd9eed052ecf6d6c14f7e514cf8f3cce21e9d226` 与之前候选包一致。APK 的 `assets/bin/Data/c399df976a7a4fa8bfa5abac6f11aa31` 包含与源 `Mutiny.tsv` 完全相同的字节，字体名也存在于包内资源。APK 位于 `D:/My Project/Mutiny X/_android_localization_check/Builds/AndroidLocalizationCheck/MutinyX-1.0.2+6.apk`。未执行游戏或 Android 真机运行。
 - **待运行验证**：由用户执行 Android 首装、重启、反复 GM 切换及点击验收；开发侧遵照用户要求不启动游戏。
 - **已知差异**：安装局部语言偏好不随 Android 系统备份恢复；更新到本版时，旧 Android SharedPreferences 中的语言选择将不再生效，首次显示英语，之后的 GM 选择继续跨重启保存。
+
+## v1.0.2 Android 下载文件替换
+
+- 用户于 2026-09-27 明确要求仅重新打包并替换 v1.0.2 的 Android 版本；原有 Windows Setup 和 ZIP 保留。修复代码提交 `03f303e`、构建记录 `772612a` 已推送到 `main`。
+- GitHub Release `v1.0.2` 的 `MutinyX-Android-1.0.2+6.apk` 已替换为上述隔离构建：远端大小 69,090,291 字节，远端 SHA-256 `1d6e8bfd8323be179e587e7ea5f6d90be1165392b37f803c0002c003dabc633b`，与本地一致。`SHA256SUMS.txt` 已同步替换，远端 SHA-256 `1fd0f775f520cef709a2dd7a105a1026a515273fb01453999bfba6d8ceb5390b`，再次下载后字节与本地一致。
+- 远端 Windows Setup SHA-256 `673640559fa7e51a2ffa92f7bb296db17a87331a029ac0f43a05a3d692033b5e`、Windows ZIP SHA-256 `50c935f6798e661142da7123a3e846502c721330f21e43443e6df8ed3b9ceaae`，与替换前一致；Release 仍为四个资产。说明文字记录 APK 源码提交与未移动的旧 v1.0.2 tag 之间的差异。
+- 发布后仅完成远端资产、大小、哈希与下载校验。没有启动游戏，Android 真机的首装英文、GM 多次回切、按钮点击和重启保存仍待用户验收。
