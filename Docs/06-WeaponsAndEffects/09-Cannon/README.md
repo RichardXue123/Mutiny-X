@@ -55,7 +55,15 @@
 | CAN-AUD-02 | 原版炮弹碰墙/地形在接触 tick 播放一次 `pop`；直接撞人生成爆炸但不播 `pop`；爆炸动画的第 3 帧只结算伤害、不追加声音 | `Cannonball.as::contact/advance`；`Explosion.as::hit` | `MutinyCannonball.Explode`、`MutinyExplosion.PlayPopOnHit` | 核对原版两个分支；Unity 实现按下方 `CAN-AUD-03` 的用户授权扩展验收 | 原版静态确认；Unity 直击分支有明确授权差异，不再登记为完全一致 |
 | CAN-AUD-03（用户授权扩展） | 炮弹直击角色也在命中当刻播放一次 `pop`；地形与角色碰撞回调即使重叠，只允许该炮弹播放一次，爆炸伤害帧不追加声音。原版直击角色分支无音效，故本规则明确不记为原版一致性 | 用户反馈；原版 `Cannonball.as::advance` 直击分支与 `contact` 地形分支的差异 | `MutinyCannonball.Explode` 统一一次性音效门 | 生产炮弹分别撞墙、直击角色并推进爆炸伤害帧；断言每颗只收到一次 `pop`，重复结束调用不再播放 | 已实现；2026-09-26 隔离工程 Unity Play Mode 专项 19/19 通过；主工程实际听感待验收 |
 
-## 修复边界
+## 高刷新摆放规格（2026-09-27）
+
+- `CAN-PRES-01`（原版确认）：`Cannon.as::advance` 调用 `Solid.as::advanceMotion`；拖动每 tick 向指针移动半距离，碰撞和范围约束保持 `CAN-PLACE-02/03`。Unity 入口为 `AdvanceBodyDragOriginalTick`，验收通过真实 `TryBeginBodyDrag/DragBodyTo` 与大炮帧推进方法驱动，不允许渲染帧增加物理 tick。
+- `CAN-PRES-02`（用户授权扩展）：炮身及其拉栓在相邻已完成的摆放位置之间随实际渲染帧插值。暂停拖动和释放后平滑完成当前显示段；短拖释放未消费的目标仍走同源碰撞步。取消回原位、重新装备及开火时清除旧显示段，炮弹仍从权威炮口位置出生。范围圆保持独立锚点，手柄的逐渲染帧直接摆放路径不额外延迟。
+- Unity 入口：`MutinyCannon.SamplePlacementPresentationPosition`、`AdvanceSimulationFrame`、`LateUpdate`，并由 `MutinyPhysicsBody.PresentationPositionOverride` 提供同源显示目标。
+- 缺陷回归：`RunCannonPresentation` 检查 25/60/120 FPS 采样、权威坐标/物理次数、实际墙体碰撞、释放/取消及开火边界，另复跑既有大炮生命周期、AI、烟迹及碰撞音效专项。2026-09-27 Unity 6000.6.0f1 隔离工程 Play Mode 45/45 通过（新增显示规则 21 条 + 既有 24 条）；两个 C# 程序集编译通过。
+- 完成口径：原版拖动半距离与碰撞路径静态确认；高刷新显示已实现、数值回归已通过。主工程真实鼠标/触摸拖动观感与 Android 真机仍待验收。已知差异：插值为用户授权扩展，普通拖动显示最多落后权威位置一个 40 ms tick；不提高物理频率，不改变拉栓装填阈值或炮弹出生坐标。
+
+## 修复边界（实现约束）
 
 - 大炮本体和炮弹必须保持为两个独立对象。
 - 大炮本体使用独立炮身与拉栓显示层，不能继续用包含静止拉栓的扁平合成图完成动态拉栓。

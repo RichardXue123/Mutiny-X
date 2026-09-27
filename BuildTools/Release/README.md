@@ -1,5 +1,7 @@
 # 本地一键发布
 
+按步骤准备新版本、避免缺 tag / 版本不匹配 / 漏提交说明，以及处理中断恢复，请阅读 [完整发布指南](../../Docs/RELEASE_GUIDE.md)。指南以下一版 v1.0.4 为示例。
+
 固定 Git tag → 独立 Unity 工作目录 → Windows / Android → 本地 SHA256 → GitHub 草稿 → 上传并校验 → 正式 Release。
 
 默认发布 Windows 便携 ZIP、Windows Setup EXE、Android APK、`SHA256SUMS.txt`。不构建 iOS，不自动递增版本或构建号，不创建或推送 tag。Unity 编辑器可以继续打开当前开发工程；脚本构建的是 tag 对应的独立目录。

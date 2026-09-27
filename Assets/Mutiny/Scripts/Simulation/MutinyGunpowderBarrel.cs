@@ -49,6 +49,12 @@ namespace Mutiny.Simulation
         public int PlacedCount => CountPlaced(GetRootBox());
         public int CurrentAnimationFrame => m_AnimationFrame + 1;
         public bool IsAiPlacementActive => m_AiList != null;
+        public override Vector2? AiPlacementCameraTargetPixels =>
+            m_ParentBox == null && IsAiPlacementActive && HasPendingPlacement &&
+            Owner != null && Owner.IsAlive &&
+            !float.IsNaN(m_AiNext.x) && !float.IsNaN(m_AiNext.y) &&
+            !float.IsInfinity(m_AiNext.x) && !float.IsInfinity(m_AiNext.y)
+                ? m_AiNext : (Vector2?)null;
 
         protected override void Awake()
         {
@@ -357,7 +363,7 @@ namespace Mutiny.Simulation
             m_AiDelayAfter = 0;
             AiContinue();
             MutinyDebugLog.Info("GunpowderBarrel", $"AI armed candidates={count} firstDelay={m_AiDelay}", this);
-            return m_AiDelay > 0;
+            return m_AiList != null && m_AiDelay > 0;
         }
 
         private void AiContinue()

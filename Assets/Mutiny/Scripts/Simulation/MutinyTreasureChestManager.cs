@@ -25,6 +25,8 @@ namespace Mutiny.Simulation
         public IReadOnlyList<string> PotentialWeapons => m_PotentialWeapons;
         public IReadOnlyList<int> ValidDropColumns => m_ValidDropColumns;
         public MutinyLevelRoot LevelRoot => m_LevelRoot;
+        public float SimulationInterpolationAlpha =>
+            Mathf.Clamp01(m_TickAccumulator / MutinyPhysics.TimeStep);
 
         public void Initialize(MutinyLevelData levelData, MutinyLevelRoot levelRoot)
         {
@@ -38,7 +40,15 @@ namespace Mutiny.Simulation
 
         private void Update()
         {
-            m_TickAccumulator += Time.deltaTime;
+            AdvanceSimulationFrame(Time.deltaTime);
+        }
+
+        internal void AdvanceSimulationFrameForVerification(float deltaTime) =>
+            AdvanceSimulationFrame(deltaTime);
+
+        private void AdvanceSimulationFrame(float deltaTime)
+        {
+            m_TickAccumulator += deltaTime;
             while (m_TickAccumulator >= MutinyPhysics.TimeStep)
             {
                 m_TickAccumulator -= MutinyPhysics.TimeStep;

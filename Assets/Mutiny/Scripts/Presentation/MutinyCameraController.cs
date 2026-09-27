@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Mutiny.Levels;
 using Mutiny.Simulation;
 using Mutiny.Diagnostics;
@@ -33,6 +34,7 @@ namespace Mutiny.Presentation
 
         private Camera m_Camera;
         private MutinyLevelRoot m_LevelRoot;
+        private MutinyFrontendController m_Frontend;
         private MutinyTeam m_PreviousTeam;
         private Transform m_TurnPanTarget;
         private MutinyCharacter m_TurnFocusCharacter;
@@ -43,6 +45,26 @@ namespace Mutiny.Presentation
         private bool m_DesktopScrollCursorWasVisible;
         private Texture2D m_ScrollCardinalTexture;
         private Texture2D m_ScrollDiagonalTexture;
+        public static bool ExplosionCameraEnabled { get; private set; }
+        private readonly List<MutinyCharacter> m_ExplosionCharacters = new List<MutinyCharacter>();
+        private MutinyCharacter m_ExplosionFocus;
+        private MutinyTeam m_ExplosionTeam;
+        private bool m_ExplosionSelectionMade;
+        private bool HasExplosionCameraTarget => m_ExplosionCharacters.Count > 0 &&
+            (!m_ExplosionSelectionMade || m_ExplosionFocus != null);
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetExplosionCameraSetting() => SetExplosionCameraEnabled(false);
+
+        public static void SetExplosionCameraEnabled(bool enabled)
+        {
+            // Enabling is not retroactive; only subsequent actual hits qualify.
+            if (ExplosionCameraEnabled == enabled && enabled)
+                return;
+            ExplosionCameraEnabled = enabled;
+            foreach (MutinyCameraController controller in FindObjectsByType<MutinyCameraController>())
+                controller.ClearExplosionCamera();
+        }
 
         private void Awake()
         {
@@ -53,10 +75,13 @@ namespace Mutiny.Presentation
         private void OnEnable()
         {
             ApplyViewportLetterbox();
+            MutinyExplosion.KnockbackApplied += OnExplosionKnockback;
         }
 
         private void OnDisable()
         {
+            MutinyExplosion.KnockbackApplied -= OnExplosionKnockback;
+            ClearExplosionCamera();
             if (m_DesktopScrollCursorWasVisible)
                 Cursor.visible = PlayerInput == null || !PlayerInput.HasVisibleSpecialCursor;
             m_DesktopScrollCursorWasVisible = false;
@@ -116,6 +141,7 @@ namespace Mutiny.Presentation
             m_TurnFocusCharacter = null;
             m_TrackedWeapon = null;
             m_AirDropCameraWasLocked = false;
+            ClearExplosionCamera();
 
             // Bind synchronously: the previous root may survive until end-of-frame
             // Destroy, so a scene search can still return the old turn/speech.
@@ -200,10 +226,21 @@ namespace Mutiny.Presentation
                 return;
 
             RefreshTurnPanTarget();
+            RefreshExplosionCamera();
 
             if (MutinyTransitionManager.IsTransitionActive)
             {
                 m_EdgeVelocityPixelsPerSecond = Vector2.zero;
+                return;
+            }
+
+            // Optional, explicitly non-Flash priority: an actual blast interrupts
+            // weapon/airdrop focus immediately, using the same displayed pose.
+            if (m_ExplosionFocus != null)
+            {
+                m_EdgeVelocityPixelsPerSecond = Vector2.zero;
+                PanTowards(GetPresentationPosition(m_ExplosionFocus.transform),
+                    OriginalTrackingPixelsPerTick, OriginalTrackingVerticalOffsetPixels, deltaTime);
                 return;
             }
 
@@ -251,7 +288,7 @@ namespace Mutiny.Presentation
                         $"airdrop tracking started chest={fallingChest.name} timeTaken={fallingChest.TimeTaken} speed=50px/tick", this);
                 }
                 m_EdgeVelocityPixelsPerSecond = Vector2.zero;
-                PanTowards(fallingChest.transform.position, 50f, 0f, deltaTime);
+                PanTowards(fallingChest.PresentationPosition, 50f, 0f, deltaTime);
                 return;
             }
             if (m_AirDropCameraWasLocked)
@@ -259,6 +296,16 @@ namespace Mutiny.Presentation
                 m_AirDropCameraWasLocked = false;
                 MutinyDebugLog.Info("Camera",
                     "airdrop tracking released; normal action/edge camera controls resumed", this);
+            }
+
+            // Original BoxWeapon.aiContinue refreshes trackX/Y before its 40-tick
+            // placement delay. The root's Transform remains at the first box.
+            if (TryGetAiBoxPlacementCameraTarget(out Vector3 placementTarget))
+            {
+                m_EdgeVelocityPixelsPerSecond = Vector2.zero;
+                PanTowards(placementTarget, OriginalTrackingPixelsPerTick,
+                    OriginalTrackingVerticalOffsetPixels, deltaTime);
+                return;
             }
 
             Transform actionTarget = FindActionTarget();
@@ -277,6 +324,14 @@ namespace Mutiny.Presentation
 
             if (m_TurnPanTarget != null)
             {
+                if (m_ExplosionSelectionMade &&
+                    m_ExplosionCharacters.Contains(m_TurnPanTarget.GetComponent<MutinyCharacter>()))
+                {
+                    // Defer a queued return, rather than cancelling the existing
+                    // AI/Voodoo camera-arrival handshake. It cannot bypass the
+                    // no-relay lock while this blast batch is still moving.
+                    return;
+                }
                 if (PanTowards(GetPresentationPosition(m_TurnPanTarget),
                         OriginalTrackingPixelsPerTick, OriginalTrackingVerticalOffsetPixels, deltaTime))
                     m_TurnPanTarget = null;
@@ -349,7 +404,8 @@ namespace Mutiny.Presentation
                 }
                 else
                 {
-                    if (m_TrackedWeapon.IsFired && !m_TrackedWeapon.IsFinished &&
+                    if (!IsBoxPlacementWeapon(m_TrackedWeapon) &&
+                        m_TrackedWeapon.IsFired && !m_TrackedWeapon.IsFinished &&
                         !(m_TrackedWeapon is MutinyMine trackedMine && trackedMine.IsStored))
                         return m_TrackedWeapon.transform;
                     m_TrackedWeapon = null;
@@ -365,6 +421,11 @@ namespace Mutiny.Presentation
             MutinyWeapon[] weapons = FindObjectsByType<MutinyWeapon>();
             for (int i = 0; i < weapons.Length; i++)
             {
+                // BoxWeapon.place clears track on the placed Solid. AI focus is
+                // supplied by the root's planned point above; never fall back to
+                // a persistent first box, including after sequence completion.
+                if (IsBoxPlacementWeapon(weapons[i]))
+                    continue;
                 // After ten ticks the original doll sets track=false for the rest
                 // of its lifetime. panToCharacter owns the one-time move to the
                 // victim; once that move clears, neither the fading doll nor the
@@ -388,11 +449,124 @@ namespace Mutiny.Presentation
                 ? TurnManager.CurrentTeam.SelectedCharacter
                 : null;
             if (selected != null && selected.IsAlive && selected.PhysicsBody != null &&
+                !(m_ExplosionSelectionMade && m_ExplosionCharacters.Contains(selected)) &&
                 !selected.PhysicsBody.IsAtRest)
                 return selected.transform;
 
             return null;
         }
+
+        private void ClearExplosionCamera()
+        {
+            m_ExplosionCharacters.Clear();
+            m_ExplosionFocus = null;
+            m_ExplosionTeam = null;
+            m_ExplosionSelectionMade = false;
+        }
+
+        private static bool IsExplosionCharacterMoving(MutinyCharacter character) =>
+            character != null && character.isActiveAndEnabled && !character.IsDrowned &&
+            !character.HasLandDeathPresentation && character.PhysicsBody != null &&
+            character.PhysicsBody.isActiveAndEnabled && character.PhysicsBody.IsActive &&
+            !character.PhysicsBody.IsAtRest;
+
+        private bool HasExplosionCameraContext() =>
+            TurnManager != null && TurnManager.CurrentTeam != null && m_LevelRoot != null &&
+            TurnManager.CurrentPhase != TurnPhase.NotStarted &&
+            TurnManager.CurrentPhase != TurnPhase.GameOver;
+
+        private void OnExplosionKnockback(IReadOnlyList<MutinyCharacter> characters)
+        {
+            if (!ExplosionCameraEnabled)
+                return;
+            EnsureReferences();
+            RefreshExplosionCamera(false);
+            if (!HasExplosionCameraContext())
+                return;
+            foreach (MutinyCharacter character in characters)
+            {
+                bool belongsToLevel = character != null &&
+                    ((TurnManager.Team1 != null && TurnManager.Team1.Characters.Contains(character)) ||
+                     (TurnManager.Team2 != null && TurnManager.Team2.Characters.Contains(character)));
+                if (belongsToLevel && IsExplosionCharacterMoving(character) &&
+                    !m_ExplosionCharacters.Contains(character))
+                    m_ExplosionCharacters.Add(character);
+            }
+            if (m_ExplosionCharacters.Count > 0)
+                m_ExplosionTeam = TurnManager.CurrentTeam;
+        }
+
+        private void RefreshExplosionCamera(bool selectTarget = true)
+        {
+            if (!ExplosionCameraEnabled || !HasExplosionCameraContext() ||
+                (m_ExplosionTeam != null && m_ExplosionTeam != TurnManager.CurrentTeam))
+            {
+                ClearExplosionCamera();
+                return;
+            }
+            m_ExplosionCharacters.RemoveAll(character => !IsExplosionCharacterMoving(character));
+            if (!IsExplosionCharacterMoving(m_ExplosionFocus))
+                m_ExplosionFocus = null;
+            if (m_ExplosionCharacters.Count == 0)
+            {
+                ClearExplosionCamera();
+                return;
+            }
+            if (!selectTarget || m_ExplosionSelectionMade)
+                return;
+
+            // Aggregate all hit batches before this LateUpdate; do not choose
+            // based on Explosion Update order. Lock once, including after release.
+            float nearestDistance = float.PositiveInfinity;
+            foreach (MutinyCharacter character in m_ExplosionCharacters)
+            {
+                float distance = ((Vector2)GetPresentationPosition(character.transform) -
+                                  (Vector2)transform.position).sqrMagnitude;
+                if (distance < nearestDistance ||
+                    (distance == nearestDistance && m_ExplosionFocus != null &&
+                     character.GetEntityId().CompareTo(m_ExplosionFocus.GetEntityId()) < 0))
+                {
+                    nearestDistance = distance;
+                    m_ExplosionFocus = character;
+                }
+            }
+            m_ExplosionSelectionMade = true;
+        }
+
+        internal MutinyCharacter ExplosionFocusForVerification => m_ExplosionFocus;
+
+        private static bool IsBoxPlacementWeapon(MutinyWeapon weapon) =>
+            weapon is MutinyWoodenCrate || weapon is MutinyGunpowderBarrel;
+
+        private bool TryGetAiBoxPlacementCameraTarget(out Vector3 target)
+        {
+            target = default;
+            if (TurnManager == null ||
+                (TurnManager.CurrentPhase != TurnPhase.ActionExecuting &&
+                 TurnManager.CurrentPhase != TurnPhase.Settling) ||
+                TurnManager.CurrentTeam == null || !TurnManager.CurrentTeam.IsAiControlled)
+                return false;
+
+            MutinyCharacter selected = TurnManager.CurrentTeam.SelectedCharacter;
+            if (selected == null || !selected.IsAlive ||
+                (selected.IsSelfThrown && selected.PhysicsBody != null && !selected.PhysicsBody.IsAtRest))
+                return false;
+
+            foreach (MutinyWeapon weapon in FindObjectsByType<MutinyWeapon>())
+            {
+                if (weapon.Owner != selected || !weapon.isActiveAndEnabled)
+                    continue;
+                Vector2? planned = weapon.AiPlacementCameraTargetPixels;
+                if (!planned.HasValue)
+                    continue;
+                target = MutinyPhysics.PixelToUnity(planned.Value.x, planned.Value.y);
+                return true;
+            }
+            return false;
+        }
+
+        internal Vector3? AiBoxPlacementTargetForVerification =>
+            TryGetAiBoxPlacementCameraTarget(out Vector3 target) ? target : (Vector3?)null;
 
         internal Transform FindActionTargetForVerification() => FindActionTarget();
         internal MutinyWeapon TrackedWeaponForVerification => m_TrackedWeapon;
@@ -408,7 +582,8 @@ namespace Mutiny.Presentation
         }
         internal bool CanAcceptManualScrollingForVerification()
         {
-            return m_TurnPanTarget == null && FindActionTarget() == null && CanUseManualScrolling();
+            return !HasExplosionCameraTarget && m_TurnPanTarget == null &&
+                   FindActionTarget() == null && CanUseManualScrolling();
         }
 
         public bool HasReachedVoodooTarget(MutinyCharacter target)
@@ -470,6 +645,12 @@ namespace Mutiny.Presentation
 
         private void AdvanceEdgeScrolling()
         {
+            if (IsFrontendPageVisible())
+            {
+                m_DesktopScrollDirection = Vector2.zero;
+                m_EdgeVelocityPixelsPerSecond = Vector2.zero;
+                return;
+            }
             if (MutinyInputHub.Instance != null && MutinyInputHub.Instance.IsControllerActive)
             {
                 AdvanceControllerScrolling(Time.deltaTime);
@@ -537,6 +718,7 @@ namespace Mutiny.Presentation
         {
             MutinyInputHub hub = MutinyInputHub.Instance;
             bool canScroll = hub != null && hub.IsControllerActive && hub.CurrentContext == "board" &&
+                             !HasExplosionCameraTarget &&
                              TurnManager != null && TurnManager.CurrentTeam != null &&
                              !TurnManager.CurrentTeam.IsAiControlled && CanUseManualScrolling() &&
                              PlayerInput != null && !PlayerInput.IsActionMenuOpen &&
@@ -587,8 +769,16 @@ namespace Mutiny.Presentation
 
         internal bool CanUseManualScrollingForVerification() => CanUseManualScrolling();
         internal bool IsDesktopScrollArrowVisible =>
+            !IsFrontendPageVisible() &&
             ShouldDrawScrollArrow(Application.isMobilePlatform, m_DesktopScrollDirection);
         internal Vector2 DesktopScrollDirectionForVerification => m_DesktopScrollDirection;
+
+        private bool IsFrontendPageVisible()
+        {
+            if (m_Frontend == null)
+                m_Frontend = FindAnyObjectByType<MutinyFrontendController>();
+            return m_Frontend != null && m_Frontend.CurrentPage != MutinyFrontendPage.Gameplay;
+        }
         internal static bool ShouldDrawScrollArrow(bool isMobilePlatform, Vector2 desktopDirection) =>
             !isMobilePlatform && desktopDirection.sqrMagnitude > 0f;
         internal Texture2D ScrollArrowTextureForVerification(bool diagonal)
@@ -630,6 +820,7 @@ namespace Mutiny.Presentation
         {
             EnsureReferences();
             return Application.isMobilePlatform &&
+                   !HasExplosionCameraTarget &&
                    m_Camera != null && m_LevelRoot != null && TurnManager != null &&
                    TurnManager.CurrentTeam != null && !TurnManager.CurrentTeam.IsAiControlled &&
                    PlayerInput != null && !PlayerInput.IsActionMenuOpen &&

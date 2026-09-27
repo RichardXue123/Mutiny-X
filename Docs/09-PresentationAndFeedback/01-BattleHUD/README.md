@@ -16,10 +16,18 @@
 
 ## 回合与宝箱提示
 
+### 底部提示高刷新率规格（2026-09-27）
+
+| ID | 可观察行为与状态转换 | 原版来源 / 扩展依据 | Unity 入口 | 验收用例 | 当前结果 |
+| --- | --- | --- | --- | --- | --- |
+| TXT-PRES-01 | 回合与拾取提示共用 FIFO；原版每 tick 上移 3 px（帧 1–9），帧 10–59 保持 y=370，帧 60–70 下移 3 px；帧 71 切下一条或隐藏。speech 期间冻结队列推进 | `IngameTextArea.as::say/onEnterFrame`、`Team.as::startTurn`、`TreasureChest.as::advance` | `MutinyIngameTextArea.AdvanceOriginalTick` | 从真实回合开始与拾取入口入队，检查帧 1/9/10/59/60/70/71、先后顺序与 speech 暂停 | 原版静态确认、已实现；2026-09-27 Unity 6000.6.0f1 隔离 Play Mode 专项 11/11 通过；主工程实际画面待验收 |
+| TXT-PRES-02 | 保留 25 Hz 的队列及状态切换；仅显示坐标用已完成 tick 起止位置和渲染帧余量插值，不修改武器入库、回合次数、音效或原版提示寿命。新提示在 y=400 开始，不从上一条尾帧插入 | 用户授权的高刷新率显示扩展；原版 `IngameTextArea.as::onEnterFrame` | `MutinyIngameTextArea.Update/RenderClipY`、`MutinyGameHUD.DrawIngameText` | 25/60/120 FPS 检查帧间位置、切换边界与队列；主工程看实际字体平移观感 | 扩展已实现；数值专项 11/11 通过；IMGUI 实际显示与 Android 真机待验收 |
+
+
 - `Team.as::startTurn` 提交 `Computer, take your turn` 或 `Player N, take your turn`；Unity 使用 `MutinyTurnManager.OnTurnStarted`，仅在实际开始新回合时加入一次，不在角色的剩余行动间重复提示。
 - `TreasureChest.as::advance` 在首次接触 10 tick 后发放第一件武器，此后每隔 40 tick 发放下一件。每次武器实际入库的同一 tick 提交 `collected ` 加 `WeaponSelectButton.hoverText` 标题，并播放现有 `icon_collect`。Unity 复用 `GetOriginalActionCopy` 的武器标题映射，例如 `collected tidal wave`。
 - SWF 中 `Controller.root.text` 位于 550×400 舞台 `(275,400)`，剪辑内只有居中的 DangleFont `textField`，位于剪辑原点下方 10 px。文字在 HUD 的 stage space 绘制，随 letterbox 等比缩放，随关卡根节点清除。
-- 提示按 FIFO 排队，每个 25 Hz tick 调整显示剪辑的 Y 位置；船长对话开始前或进行中暂存并暂停底部提示。原版 `IngameTextArea` 的受保护 AS2 动作只保留了 `lines`、`thisLineFrame`、`onEnterFrame`、`_y`、`speechBubble` 等结构，精确的运动速度与保持帧数尚无可读源码。当前升起 10 tick、停留 40 tick、退场 10 tick，待原版逐帧录像核定这些数值。
+- 提示按 FIFO 排队，每个 25 Hz tick 推进原版状态；船长对话开始前或进行中暂存并暂停底部提示。`IngameTextArea.as::onEnterFrame` 已可读，确认第 1–9 tick 各上移 3 px、第 10–59 tick 保持、第 60–70 tick 各下移 3 px、第 71 tick 换下一条。Unity 显示坐标取已完成 tick 起止值插值，存在一个 25 Hz tick 的表现延迟，但入队与切换仍遵循原版时序；主工程真实画面待验收。
 - 原版 `Controller.changeLevel()` 与 `TileSystem.readXML()` 均可能调用 `startTurn()`；Unity 提示挂接关卡当前 `OnTurnStarted`，避免该重复入口造成同一句排队两次。
 
 ## 架构与类关系

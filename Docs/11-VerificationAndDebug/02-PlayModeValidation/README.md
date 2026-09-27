@@ -12,6 +12,16 @@
 
 ## 本轮记录
 
+- 2026-09-27：用户授权的可选 `excamera` 运镜在隔离 Unity 6000.6.0f1 `Validate Explosion Camera Play Mode` 29/29 通过，默认关闭时既有 `Validate Camera Movement` 11/11 复跑通过。正式 GM 解析及真实爆炸/物理/镜头入口验证最近单角色、同帧汇总、不接力、连锁锁定、新批次、60/120 FPS 显示同源、空投/武器竞争和释放边界；规格与剩余项见 [EXT-EXCAM-01..04](../../09-PresentationAndFeedback/04-Camera/README.md)。没有 Flash 原版对应；主工程完整对局与 Android 真机待验收。
+
+- 2026-09-27：`Mutiny/Parity/Validate AI Box Camera Play Mode` 在 Unity 6000.6.0f1 隔离工程 125/125 通过。实际 AI 执行木箱/火药桶后，每次下一计划点在 40 tick 准备期更新镜头，包含不同位置及堆叠、60/120 FPS 步长、空投优先级、释放与资格边界；原版 10 tick 间隔、三木箱/两火药桶数量及玩家自由滚屏不变。向上堆叠重新接管、第一箱后间隙保持目标为用户授权扩展，原版与扩展分别登记。主工程完整场景及 Android 真机待验收。
+
+- 2026-09-27：`Mutiny/Parity/Validate Cannon Presentation Play Mode` 在 Unity 6000.6.0f1 隔离工程 45/45 通过（显示规则 21 条、既有大炮 24 条）。25/60/120 FPS 采样使用真实大炮摆放/碰撞入口；炮身与拉栓平滑显示，物理不重复推进，墙体接触和短拖释放保持逻辑位置，取消/开火清除显示滞后；既有 AI 待发射回合、炮弹烟迹与爆炸音效无数值回归。主工程真实鼠标/触摸操作观感与 Android 真机待验收。
+
+- 2026-09-27：`Mutiny/Parity/Validate Air Drop Presentation Play Mode` 在 Unity 6000.6.0f1 隔离工程 5/5 通过；既有 `Validate Camera Movement` 复跑 11/11 通过。生产宝箱管理器的 25 Hz 下降、120/60 Hz 中间帧显示采样、降落伞帧号不重复推进及第 106 tick 落地转 `touchdown` 均已数值验证；主工程实际降落画面和 Android 真机待验收。
+
+- 2026-09-27：`Mutiny/Parity/Validate Bottom Notices Play Mode` 在 Unity 6000.6.0f1 隔离工程 11/11 通过；`Validate Battle HUD` 27/27 通过。两类底部提示共用 FIFO；原版 70 tick 显示、71 tick 换下一条，speech 阶段暂停；25/60/120 FPS 的显示位置按剩余帧时间插值，实际队列与文本没有被渲染帧重复推进。原版时序静态依据是 `IngameTextArea.as::onEnterFrame`；高帧率位移为用户授权扩展。主工程实际 IMGUI 文字观感与 Android 真机待验收。
+
 - 2026-09-27：新 GM-08 `aitakeoverwithluck {luck}` 在隔离 Unity 6000.6.0f1 Play Mode 的 `RunGM()` 通过 35/35 断言。旧命令拒绝、有限 `0..100` 参数、分数 Luck 候选采样、跳后续行动、原属性不变及回合结束清理经正式生产入口核对；真实鼠标/手机和空投现场仍待验收。证据见 [GM-08 记录](../05-GMTools/Artifacts/GM-08-LUCK-20260927.txt)。
 - 新 GM-08 另以实际 AI 协程、物理和回合 `Update` 跑过 2/2 场景：接管首次行动与玩家跳跃途中接管，均由 AI 自动选海啸并在结束后恢复人类控制；角色原 Luck 未变。候选数由上述 35 条专项断言验证；真实界面输入仍待验收。
 

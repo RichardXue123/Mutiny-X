@@ -35,6 +35,8 @@ Mutiny X 是使用 Unity 6 复刻 Nitrome Flash 游戏《Mutiny》的项目。�
 
 ## 构建与发布
 
+完整操作顺序、版本准备和历次报错的处理方法见 [完整发布指南](Docs/RELEASE_GUIDE.md)。
+
 固定版本 tag 后，可使用 [本地一键发布流程](BuildTools/Release/README.md) 自动构建 Windows 便携包、安装包与 Android APK，校验后上传并发布 GitHub Release。支持 `-BuildOnly` 本地验证和 `-Resume` 中断恢复。
 
 ## 目录

@@ -10,6 +10,10 @@
 
 参数和时序以原版证据为准。
 
+`BOX-CAM-01` 的自由滚屏规则仅适用于玩家手动摆放。AI 每次预定下一桶时的独立目标、向上堆叠和序列释放按 [AI-BOX-CAM-01 / EXT-AI-BOX-CAM-02](../../09-PresentationAndFeedback/04-Camera/README.md#ai-连续箱体运镜2026-09-27) 验收，不跟随已放下的第一桶实体。
+
+2026-09-27 边界修正：`BeginAiPlacement` 的候选搜索失败后即使 `m_AiDelay` 尚为 40，也必须返回 false（与木箱一致），不能将已清空的 `m_AiList` 误报为序列启动成功。玩家回归对 `GPB-SEQ-01` 的根节点完成状态改为在正式 `AdvanceSequenceTick` 传播子节点完成之后检查；此前测试只提交两个渲染帧点击、尚未推进原版 `BoxWeapon.advance` 同源完成传播便检查 `root.IsFinished`，属于测试时序错误。本轮未改生产完成时序或放置数量。
+
 ## 逻辑摘要
 
 - 继承 BoxWeapon；extent 为 left/top 16、right/bottom 15。

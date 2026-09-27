@@ -10,6 +10,8 @@
 
 参数和时序以原版证据为准。
 
+`BOX-CAM-01` 的自由滚屏规则仅适用于玩家手动摆放。AI 每次预定下一箱时的独立目标、向上堆叠和序列释放按 [AI-BOX-CAM-01 / EXT-AI-BOX-CAM-02](../../09-PresentationAndFeedback/04-Camera/README.md#ai-连续箱体运镜2026-09-27) 验收，不跟随已放下的第一箱实体。
+
 ## 逻辑摘要
 
 - extent 为 left/top 16、right/bottom 15；默认 `createMore=2`，一次共放 3 个。

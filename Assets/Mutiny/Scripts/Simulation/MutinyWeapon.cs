@@ -48,6 +48,10 @@ namespace Mutiny.Simulation
         /// </summary>
         public virtual bool IsBodyVisibleWhileReady => true;
 
+        // BoxWeapon AI tracks its next planned placement, not a moving Solid.
+        // Other weapons retain their existing transform-based camera targets.
+        public virtual Vector2? AiPlacementCameraTargetPixels => null;
+
         /// <summary>Matches Controller.twanging == this for pre-fire overrides.</summary>
         public bool IsBeingAimed { get; private set; }
 

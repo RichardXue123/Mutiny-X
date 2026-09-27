@@ -12,9 +12,9 @@ namespace Mutiny.Presentation
     public sealed class MutinyIngameTextArea : MonoBehaviour
     {
         private const float TickSeconds = 1f / 25f;
-        private const int RiseTicks = 10;
-        private const int HoldTicks = 40;
-        private const int FallTicks = 10;
+        private const int RiseEndFrame = 10;
+        private const int HoldEndFrame = 60;
+        private const int LastVisibleFrame = 70;
         private const float HiddenY = 400f;
         private const float ShownY = 370f;
 
@@ -25,10 +25,16 @@ namespace Mutiny.Presentation
         private string m_CurrentLine;
         private Func<string> m_CurrentResolver;
         private int m_ThisLineFrame;
+        private float m_PreviousClipY = HiddenY;
 
         public string VisibleText => m_CurrentLine;
         public int PendingLineCount => m_Lines.Count;
         public float ClipY { get; private set; } = HiddenY;
+        // Display-only interpolation; the queue and its 25 Hz frame counter never
+        // observe this value. Keep the glyph atlas itself pixel-aligned.
+        public float RenderClipY => m_CurrentLine == null ? HiddenY :
+            Mathf.Lerp(m_PreviousClipY, ClipY,
+                Mathf.Clamp01(m_TickAccumulator / TickSeconds));
         public bool IsVisible => m_CurrentLine != null &&
                                  (m_Speech == null || !m_Speech.HasPendingOrActiveSpeech);
 
@@ -45,6 +51,7 @@ namespace Mutiny.Presentation
             m_ThisLineFrame = 0;
             m_TickAccumulator = 0f;
             ClipY = HiddenY;
+            m_PreviousClipY = HiddenY;
 
             if (m_TurnManager != null)
                 m_TurnManager.OnTurnStarted += HandleTurnStarted;
@@ -61,7 +68,12 @@ namespace Mutiny.Presentation
 
         private void Update()
         {
-            m_TickAccumulator += Time.unscaledDeltaTime;
+            AdvancePresentationFrame(Time.unscaledDeltaTime);
+        }
+
+        internal void AdvancePresentationFrame(float deltaTime)
+        {
+            m_TickAccumulator += deltaTime;
             while (m_TickAccumulator >= TickSeconds)
             {
                 m_TickAccumulator -= TickSeconds;
@@ -108,9 +120,8 @@ namespace Mutiny.Presentation
                 m_CurrentLine = m_CurrentResolver();
         }
 
-        // The exported IngameTextArea class records thisLineFrame, a queue and _y,
-        // but its protected AS2 body has no trustworthy timing constants. Animate
-        // at the SWF's 25 Hz and keep those values in one place for frame comparison.
+        // Original IngameTextArea.onEnterFrame: rise on frames 1..9, hold on
+        // 10..59, fall on 60..70, then advance the queue when frame > 70.
         public void AdvanceOriginalTick()
         {
             if (m_TurnManager == null || m_TurnManager.CurrentPhase == TurnPhase.NotStarted ||
@@ -129,23 +140,35 @@ namespace Mutiny.Presentation
                 m_CurrentLine = m_CurrentResolver();
                 m_ThisLineFrame = 0;
                 ClipY = HiddenY;
+                m_PreviousClipY = HiddenY;
             }
 
             m_ThisLineFrame++;
-            if (m_ThisLineFrame <= RiseTicks)
-                ClipY = Mathf.Lerp(HiddenY, ShownY, m_ThisLineFrame / (float)RiseTicks);
-            else if (m_ThisLineFrame <= RiseTicks + HoldTicks)
+            if (m_ThisLineFrame > LastVisibleFrame)
+            {
+                m_ThisLineFrame = 0;
+                if (m_Lines.Count > 0)
+                {
+                    m_CurrentResolver = m_Lines.Dequeue();
+                    m_CurrentLine = m_CurrentResolver();
+                }
+                else
+                {
+                    m_CurrentLine = null;
+                    m_CurrentResolver = null;
+                }
+                ClipY = HiddenY;
+                m_PreviousClipY = HiddenY;
+                return;
+            }
+
+            m_PreviousClipY = ClipY;
+            if (m_ThisLineFrame < RiseEndFrame)
+                ClipY = HiddenY - 3f * m_ThisLineFrame;
+            else if (m_ThisLineFrame < HoldEndFrame)
                 ClipY = ShownY;
             else
-                ClipY = Mathf.Lerp(ShownY, HiddenY,
-                    (m_ThisLineFrame - RiseTicks - HoldTicks) / (float)FallTicks);
-
-            if (m_ThisLineFrame >= RiseTicks + HoldTicks + FallTicks)
-            {
-                m_CurrentLine = null;
-                m_CurrentResolver = null;
-                ClipY = HiddenY;
-            }
+                ClipY = ShownY + 3f * (m_ThisLineFrame - HoldEndFrame);
         }
     }
 }

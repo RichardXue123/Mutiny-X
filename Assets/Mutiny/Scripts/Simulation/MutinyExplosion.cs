@@ -10,6 +10,13 @@ namespace Mutiny.Simulation
     {
         public const int ExplosionSortingOrder = 200;
 
+        // Presentation consumes one complete hit batch, never individual loop
+        // entries. This event does not change damage or the simulation clock.
+        public static event Action<IReadOnlyList<MutinyCharacter>> KnockbackApplied;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetPresentationEvents() => KnockbackApplied = null;
+
         [Header("Explosion Properties (Flash units)")]
         public float PixelX;
         public float PixelY;
@@ -145,6 +152,7 @@ namespace Mutiny.Simulation
             }
 
             // 1. Damage and launch characters in radius (Flash AS2 Explosion.hit)
+            var knockedCharacters = KnockbackApplied != null ? new List<MutinyCharacter>() : null;
             var characters = FindObjectsByType<MutinyCharacter>();
             for (int i = 0; i < characters.Length; i++)
             {
@@ -188,12 +196,18 @@ namespace Mutiny.Simulation
                     ch.PhysicsBody.State.VelocityX += normX * 5.0f * force;
                     ch.PhysicsBody.State.VelocityY += (normY * 5.0f * force) - (force * 6.0f);
 
+                    if (force > 0f && !ch.PhysicsBody.IsAtRest)
+                        knockedCharacters?.Add(ch);
+
                     // Flash: subtractHealth(maxDamage * ratio)
                     ch.TakeDamage(MaxDamage * ratio);
                     if (Caster != null)
                         Caster.Evilness += ratio;
                 }
             }
+
+            if (knockedCharacters != null && knockedCharacters.Count > 0)
+                KnockbackApplied?.Invoke(knockedCharacters);
 
             // Flash Explosion.hit checks every Controller.boxes entry against the
             // nearest point on its asymmetric AABB. Wooden crates remove themselves

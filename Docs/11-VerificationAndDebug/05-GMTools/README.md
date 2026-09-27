@@ -15,6 +15,10 @@ GM 是当前 Unity 工程的调试扩展，不是 Flash 原版玩法规则。以
 
 ## 可观察规则与状态转换
 
+### GM-11 · 可选爆炸击退镜头
+
+原版来源不适用，用户授权扩展。生产 GM 解析支持 `excamera 1` 开启、`excamera` / `excamera 0` 关闭，非法参数不改状态或成功历史。会话默认关闭、不写存档；跨关卡保留开关，关卡重置清除跟随批次，`SubsystemRegistration` 清零开关。Help 与成功历史共用正式入口。规格及实际验证见 [GM-11 命令说明](../GM_COMMANDS.md#gm-11--爆炸击退运镜) 与 [镜头扩展规则](../../09-PresentationAndFeedback/04-Camera/README.md)。
+
 ### GM-09 · 切换语言
 
 原版来源：不适用，用户授权扩展。`setlanguage zh-cn` / `setlanguage en` 经 `ExecuteCommand` 调用本地化服务，菜单和战斗共用，成功后保存语言并加入最近命令。拒绝缺参、旧 `cn`、非法语言及额外参数，原选择及历史保持不变。详细规格和验收见 [GM-09](../GM_COMMANDS.md#gm-09--切换语言)；2026-09-26 对旧 `cn` 命令的隔离 Play Mode **7/7** 是历史结果。新命令和回切待用户运行验收。

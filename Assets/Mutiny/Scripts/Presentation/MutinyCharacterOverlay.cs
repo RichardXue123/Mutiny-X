@@ -240,6 +240,10 @@ namespace Mutiny.Presentation
             m_CancelWeapon.transform.localPosition =
                 new Vector3(0f, -OriginalCancelWeaponCenterY / PixelsPerUnit, 0f);
             m_CancelWeaponRenderer = m_CancelWeapon.AddComponent<SpriteRenderer>();
+            // This is UI artwork, so keep its transparent perimeter independent
+            // of the scene's default lit sprite material and 2D lighting passes.
+            m_CancelWeaponRenderer.sharedMaterial =
+                Resources.Load<Material>("UI/cancel_button_transparent");
             m_CancelWeaponRenderer.sortingOrder = overlaySortingOrder + 5;
             m_CancelWeapon.SetActive(false);
 

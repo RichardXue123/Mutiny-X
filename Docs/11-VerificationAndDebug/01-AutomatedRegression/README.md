@@ -1,5 +1,14 @@
 # 11.01 · 自动回归
 
+## 可选爆炸击退镜头（2026-09-27，授权扩展）
+
+`Validate Explosion Camera Play Mode` 经生产 GM `excamera` 解析、爆炸 `ApplyHit` 批事件和镜头 `AdvanceCamera` 检查默认关闭、合法/非法参数、历史重放、关闭立即释放、最近角色、同帧多爆炸、60/120 FPS、显示姿态、武器/空投抢占、连锁不抢换及停止后不接力。落地由真实重力、地形和摩擦完成，另检验普通角色跟随与显式 `PanToCharacter` 两个接力旁路、全批结束后新爆炸、致死飞行、落水、停用、销毁、关卡重置、零力边界、普通跳跃不触发，以及 Cherry Bomb 实际创建爆炸的生产链。隔离 Unity 6000.6.0f1 Play Mode 29/29 通过；编译通过；完整真实关卡、GM UI 及 Android 真机待验收。
+
+## 底部提示高刷新率回归（2026-09-27）
+
+`Mutiny/Parity/Validate Bottom Notices Play Mode` 调用生产同源 `MutinyTurnManager.Initialize → OnTurnStarted → MutinyIngameTextArea.AdvanceOriginalTick/AdvancePresentationFrame`，并排入 `SayCollected("tidalWave")`。检查 speech 暂停、原版帧 1/9/10/59/60/70/71 的位置与 FIFO 切换、25/60/120 FPS 的首 tick 与帧间显示坐标，确认渲染插值不提前消费队列。Unity 6000.6.0f1 隔离工程 Play Mode 11/11 通过；同工程 `Validate Battle HUD` 广域回归 27/27 通过。IMGUI 真机画面与帧时间波动待验收。
+
+
 ## 海鸥投弹高刷新率回归（2026-09-26）
 
 `Mutiny/Parity/Validate Seagull Presentation Play Mode` 调用 `RunSeagullPresentation()`，包含既有原版海鸥出生、点击排队、图层、时间轴、碰撞与落水测试，以及 `SEA-PRES-01/02` 的 25/60/120 FPS 显示扩展回归。经真实 `RequestShot → AdvanceSimulationFrame → OnSimulationStep → 子弹 AdvanceSimulationTick` 链路检查出生 tick 一次、首可见起点、半 tick 实际 Transform、父子相位、连续投放、自身 Update 不多推进、延迟 Start 不改写权威位置；最后比较实际碰撞和落水结束 tick 及爆炸数。2026-09-26 Unity 6000.6.0f1 隔离工程 Play Mode 31/31 断言通过；主工程完整投弹画面及 Android 真机未运行。
@@ -154,12 +163,20 @@ Unity 6000.6.0f1 隔离工程 Play Mode 实际 13/13 断言通过；现有 `Vali
 
 ## 高刷新率镜头跟随回归（feature/cameramovement）
 
+- `AI-BOX-CAM-01/EXT-AI-BOX-CAM-02`：`Validate AI Box Camera Play Mode` 经实际 AI 执行入口启动三木箱/两火药桶序列；换位置、向上堆叠、39/40 tick 出生门、9/10 tick 间隔、60/120 FPS 连续平移、空投优先级、无合法候选、owner 取消选中/死亡和完成后的旧箱跟随抑制均有回归。2026-09-27 Unity 6000.6.0f1 隔离工程 125/125 通过（AI 116 条、既有玩家箱体交互 9 条）；编译通过；主工程与 Android 实际画面待验收。玩家火药桶旧完成断言现驱动正式序列 tick 后检查根节点，原因与原版来源记录于火药桶模块，未改生产放置时序。
+
+- `CAN-PRES-01/02`：正式 `TryBeginBodyDrag/DragBodyTo/ReleasePointer/CancelPointer`、碰撞和大炮帧推进入口驱动 25/60/120 FPS 显示采样，验证中间帧不额外推进物理、拉栓跟随炮身、范围圆不移动、撞墙不穿透、短拖释放补交一次碰撞步、取消和开火清除旧插值。2026-09-27 Unity 6000.6.0f1 隔离工程 `Validate Cannon Presentation Play Mode` 45/45 通过，含新增 21 条及既有大炮 24 条；两个 C# 程序集编译通过。详见 [大炮规格](../../06-WeaponsAndEffects/09-Cannon/README.md)；主工程真实鼠标与 Android 真机观感待验收。
+
+- `AIR-PRES-01/02`：生产 `MutinyTreasureChestManager.Update` 同源推进入口创建、下降并落地宝箱；检查 `-300` 起点、每 tick 3 px、120/60 Hz 中间显示帧只移动位置不重复增加 `TimeTaken` 或推进降落伞帧、落地时钳到 `floorY-15` 且立即清除旧插值。2026-09-27 Unity 6000.6.0f1 隔离工程 `Validate Air Drop Presentation Play Mode` 5/5 通过；`Assembly-CSharp-Editor` 编译通过。原版离散规则和用户授权显示扩展分开登记于 [宝箱降落规格](../../07-DynamicWorldEvents/02-ChestDescentAndLanding/README.md)；主工程实际画面和 Android 真机待验收。
+
 - `CAM-PRES-01`：驱动生产 `MutinyPhysicsBody.AdvanceSimulationFrame` 与显示入口，验证角色/武器显示位置由相邻已完成 tick 插值，权威 `State` 不随中间渲染帧改变；外部改位不复用旧轨迹。
 - `CAM-PRES-02`：驱动生产 `MutinyCameraController.AdvanceCamera`，验证跳跃角色、海鸥、海啸、炮弹的镜头目标与其显示位置同源；60/120 FPS 中间帧仍前进，远距离跟随不超过 30 px/tick；空投优先于武器并保持 50 px/tick 切入。
 - `CAM-TRACK-SEA-01`：验证海鸥使用原版 `trackY=y+100` 偏移。
 - 实际结果：Unity 6000.6.0f1 独立临时工程 Play Mode 批处理运行 `Validate Camera Movement`，11/11 断言通过；两个 C# 工程编译通过。该结果证明数值及生产方法路径，不等于主工程真实 25/60/120 FPS 画面验收。
 
 ## Android 镜头缺陷回归
+
+- `CUR-FRONT-01`：创建真实 Input System Mouse 并把位置设在窗口边缘，在生产 Title 页保留活动回合与关卡引用，驱动相机更新及系统光标可见性更新，断言不滚屏、不显示箭头且鼠标恢复可见。2026-09-27 隔离 Unity 6000.6.0f1 `Validate Scroll Arrows Play Mode` 光标专项 11/11 通过；实际鼠标/手柄页面画面待验收。见 [前端光标规格](../../09-PresentationAndFeedback/08-CursorsAndTrajectory/FRONTEND_CURSOR_BEHAVIOR.md)。
 
 - `CUR-SCROLL-01/AND-CUR-SCROLL-01`：2026-09-25 的历史基线通过箭头资源、八方向、视口边缘及移动平移专项 5/5 断言；其中安卓边缘箭头要求已于 2026-09-26 被用户撤回，不再作为当前验收结果。桌面实际鼠标画面仍待验收。
 - `AND-CUR-SCROLL-02`：2026-09-26 移除安卓拖动方向箭头的状态与绘制分支，保留触摸平移和桌面滚屏箭头。Unity 6000.6.0f1 隔离临时工程 `Validate Scroll Arrows Play Mode` 通过 10/10 断言，覆盖生产绘制门、移动平移与边界钳制；`Assembly-CSharp-Editor` 编译通过。Android 真机画面尚未运行。
@@ -193,8 +210,8 @@ Unity 6000.6.0f1 隔离工程 Play Mode 实际 13/13 断言通过；现有 `Vali
 
 ## 简中按钮文字垂直对齐回归（LOC-BTN-01）
 
-- 从生产 GM `setlanguage zh-cn/en` 切换后读取按钮文字绘制矩形：简中 163×24 和 280×24 两种按钮文字均上移 3 个原版画布像素，底图/命中区域尺寸保持不变；英文 PirateFont 不偏移。
-- 2026-09-27 隔离 Unity 6000.6.0f1 Play Mode `Mutiny/Localization/Validate Play Mode`：包含本缺陷的两条断言，语言专项 10/10，对白与提示 124/124 通过。主工程/玩家构建的实际像素画面待目视验收。
+- 最新规格按用户要求：简中按钮文字相对旧版下移 1 个原版像素，Y 偏移由 -3 改为 -2。从生产 GM `setlanguage zh-cn/en` 切换后读取 163×24 和 280×24 两种按钮的实际文字矩形，并检查 1×/2× 画布变换后增量为 +1/+2 屏幕像素；底图/命中区域尺寸保持不变，英文 PirateFont 不偏移。
+- 2026-09-27 Unity 6000.6.0f1 隔离 Play Mode `RunGMLanguage()` 当前 11/11 通过，含本规则三条布局断言；日志 `C:/Users/27487/AppData/Local/Temp/current-ui-adjustment-20260927.log`。先前 -3 偏移的 10/10 是历史基线；对白与提示 124/124 为旧专项结果，本次未重跑。主工程/玩家构建的实际像素画面待目视验收。
 
 ## 失败结算提交按钮回归（SCORE-EXT-04）
 

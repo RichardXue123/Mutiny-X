@@ -48,6 +48,10 @@ namespace Mutiny.Simulation
         private MutinyCannonball m_Cannonball;
         private SpriteRenderer m_PinRenderer;
         private SpriteRenderer m_RangeCircleRenderer;
+        private Vector2 m_PreviousPlacement;
+        private Vector2 m_CurrentPlacement;
+        private float m_PlacementPresentationElapsed;
+        private bool m_HasPlacementPresentation;
 
         public override bool AdvancesMotionWhileReady => false;
         public float PinX { get; private set; } = PinRestX;
@@ -79,6 +83,9 @@ namespace Mutiny.Simulation
             PhysicsBody.State.Weight = 0f;
             PhysicsBody.State.HitsBoxes = true;
             PhysicsBody.IsActive = false;
+            // This weapon owns its 25 Hz clock. Expose its display pose without
+            // enabling a second autonomous physics simulation.
+            PhysicsBody.PresentationPositionOverride = SamplePlacementPresentationPosition;
             PlaceAtEquipmentPosition();
             PinX = PinRestX;
             RotationDegrees = 0;
@@ -195,7 +202,12 @@ namespace Mutiny.Simulation
                 // happen between two 25 Hz weapon ticks. The final move still uses
                 // the production collision sweep and original half-distance step.
                 if (m_BodyDragPointerDirty)
+                {
+                    Vector2 displayStart = MutinyPhysics.UnityToPixel(
+                        SamplePlacementPresentationPosition().Value);
                     AdvanceBodyDragOriginalTick();
+                    RecordPlacementPresentation(displayStart, 0f);
+                }
                 StopBodyDrag();
                 return false;
             }
@@ -266,9 +278,20 @@ namespace Mutiny.Simulation
 
         protected override void Update()
         {
+            AdvanceSimulationFrame(Time.deltaTime);
+        }
+
+        internal void AdvanceSimulationFrameForVerification(float deltaTime) =>
+            AdvanceSimulationFrame(deltaTime);
+
+        private void AdvanceSimulationFrame(float deltaTime)
+        {
             if (IsFinished)
                 return;
-            m_TickAccumulator += Time.deltaTime;
+            // Complete the display segment even after pointer release. Logical
+            // positions and collisions are never advanced by this render clock.
+            m_PlacementPresentationElapsed += deltaTime;
+            m_TickAccumulator += deltaTime;
             while (m_TickAccumulator >= MutinyPhysics.TimeStep)
             {
                 m_TickAccumulator -= MutinyPhysics.TimeStep;
@@ -283,7 +306,12 @@ namespace Mutiny.Simulation
             // Cannon.advance starts with Solid.advanceMotion. Only a player body
             // drag has non-zero body velocity here in the Unity implementation.
             if (!IsFired && m_DraggingBody)
+            {
+                Vector2 previous = Position;
                 AdvanceBodyDragOriginalTick();
+                if ((Position - previous).sqrMagnitude > 0.00000001f)
+                    RecordPlacementPresentation(previous, m_TickAccumulator);
+            }
 
             AdvanceRangeCircleOriginalTick();
 
@@ -385,6 +413,8 @@ namespace Mutiny.Simulation
         {
             if (IsFired)
                 return;
+            // Never launch from the one-tick-delayed display coordinate.
+            ResetPlacementPresentation();
             IsFired = true;
             m_FireStrength = 0f;
             StopBodyDrag();
@@ -516,11 +546,45 @@ namespace Mutiny.Simulation
             PhysicsBody.State.X = x;
             PhysicsBody.State.Y = y;
             transform.position = MutinyPhysics.PixelToUnity(x, y);
+            m_HasPlacementPresentation = false;
             UpdateRangeCircleVisual();
         }
 
+        private void RecordPlacementPresentation(Vector2 previous, float elapsed)
+        {
+            m_PreviousPlacement = previous;
+            m_CurrentPlacement = Position;
+            m_PlacementPresentationElapsed = elapsed;
+            m_HasPlacementPresentation = true;
+        }
+
+        private Vector3? SamplePlacementPresentationPosition()
+        {
+            Vector2 pixels = Position;
+            if (m_HasPlacementPresentation && !IsFired &&
+                (pixels - m_CurrentPlacement).sqrMagnitude < 0.0001f)
+                pixels = Vector2.Lerp(m_PreviousPlacement, m_CurrentPlacement,
+                    Mathf.Clamp01(m_PlacementPresentationElapsed / MutinyPhysics.TimeStep));
+            return MutinyPhysics.PixelToUnity(pixels.x, pixels.y);
+        }
+
+        private void ResetPlacementPresentation()
+        {
+            m_HasPlacementPresentation = false;
+            transform.position = MutinyPhysics.PixelToUnity(Position.x, Position.y);
+        }
+
+        protected override void LateUpdate()
+        {
+            transform.position = SamplePlacementPresentationPosition().Value;
+        }
+
+        internal void ApplyPlacementPresentationForVerification() => LateUpdate();
+
         private void OnDestroy()
         {
+            if (PhysicsBody != null)
+                PhysicsBody.PresentationPositionOverride = null;
             if (m_RangeCircleRenderer == null)
                 return;
 

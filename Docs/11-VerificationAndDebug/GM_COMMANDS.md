@@ -23,8 +23,17 @@
 | GM-08 | `aitakeoverwithluck {luck}` | 大小写不敏感；`luck` 使用英文小数点 | AI 以指定 Luck 接管当前人类队伍这一回合的剩余行动，允许跳跃前、跳跃飞行中及落地后使用；完整回合结束自动恢复人类控制。 | 仅本回合 AI 决策；不改变角色原始 Luck、未来回合、真实库存或存档。 |
 | GM-09 | `setlanguage zh-cn` / `setlanguage en` | 大小写不敏感；允许多个参数分隔空白 | `zh-cn` 选择简体中文（内部 Locale `zh-Hans`），`en` 选择英语；复用本地化服务刷新当前页面。缺参、旧 `cn`、未知代码及额外参数拒绝，保留原语言。 | 单独语言偏好，跨场景及重启保留；不影响进度和成绩。 |
 | GM-10 | `ailog 1` / `ailog 0` | 大小写不敏感 | 开启／关闭每次 AI 实际行动的一条 `[Mutiny:AI-Action]` 详细日志；含行动参数、胜出分数、各行动类别最佳分和选择原因。 | 当前运行会话；切关保留，新 Play／重启默认关闭；不写存档。 |
+| GM-11 | `excamera 1` / `excamera` | `excamera 0` 也关闭；大小写不敏感 | 可选爆炸击退运镜：同帧最近被炸飞者优先，一批只选一人，不接力；关闭立即释放。 | 当前运行会话；切关保留，新 Play／重启默认关闭；不写存档。 |
 
 `GM-06` 尚未分配给命令。旧回归中的 `GM-02` 至 `GM-06` 字样是断言标题，分别检查 GM-01 的武器效果和按钮几何，并非同名命令 ID；新增命令不得据此复用现有 ID。
+
+## GM-11 · 爆炸击退运镜
+
+原版来源：不适用，用户授权的可选镜头扩展。`excamera 1` 开启；不带参数的 `excamera` 关闭，兼容 `excamera 0`。恰好零个参数或一个 `0/1` 参数才合法，其他参数拒绝并保持开关及成功历史不变。关闭同步清空已选目标与待选候选；开启不追溯此前已飞行的角色。默认关闭，跨关卡保留开关，新 Play／重启关闭，无存档写入。
+
+只由实际爆炸的非零击退触发。下一显示帧按角色显示坐标到镜头中心的距离选最近一人，同帧多个爆炸也一起比较；选中后不因其他人更近而换人。目标静止、落水、销毁或物理停用即结束跟随，该批其他人仍移动时不会接力，连锁爆炸也不抢换；整批停止后的新爆炸可以重新选人。沿用现有高帧率插值与跟随速度，开启时优先于武器及空投。完整规格与验收结果见 [EXT-EXCAM-01..04](../09-PresentationAndFeedback/04-Camera/README.md)。
+
+生产链路：`MutinyGMManager.ExecuteCommand` → `MutinyCameraController.SetExplosionCameraEnabled`；`MutinyExplosion.ApplyHit` → 批击退事件 → `MutinyCameraController.AdvanceCamera`。验证入口为 `Mutiny → Parity → Validate Explosion Camera Play Mode`，GM 解析检查同时接入 `Validate GM Commands`。2026-09-27 隔离 Unity 6000.6.0f1 Play Mode 专项 29/29 通过，含 6 条 GM 正式解析/历史/初始化检查；编译通过。主工程实际 GM 按钮与键盘、完整对局及 Android 真机待验收。
 
 ## GM-10 · AI 行动决策日志
 

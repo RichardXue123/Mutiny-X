@@ -788,14 +788,20 @@ namespace Mutiny.Presentation
             float left = (Screen.width - OriginalCanvasWidth * scale) * 0.5f;
             float top = (Screen.height - OriginalCanvasHeight * scale) * 0.5f;
             Matrix4x4 oldMatrix = GUI.matrix;
+            // The bitmap font rounds each glyph to integer stage pixels. Apply
+            // the fractional clip motion after that rounding so the complete
+            // text clip can still move on intermediate render frames.
+            float renderY = IngameText.RenderClipY;
+            float integerY = Mathf.Floor(renderY);
             GUI.matrix = Matrix4x4.TRS(new Vector3(left, top, 0f),
-                Quaternion.identity, new Vector3(scale, scale, 1f));
+                Quaternion.identity, new Vector3(scale, scale, 1f)) *
+                Matrix4x4.Translate(new Vector3(0f, renderY - integerY, 0f));
 
             // Stage instance "text" is at (275,400); its textField's DangleFont
             // child is placed 10 px below the clip origin and centered on x=275.
             GUI.BeginGroup(new Rect(0f, 0f, OriginalCanvasWidth, OriginalCanvasHeight));
             MutinyLocalizedText.Dangle(
-                new Rect(25f, IngameText.ClipY + 10f, 500f, 13f),
+                new Rect(25f, integerY + 10f, 500f, 13f),
                 null, IngameText.VisibleText, Color.white, TextAnchor.MiddleCenter, 0, 13);
             GUI.EndGroup();
             GUI.matrix = oldMatrix;

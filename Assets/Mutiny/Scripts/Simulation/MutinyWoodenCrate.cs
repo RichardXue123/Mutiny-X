@@ -48,6 +48,12 @@ namespace Mutiny.Simulation
         public bool IsExploding => m_IsExploding;
         public int PlacedCount => CountPlaced(GetRootBox());
         public bool IsAiPlacementActive => m_AiList != null;
+        public override Vector2? AiPlacementCameraTargetPixels =>
+            m_ParentBox == null && IsAiPlacementActive && HasPendingPlacement &&
+            Owner != null && Owner.IsAlive &&
+            !float.IsNaN(m_AiNext.x) && !float.IsNaN(m_AiNext.y) &&
+            !float.IsInfinity(m_AiNext.x) && !float.IsInfinity(m_AiNext.y)
+                ? m_AiNext : (Vector2?)null;
         internal int TimelineFrameForVerification => m_AnimationFrame + 1;
         internal bool IsVisibleForVerification => SpriteRenderer != null && SpriteRenderer.enabled;
 

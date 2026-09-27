@@ -23,3 +23,5 @@
 | CUR-SCROLL-02 | 滚屏箭头持续显示期间系统鼠标保持隐藏；武器光标无状态变化或被反复清空时不得每帧重新显示系统鼠标；退出滚屏后按当前武器光标状态恢复 | `CustomCursor.as::setCursor/restoreCursor`：同一光标类型提前返回，不重复调用 `Mouse.show()`；`TileSystem.as::advance` 的 scroll 光标优先级 | `MutinySpecialWeaponCursor.SetMode/OnDisable`、`MutinyCameraController.UpdateScrollCursorVisibility` | 经正式 `SetMode/Clear` 重复调用，检查已隐藏鼠标保持隐藏；状态切换后恢复正确可见性；主工程 PIE 视觉复验待做 | 原版静态确认、已实现；Unity 6.6 隔离 Play Mode 6/6 专项断言通过；主工程 PIE 无闪烁待目视确认 |
 
 `scroll1/scroll2` 使用 `DefineSprite_1813_cursor/78.png` 与 `87.png` 的原始 31×22 PNG 字节，运行时以 Point 过滤和原版 550×400 舞台比例绘制。该箭头仅用于桌面手动滚屏；安卓触摸平移仍可用，但不显示箭头。
+
+前端页面不启用边缘滚屏或滚屏箭头；恢复普通鼠标的规格和验证见 [CUR-FRONT-01](FRONTEND_CURSOR_BEHAVIOR.md)。

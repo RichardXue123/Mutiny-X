@@ -8,6 +8,8 @@
 
 ## 行为规格
 
+[取消叉透明度规格与渲染回归](CANCEL_BUTTON_VISUAL_BEHAVIOR.md)（`CHAR-OVR-CANCEL-ALPHA-01`）。
+
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
 | --- | --- | --- | --- | --- | --- |
 | CHAR-OVR-AIM-01 | Throw Self/跳跃拉线蓄力属于 `twanging` 而不是 `dragging`，当前角色 P1/P2 标记、选择框、血条和取消叉保持可见；松开正式起跳才按 `thrown` 隐藏。取消蓄力不消耗跳跃，其他角色不受影响 | `Character.as:68-69,126-143,176-179,742-747`；`TileSystem.as:740-746,760-763`；对应 pcode；用户提供的原版截图 | `MutinyCharacterOverlay.LateUpdate`、`MutinyPlayerInput.TryBeginAimFromPrimaryPointer/ResolveAimRelease/ShouldShowCancelWeapon` | 生产选取跳跃→蓄力并显示轨迹→检查四项 UI→右键/叉取消→重新蓄力并正常松开起跳→检查隐藏与行动结算恢复 | 原版静态确认与用户截图一致；已实现；2026-09-26 Unity 6000.6.0f1 隔离 Play Mode 共 25/25 断言通过（本规则 7 条、既有覆盖层 13 条、触屏取消 5 条）；主工程画面及安卓真机待验收 |

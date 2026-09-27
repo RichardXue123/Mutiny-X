@@ -6,6 +6,7 @@ using UnityEngine;
 
 namespace Mutiny.Simulation
 {
+    [DefaultExecutionOrder(400)]
     [DisallowMultipleComponent]
     [RequireComponent(typeof(SpriteRenderer))]
     public sealed class MutinyTreasureChest : MonoBehaviour
@@ -36,6 +37,9 @@ namespace Mutiny.Simulation
         private SpriteRenderer m_ReleasedWeaponFrameRenderer;
         private SpriteRenderer m_ReleasedWeaponRenderer;
         private MutinyPlayerInput m_PlayerInput;
+        private float m_PreviousTickPixelY;
+        private float m_CurrentTickPixelY;
+        private bool m_HasPresentationTick;
 
         public float PixelX { get; private set; }
         public float PixelY { get; private set; }
@@ -46,6 +50,19 @@ namespace Mutiny.Simulation
         public int CurrentVisualFrame => m_VisualFrame;
         public int RemainingContents => m_Contents.Count;
         public MutinyCharacter CollectingCharacter => m_CharacterTouched;
+        public Vector3 PresentationPosition => SamplePresentationPosition(
+            m_Manager != null ? m_Manager.SimulationInterpolationAlpha : 1f);
+
+        public Vector3 SamplePresentationPosition(float alpha)
+        {
+            float displayY = IsFalling && m_HasPresentationTick
+                ? Mathf.Lerp(m_PreviousTickPixelY, m_CurrentTickPixelY, Mathf.Clamp01(alpha))
+                : PixelY;
+            Vector3 localPosition = MutinyPhysics.PixelToUnity(PixelX, displayY);
+            return transform.parent != null
+                ? transform.parent.TransformPoint(localPosition)
+                : localPosition;
+        }
 
         private void Awake()
         {
@@ -59,6 +76,9 @@ namespace Mutiny.Simulation
             m_Manager = manager;
             PixelX = x;
             PixelY = -300f;
+            m_PreviousTickPixelY = PixelY;
+            m_CurrentTickPixelY = PixelY;
+            m_HasPresentationTick = false;
             m_FloorY = floorY;
             m_Contents.AddRange(contents);
 
@@ -96,6 +116,7 @@ namespace Mutiny.Simulation
             }
             else if (IsFalling)
             {
+                m_PreviousTickPixelY = PixelY;
                 PixelY += 3f;
                 if (PixelY >= m_FloorY - 15f)
                 {
@@ -104,6 +125,8 @@ namespace Mutiny.Simulation
                     PlaySequence(VisualSequence.Touchdown);
                     MutinyDebugLog.Info("Chest", $"landed name={name} x={PixelX:0} y={PixelY:0}", this);
                 }
+                m_CurrentTickPixelY = PixelY;
+                m_HasPresentationTick = true;
                 SyncTransform();
             }
             else if (m_CharacterTouched != null)
@@ -381,6 +404,14 @@ namespace Mutiny.Simulation
         {
             transform.localPosition = MutinyPhysics.PixelToUnity(PixelX, PixelY);
         }
+
+        private void LateUpdate()
+        {
+            if (IsFalling && m_HasPresentationTick)
+                transform.position = PresentationPosition;
+        }
+
+        internal void ApplyPresentationPoseForVerification() => LateUpdate();
 
         private void OnDestroy()
         {

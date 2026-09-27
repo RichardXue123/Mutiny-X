@@ -17,6 +17,7 @@ namespace Mutiny.Presentation
         private static int s_LastHoverFrame = -1;
         private static bool s_IsHandCursorActive;
         private bool m_WasControllerActive;
+        private MutinyFrontendController m_Frontend;
 
         // Windows standard 32x32 pointing hand cursor bitmap
         private const string SystemHandCursorPngBase64 =
@@ -74,9 +75,16 @@ namespace Mutiny.Presentation
         private void LateUpdate()
         {
             UpdateCursor();
+            UpdateSystemCursorVisibility();
+        }
+
+        internal void UpdateSystemCursorVisibility()
+        {
             bool controller = MutinyInputHub.Instance != null && MutinyInputHub.Instance.IsControllerActive;
             if (controller)
                 Cursor.visible = false;
+            else if (IsFrontendPageVisible())
+                Cursor.visible = true;
             else if (m_WasControllerActive)
             {
                 MutinyCameraController camera = FindAnyObjectByType<MutinyCameraController>();
@@ -85,6 +93,13 @@ namespace Mutiny.Presentation
                                  (player == null || !player.HasVisibleSpecialCursor);
             }
             m_WasControllerActive = controller;
+        }
+
+        private bool IsFrontendPageVisible()
+        {
+            if (m_Frontend == null)
+                m_Frontend = FindAnyObjectByType<MutinyFrontendController>();
+            return m_Frontend != null && m_Frontend.CurrentPage != MutinyFrontendPage.Gameplay;
         }
 
         public static void UpdateCursor()

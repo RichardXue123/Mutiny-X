@@ -9,7 +9,7 @@ namespace Mutiny.Presentation
         private static Font s_CjkFont;
         private static readonly HashSet<string> MissingGlyphs = new HashSet<string>();
         // Optical correction for 18 px Noto CJK text inside 24 px Pirate buttons.
-        private const float ChinesePirateButtonYOffset = -3f;
+        private const float ChinesePirateButtonYOffset = -2f;
         public const int SpeechFontSize = 15;
         public static readonly Color SpeechColor = new Color32(24, 29, 35, 255);
 
