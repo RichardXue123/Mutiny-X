@@ -760,8 +760,6 @@ namespace Mutiny.Simulation
         {
             if (m_Team == null)
                 m_Team = GetComponent<MutinyTeam>();
-            Vector2 shooterPos = new Vector2(shooter.PhysicsBody.State.X, shooter.PhysicsBody.State.Y);
-
             float effectiveLuck = decisionLuck ?? GetEffectiveLuck(shooter);
             int samples = Mathf.FloorToInt(effectiveLuck * m_Team.Characters.Count / Mathf.Max(1, m_Team.AliveCount));
             List<PhysicsBoxObstacle> simulationBoxes = MutinyBoxRegistry.GetObstacles();
@@ -825,16 +823,24 @@ namespace Mutiny.Simulation
                     continue;
 
                 PhysicsBodyState formalTemplate = CreateFormalWeaponPredictionTemplate(shooter, weaponType);
+                List<MutinyCharacter> bananaCharacters = null;
+                if (string.Equals(weaponType, "banana", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Banana.advanceMotion checks every team's characters, including
+                    // owner, allies and dead entries; its scoring still filters alive.
+                    bananaCharacters = new List<MutinyCharacter>(allies);
+                    bananaCharacters.AddRange(enemies);
+                }
                 for (int s = 0; s < samples; s++)
                 {
                     Vector2 velocity = RandomArc(MutinyWeaponFactory.GetTwangMaxForce(weaponType));
                     PhysicsBodyState body = formalTemplate;
-                    body.X = shooterPos.x;
-                    body.Y = shooterPos.y;
+                    // Character.equip / Weapon.randomThrows retain the equipment
+                    // origin: y - 10, or y - 30 for Boulder (AI-PHY-05).
                     body.VelocityX = velocity.x;
                     body.VelocityY = velocity.y;
                     Vector2 impact = SimulateWeaponImpact(body, weaponType, terrainGrid, gridW, gridH,
-                        waterPixelY, simulationBoxes, out _);
+                        waterPixelY, simulationBoxes, out _, bananaCharacters);
                     float score = ScoreGenericWeaponCandidate(weaponType, impact, enemies, allies);
                     ConsiderCandidate(ref bestMove, new AIMove
                     {
@@ -1668,7 +1674,8 @@ namespace Mutiny.Simulation
             int gridH,
             float waterPixelY,
             IReadOnlyList<PhysicsBoxObstacle> boxes,
-            out int steps)
+            out int steps,
+            IReadOnlyList<MutinyCharacter> bananaCharacters = null)
         {
             // Weapon.randomThrows executes advanceMotion until the concrete weapon
             // sets simulationFinished, with a source guard that breaks after the
@@ -1694,9 +1701,15 @@ namespace Mutiny.Simulation
                     body.VelocityX == 0f && Mathf.Abs(body.VelocityY) < 0.2f)
                     return new Vector2(body.X, body.Y);
 
-                if (string.Equals(weaponType, "banana", StringComparison.OrdinalIgnoreCase) &&
-                    body.VelocityX == 0f && Mathf.Abs(body.VelocityY) < 0.5f)
-                    return new Vector2(body.X, body.Y);
+                if (string.Equals(weaponType, "banana", StringComparison.OrdinalIgnoreCase))
+                {
+                    bool atRest = body.VelocityX == 0f && Mathf.Abs(body.VelocityY) < 0.5f;
+                    float nearest = MutinyBanana.FindOriginalNearestCharacterDistanceSquared(body, bananaCharacters);
+                    // Source lastSqDistance is never updated from Infinity. Do not
+                    // invent a receding-distance history for prediction (AI-PHY-04).
+                    if (atRest || MutinyBanana.ShouldDetonateForAi(nearest, float.PositiveInfinity))
+                        return new Vector2(body.X, body.Y);
+                }
 
                 if (string.Equals(weaponType, "parachuteBomb", StringComparison.OrdinalIgnoreCase))
                     MutinyParachuteBomb.ApplyOriginalCeilingClamp(ref body);
@@ -1752,7 +1765,9 @@ namespace Mutiny.Simulation
             out int steps)
         {
             return SimulateWeaponImpact(body, weaponType, grid, gridW, gridH, waterPixelY,
-                MutinyBoxRegistry.GetObstacles(), out steps);
+                MutinyBoxRegistry.GetObstacles(), out steps,
+                string.Equals(weaponType, "banana", StringComparison.OrdinalIgnoreCase)
+                    ? FindObjectsByType<MutinyCharacter>() : null);
         }
 
         internal static Vector2 SimulateCharacterLandingForVerification(

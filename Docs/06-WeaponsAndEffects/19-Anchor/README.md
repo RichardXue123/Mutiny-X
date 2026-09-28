@@ -23,6 +23,17 @@
 
 ## 行为规格与实现映射
 
+### 下落高刷新率显示（2026-09-28）
+
+实现前规格：`ANC-PRES-01/02` 为用户授权的显示扩展，不是 Flash 原版新增行为。AS2 静态确认 `Anchor.advance` 每 tick 设置 `velocityY=40` 并调用 `advanceMotion/update`，`aiPerform` 保留 20 tick 等待；`contact(FLOOR)` 即刻压砸、播放主时间轴并停止下落。Unity 当前由锚自己的时钟推进物理，通用 body 非自主更新，之前未进入共享显示插值。
+
+| ID | 可观察行为及状态转换 | 原版来源 / 授权差异 | Unity 入口 | 验收用例 | 当前结果 |
+| --- | --- | --- | --- | --- | --- |
+| ANC-PRES-01 | 玩家点击/AI 提交仍从 `y=-200` 出生、每逻辑 tick 下落 40 px；AI 20 tick 等待不变。非自主物理体使用锚时钟的剩余比例，在实际渲染帧插值最近已完成 tick 的起止位置；锚身和镜头共用显示采样，不多推进物理或命中。 | `Anchor.as::place/advance/aiPerform`；用户授权高刷新率扩展 | 锚 `AdvanceSimulationFrame`、共享 body 的外部显示时钟 | 玩家正式点击与 AI 正式执行分别在 25/60/120 FPS 检查出生、AI 等待、首 tick/半 tick、显示帧不改权威状态、连续中间帧、镜头同源、无二次自主更新和延迟 Start | 已登记；待实现及运行 |
+| ANC-PRES-02 | 首次碰撞仍按生产物理在同一 tick 造成 60 HP 压砸并开始原版撞击/hold；该 tick 显示立即吸附实际落点，停止插值。主时间轴、子碎屑、30 tick hold 和 10 tick whiteOut 保持原版 25 Hz，不由渲染帧重复推进。 | `Anchor.as::contact/advance`；显示吸附为扩展过渡规则 | `HitFloor`、外部显示时钟采样与原版后续时序 | 比较各 FPS 的触地物理 tick/位置/一次伤害；触地首帧及后续中间帧静止；既有 ANC-ANI-02/03 回归 | 已登记；待实现及运行 |
+
+使用与既有角色/武器一致的一个已完成物理 tick 显示延迟（至多 40 ms）；接触时立即清除这段延迟。此次只平滑下落位移，不创造原版没有的精灵补帧，不修改触地碎屑/白化的逻辑时钟。
+
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
 | --- | --- | --- | --- | --- | --- |
 | AI-WPN-04 | AI 在全图随机 X，从顶部垂直模拟 Anchor；只接纳触地样本，评分乘 `0.5`，胜出后等待 20 tick 再下落 | `Anchor.as::randomThrows/aiPerform` | `MutinyAIController.EvaluateAnchor()`、`MutinyAnchor.DropForAi()` | 固定种子与地面，核对样本数、X 范围、胜出类型、正式对象和库存消耗 | 已实现；自动回归已写；待 Unity 运行验证 |

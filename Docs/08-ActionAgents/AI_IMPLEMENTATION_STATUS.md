@@ -4,6 +4,8 @@
 > 范围：原版 Flash 的角色选择、是否移动、移动落点评价、空投价值、武器选择与 AI 专用执行；以及 Unity 当前实现的对应关系。  
 > 结论口径：本文严格区分“静态确认”“已实现”“实际测试通过”“待运行验证”和“已知差异”。
 
+2026-09-28 补充：香蕉预测现按原版在静止或距任一角色严格小于 20 px 时结束；普通抛射预测保留装备起点（普通上方 10 px，Boulder 上方 30 px）。专项 18/18 通过；扩大回归 46/50，4 条旧失败在修复前也存在。详细边界与记录见 [AI-PHY-04/05](05-AIWeaponSelection/PREDICTION_PARITY_20260928.md)。随机数差别本轮明确不调整。
+
 ## 1. 当前结论
 
 Unity 已经具备可工作的 AI 主干：每个可行动角色生成“投掷自己”和“使用武器”候选，使用原版风格的分数挑出全队最佳候选，再经生产武器入口执行。移动评分中的高度、敌方中心、落水、敌我距离、空投和移动距离项都已接入；15 种库存武器现在都能进入普通或专用候选路径。Wooden Crate 与 Anchor 已按原版专用逻辑接入，不再被候选分发器排除。
@@ -157,7 +159,7 @@ Unity 普通执行走 `MutinyWeaponFactory.SpawnAndFire()`，因此不是由 AI 
 | --- | --- | --- | --- |
 | Cherry Bomb | 普通随机弹道，首次接触完成；移动阶段另有源码怪癖式后续加分 | 候选恢复首次接触与箱体碰撞；`SpawnAndFire` | 已实现；待整回合验证 |
 | Dynamite | 普通随机弹道，滚动至模拟完成 | 预测持续至静止或原版 101-step 安全上限；正式炸药类执行 | 已实现；待运行对照 |
-| Banana | 普通初投；模拟在静止时结束，正式 AI 运行中还会按接近/远离角色引爆 | 普通候选恢复静止终止；`MutinyBanana` 有 AI 自动引爆 | 已实现；待运行对照 |
+| Banana | 普通初投；模拟和正式 AI 运行均在静止或距任一角色 <20 px 时结束；源码有远离判断但 lastSqDistance 未更新，不能实际触发 | 预测与正式对象共用角色距离判断；包含自己/队友/死者；预测保留装备起点 | 已修复；AI-PHY-04/05 专项通过，整关原版运行对照待验收 |
 | Boulder | 普通随机弹道；AI 直接用候选速度 | 专用物理参数预测；执行保留原速度，不套玩家 `.5` 转换 | 已实现；有生产入口回归断言，待实际运行 |
 | Cannon | 专用部署点、角度和 Cannonball 模拟 | `EvaluateCannon` + `BeginAiFire` | 已实现；候选到执行链完整，待运行对照 |
 | Gunpowder Barrel | `BoxWeapon` 位置采样和连续摆放 | `EvaluateBoxWeapon` + `BeginAiPlacement` | 已实现；连续节奏已接入，待运行对照 |
@@ -226,7 +228,9 @@ Unity 普通执行走 `MutinyWeaponFactory.SpawnAndFire()`，因此不是由 AI 
 | AI-WPN-03 | 专用武器携带执行所需的额外参数，而不是伪装成普通投射物 | 各专用武器 `aiSimulation/aiPerform` | Cannon/Seagull/Tidal/Voodoo/BoxWeapon/Anchor 分支 | 通过生产执行入口验证参数传递、库存消耗和完成状态 | 已实现六类；待 Play Mode 整链验证 |
 | AI-WPN-04 | Anchor 在全图采样 X，从 `y=-200` 垂直模拟，只将触地样本按普通武器公式和 `×0.5` 修正加入候选；胜出后走正式 20 tick 延迟入口 | `Anchor.as::randomThrows/aiPerform` | `EvaluateAnchor`、`DropForAi` | 固定随机种子和地面，断言样本数、候选类型、X 范围、正式对象与库存消耗 | 回归代码已加入；程序集编译通过；待 Unity 运行 |
 | AI-WPN-05 | Wooden Crate 复用 BoxWeapon 合法位置采样，至少 3 个位置才加入候选；执行时按原版节奏连续放 3 箱 | `Character.as::aiThink`、`BoxWeapon.as::aiSimulation/aiPerform/aiContinue` | `EvaluateBoxWeapon`、`MutinyWoodenCrate.BeginAiPlacement` | 固定随机种子和宽地面，断言候选及前三位置，并推进 40 tick 验证第一箱落地 | 回归代码已加入；程序集编译通过；待 Unity 运行 |
-| AI-PHY-01 | 普通武器候选使用武器自己的原版终止语义：接触型遇任意碰撞结束，Dynamite/Mine/Banana 静止结束，其余最多推进 101 次 | `Weapon.as::randomThrows` 及各武器 `contact/advanceMotion` | `SimulateWeaponImpact` | 分别构造接触、静止、无接触三类轨迹，核对终止 tick 与最终落点 | 已实现；回归已写；待 Unity 运行 |
+| AI-PHY-01 | 普通武器候选使用武器自己的原版终止语义：接触型遇任意碰撞结束，Dynamite/Mine 静止结束，Banana 静止或近任一角色 <20 px 结束，其余最多推进 101 次 | `Weapon.as::randomThrows` 及各武器 `contact/advanceMotion` | `SimulateWeaponImpact` | 分别构造接触、静止、无接触三类轨迹，核对终止 tick 与最终落点 | 已实现；香蕉专项通过；完整结果见 AI-PHY-04/05 记录 |
+| AI-PHY-04 | 香蕉运动后检查距全队任一角色 <20 px（含 owner/死者），不补源码没有执行的距离历史 | `Banana.as:43-107`、pcode | `SimulateWeaponImpact`、`MutinyBanana` 共用距离判断 | 20 px 严格边界、敌我/死者、101-step、正式引爆位置 | 已实现；2026-09-28 专项通过，整关对照待验证 |
+| AI-PHY-05 | 普通武器预测不覆盖正式装备起点：普通 y-10，Boulder y-30 | `Character.as::equip`、`Weapon.as::randomThrows` | `EvaluateCharacterWeapons`、正式模板 | 8 种候选与正式模板对照，近箱体/地形及无障碍起点差异 | 已实现；2026-09-28 专项通过，整关对照待验证 |
 | AI-PHY-02 | 所有 `hitsBoxes=true` 的 AI 武器和角色移动预测都读取与正式物理相同的共享箱体障碍；角色持续模拟到静止或入水 | `Solid.as::advanceMotion`、`Character.as::randomThrows` | `SimulateWeaponImpact`、`SimulateCharacterLanding`、`MutinyBoxRegistry` | 在无 tile 场景放置箱体，断言武器预测在箱体处终止；长轨迹超过旧 70 tick 后仍继续 | 已实现；回归已写；待 Unity 运行 |
 | AI-WPN-06 | Seagull 对敌方单发收益为 `1-distance/40`，对己方惩罚为 `-(1.5-distance/40)`，不是统一倍率公式 | `Seagull.as::aiSimulation` | `ScoreSeagullShot` | 比较距离 20、40 px 的敌我分数，断言队友 20 px 为 `-1` | 已实现；回归已写；待 Unity 运行 |
 | AI-CAM-01 | AI 选出最终角色后显式请求镜头移向该角色，并等镜头目标清空才执行，不使用固定秒数替代 | `Team.as::advance` | `ExecuteAITurnRoutine`、`MutinyCameraController.PanToCharacter` | 通过生产胜出角色镜头入口断言设置完成门；整协程时序待 Play Mode | 已实现；局部回归已写；待 Unity 运行 |

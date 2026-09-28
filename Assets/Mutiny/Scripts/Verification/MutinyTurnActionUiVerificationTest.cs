@@ -101,6 +101,7 @@ namespace Mutiny.Verification
             VerifyGunpowderBarrel(result);
             VerifyWoodenCrate(result);
             VerifyAnchor(result);
+            VerifyAnchorPresentation(result);
             VerifyCharacterLayering(result);
             VerifyCharacterOverlay(result);
             VerifyCharacterAimOverlay(result);
@@ -115,6 +116,18 @@ namespace Mutiny.Verification
             var result = new MutinyLevel1VerificationResult();
             VerifyCannonSmokeTrail(result);
             VerifyCannonImpactEffects(result);
+            return result;
+        }
+
+        public static MutinyLevel1VerificationResult RunAiPredictionParity()
+        {
+            var result = new MutinyLevel1VerificationResult();
+            VerifyAiDecisionFlow(result);
+            VerifyAiSpecialWeaponCandidates(result);
+            VerifyAiOriginalPredictionParity(result);
+            VerifyBanana(result);
+            VerifyBoulder(result);
+            MutinyAiPredictionVerificationTest.Verify(result);
             return result;
         }
 
@@ -136,6 +149,7 @@ namespace Mutiny.Verification
         {
             var result = new MutinyLevel1VerificationResult();
             VerifyAnchor(result);
+            VerifyAnchorPresentation(result);
             return result;
         }
 
@@ -2633,6 +2647,193 @@ namespace Mutiny.Verification
                 DestroyNow(teamObject);
                 foreach (MutinyAnchor anchor in Object.FindObjectsByType<MutinyAnchor>())
                     DestroyNow(anchor != null ? anchor.gameObject : null);
+            }
+        }
+
+        private static void VerifyAnchorPresentation(MutinyLevel1VerificationResult result)
+        {
+            foreach (bool aiControlled in new[] { false, true })
+            foreach (int fps in new[] { 25, 60, 120 })
+            {
+                var objects = new List<GameObject>();
+                string label = $"ANC-PRES { (aiControlled ? "AI" : "player") } {fps}FPS";
+                GameObject MakeObject(string name)
+                {
+                    var go = new GameObject(label + "_" + name);
+                    objects.Add(go);
+                    return go;
+                }
+                try
+                {
+                    var level = MakeObject("Level").AddComponent<MutinyLevelRoot>();
+                    level.Width = 64;
+                    level.Height = 64;
+                    level.WaterLevelY = -64f;
+                    var turn = level.gameObject.AddComponent<MutinyTurnManager>();
+                    var red = MakeObject("Red").AddComponent<MutinyTeam>();
+                    red.TeamNumber = 1;
+                    red.IsAiControlled = aiControlled;
+                    var blue = MakeObject("Blue").AddComponent<MutinyTeam>();
+                    blue.TeamNumber = 2;
+                    blue.IsAiControlled = true;
+                    var owner = MakeObject("Owner").AddComponent<MutinyCharacter>();
+                    owner.PhysicsBody.State = PhysicsBodyState.CreateDefault(320f, 500f);
+                    owner.PhysicsBody.IsActive = false;
+                    owner.TeamIndex = 1;
+                    owner.AddWeapon("anchor");
+                    red.RegisterCharacter(owner);
+                    var victim = MakeObject("Victim").AddComponent<MutinyCharacter>();
+                    victim.PhysicsBody.State = PhysicsBodyState.CreateDefault(768f, 930f);
+                    victim.PhysicsBody.IsActive = false;
+                    victim.TeamIndex = 2;
+                    blue.RegisterCharacter(victim);
+                    turn.Initialize(red, blue);
+                    red.SelectCharacter(owner);
+                    MutinyAnchor anchor = null;
+                    bool committed;
+                    if (aiControlled)
+                    {
+                        var ai = red.gameObject.AddComponent<MutinyAIController>();
+                        ai.ExecuteMoveForVerification(new AIMove
+                        {
+                            MoveType = AIMoveType.ShootWeapon,
+                            Character = owner,
+                            WeaponType = "anchor",
+                            TargetPosition = new Vector2(768f, 930f)
+                        });
+                        foreach (MutinyAnchor candidate in Object.FindObjectsByType<MutinyAnchor>())
+                            if (candidate.Owner == owner && candidate.IsFired)
+                                anchor = candidate;
+                        committed = anchor != null;
+                    }
+                    else
+                    {
+                        var input = MakeObject("Input").AddComponent<MutinyPlayerInput>();
+                        input.TurnManager = turn;
+                        committed = input.SelectWeapon("anchor");
+                        anchor = input.ArmedAnchor;
+                        committed &= input.TryActivateClickWeaponForVerification(owner, new Vector2(768f, 930f));
+                    }
+                    result.Assert(committed && anchor != null && !owner.HasWeapon("anchor") &&
+                                  turn.CurrentPhase == TurnPhase.ActionExecuting &&
+                                  Mathf.Approximately(anchor.PhysicsBody.State.Y, -200f),
+                        label + " ANC-PRES-01 actual player/AI entry consumes once and starts at the original drop height");
+                    if (anchor == null)
+                        continue;
+                    objects.Add(anchor.gameObject);
+                    MutinyPhysicsBody body = anchor.PhysicsBody;
+                    var terrain = new string[64, 64];
+                    for (int column = 0; column < 64; column++)
+                        terrain[30, column] = "ground";
+                    body.SetTerrain(terrain, 64, 64);
+                    var cameraObject = MakeObject("Camera");
+                    cameraObject.AddComponent<Camera>();
+                    var camera = cameraObject.AddComponent<MutinyCameraController>();
+                    camera.TurnManager = turn;
+                    camera.ResetForLevel(level);
+
+                    if (aiControlled)
+                    {
+                        for (int tick = 0; tick < 20; tick++)
+                        {
+                            anchor.AdvanceSimulationFrameForVerification(MutinyPhysics.TimeStep);
+                            body.ApplyPresentationPoseForVerification();
+                        }
+                        result.Assert(body.SimulationTickCount == 0 &&
+                                      Mathf.Approximately(body.State.Y, -200f) &&
+                                      Mathf.Approximately(MutinyPhysics.UnityToPixel(anchor.transform.position).y, -200f),
+                            label + " ANC-PRES-01 original twenty AI waiting ticks advance no physics or visible fall");
+                    }
+                    Sprite fallingSprite = anchor.SpriteRenderer.sprite;
+                    anchor.AdvanceSimulationFrameForVerification(0.02f);
+                    body.ApplyPresentationPoseForVerification();
+                    result.Assert(body.SimulationTickCount == 0 && Mathf.Approximately(body.State.Y, -200f) &&
+                                  Mathf.Approximately(MutinyPhysics.UnityToPixel(anchor.transform.position).y, -200f),
+                        label + " ANC-PRES-01 the first render half-tick does not predict ahead of the first real fall");
+                    anchor.AdvanceSimulationFrameForVerification(0.02f);
+                    body.ApplyPresentationPoseForVerification();
+                    result.Assert(body.SimulationTickCount == 1 && Mathf.Approximately(body.State.Y, -160f) &&
+                                  Mathf.Approximately(MutinyPhysics.UnityToPixel(anchor.transform.position).y, -200f),
+                        label + " ANC-PRES-01 first real tick falls forty pixels while display starts at its completed-tick origin");
+                    anchor.AdvanceSimulationFrameForVerification(0.02f);
+                    body.AdvanceSimulationFrameForVerification(0.04f);
+                    body.ApplyPresentationPoseForVerification();
+                    result.Assert(!body.IsActive && body.SimulationTickCount == 1 &&
+                                  Mathf.Approximately(body.State.Y, -160f) &&
+                                  Mathf.Abs(MutinyPhysics.UnityToPixel(anchor.transform.position).y + 180f) < 0.001f &&
+                                  anchor.CurrentAnimationFrame == 1 && anchor.SpriteRenderer.sprite == fallingSprite &&
+                                  Mathf.Approximately(victim.Health, 100f),
+                        label + " ANC-PRES-01 middle display frame moves twenty pixels without an autonomous body tick, damage or sprite-frame advance");
+                    body.SendMessage("Start", SendMessageOptions.DontRequireReceiver);
+                    body.ApplyPresentationPoseForVerification();
+                    result.Assert(Mathf.Approximately(body.State.Y, -160f) && body.SimulationTickCount == 1 &&
+                                  Mathf.Abs(MutinyPhysics.UnityToPixel(anchor.transform.position).y + 180f) < 0.001f,
+                        label + " ANC-PRES-01 delayed production Start preserves authority and does not seed from the interpolated display");
+                    anchor.AdvanceSimulationFrameForVerification(0.02f);
+
+                    bool sawIntermediateMotion = false;
+                    bool sampledCamera = false;
+                    bool cameraMatches = true;
+                    bool fallUsesStoppedSprite = true;
+                    bool landingChecked = false;
+                    bool landingCorrect = false;
+                    for (int frame = 0; frame < 600 && !anchor.IsFinished; frame++)
+                    {
+                        long ticksBefore = body.SimulationTickCount;
+                        float displayBefore = MutinyPhysics.UnityToPixel(body.PresentationPosition).y;
+                        bool wasFalling = !anchor.HasHitBottom;
+                        anchor.AdvanceSimulationFrameForVerification(1f / fps);
+                        body.ApplyPresentationPoseForVerification();
+                        float displayY = MutinyPhysics.UnityToPixel(anchor.transform.position).y;
+                        if (wasFalling && !anchor.HasHitBottom)
+                        {
+                            sawIntermediateMotion |= body.SimulationTickCount == ticksBefore &&
+                                displayY > displayBefore + 0.001f && displayY < body.State.Y;
+                            fallUsesStoppedSprite &= anchor.CurrentAnimationFrame == 1 &&
+                                anchor.SpriteRenderer.sprite == fallingSprite && victim.Health == 100f;
+                            if (displayY > 300f)
+                            {
+                                Vector3 desired = body.PresentationPosition +
+                                    new Vector3(0f, 50f / MutinyPhysics.PixelsPerUnit, 0f);
+                                cameraObject.transform.position = desired + new Vector3(0f, 0f, -10f);
+                                camera.AdvanceCameraForVerification(1f / fps);
+                                sampledCamera = true;
+                                cameraMatches &= camera.FindActionTargetForVerification() == anchor.transform &&
+                                    Vector2.Distance(cameraObject.transform.position, desired) < 0.001f;
+                            }
+                        }
+                        if (anchor.HasHitBottom && !landingChecked)
+                        {
+                            landingChecked = true;
+                            landingCorrect = body.SimulationTickCount == 29 &&
+                                Mathf.Abs(body.State.Y - 959.9f) < 0.001f &&
+                                Mathf.Abs(displayY - body.State.Y) < 0.001f &&
+                                Mathf.Approximately(victim.Health, 40f) &&
+                                anchor.HoldTicksRemaining == 29 && anchor.CurrentAnimationFrame == 1;
+                            anchor.AdvanceSimulationFrameForVerification(0.001f);
+                            body.ApplyPresentationPoseForVerification();
+                            landingCorrect &= body.SimulationTickCount == 29 &&
+                                Mathf.Abs(MutinyPhysics.UnityToPixel(anchor.transform.position).y - body.State.Y) < 0.001f &&
+                                anchor.HoldTicksRemaining == 29 && anchor.CurrentAnimationFrame == 1;
+                        }
+                    }
+                    result.Assert(fallUsesStoppedSprite && sampledCamera && cameraMatches &&
+                                  (fps == 25 || sawIntermediateMotion),
+                        label + " ANC-PRES-01 continuous intermediate render frames and camera share one display pose, retaining stopped fall frame 1");
+                    result.Assert(landingChecked && landingCorrect,
+                        label + " ANC-PRES-02 original collision tick, landing snap, single sixty-HP crush and immediate hold timing are frame-rate independent");
+                    result.Assert(anchor.IsFinished && body.SimulationTickCount == 29 &&
+                                  victim.Health == 40f && owner.Health == 100f &&
+                                  anchor.HoldTicksRemaining == 0 && anchor.FadeTicksRemaining == 0 &&
+                                  anchor.CurrentAnimationFrame == 12 && anchor.CurrentImpactFrame == 17 &&
+                                  !anchor.AreImpactParticlesVisible && !anchor.SpriteRenderer.enabled,
+                        label + " ANC-PRES-02 render frames do not duplicate collision damage or the original impact/hold/white-out completion");
+                }
+                finally
+                {
+                    for (int i = objects.Count - 1; i >= 0; i--)
+                        DestroyNow(objects[i]);
+                }
             }
         }
 

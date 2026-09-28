@@ -49,7 +49,12 @@ namespace Mutiny.Simulation
         // Parent-driven projectiles must not run a second autonomous simulation,
         // but may still render the completed tick using their parent's clock.
         internal MutinyPhysicsBody PresentationClockSource { get; set; }
-        private bool CanInterpolatePresentation => IsActive || PresentationClockSource != null;
+        // Self-ticked weapons such as Anchor have their own accumulator but still
+        // use these authoritative snapshots and the shared render/restore path.
+        // Supplying a render clock must never enable autonomous physics Update.
+        internal Func<float> PresentationClockAlphaOverride { get; set; }
+        private bool CanInterpolatePresentation => IsActive || PresentationClockSource != null ||
+            PresentationClockAlphaOverride != null;
 
         public bool IsAtRest => State.IsAtRest;
         public long SimulationTickCount { get; private set; }
@@ -58,7 +63,9 @@ namespace Mutiny.Simulation
         // origin instead of the ahead-of-render authoritative State position.
         public Vector2 CurrentStepStartPositionPixels { get; private set; }
         public float SimulationInterpolationAlpha =>
-            PresentationClockSource != null
+            PresentationClockAlphaOverride != null
+                ? Mathf.Clamp01(PresentationClockAlphaOverride())
+                : PresentationClockSource != null
                 ? PresentationClockSource.SimulationInterpolationAlpha
                 : Mathf.Clamp01(m_TimeAccumulator / MutinyPhysics.TimeStep);
 

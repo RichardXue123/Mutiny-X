@@ -15,6 +15,7 @@
 - extent 7、bounce .8、friction .5、twangMaxForce 30。
 - 碰撞只播放反弹音；没有“反弹若干次后爆炸”。
 - 静止自动爆；人类玩家飞行中再次点击爆；AI 在近角色条件下爆，规格为 `160/80`。
+- AI 试射也检查运动后距任一角色严格小于 20 px（包含自己、队友及队伍中死者），不仅是静止结束；2026-09-28 修复与正式距离判断共用。`lastSqDistance` 未更新的源码远离分支不实际触发，不补距离历史；见 [AI-PHY-04/05 规格与验证](../../08-ActionAgents/05-AIWeaponSelection/PREDICTION_PARITY_20260928.md)。
 - 正常松手走 `TileSystem.mouseUp → twanging.twang() → Solid.twang()`，不会经过 `Weapon.release()`；预览与实际提交都使用 Banana 自身的 30 力上限。
 
 来源：`Banana.as`。规则：`BAN-*`，见 [完整审计](../IMPLEMENTATION_DETAILS.md#63-banana)。

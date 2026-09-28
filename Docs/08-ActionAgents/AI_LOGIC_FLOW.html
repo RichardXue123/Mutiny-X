@@ -511,7 +511,7 @@ M = distance(L,S起点)
             <span class="formula">samples = floor(Luck × teamCount / max(1, aliveCount))
 angle = 180 + NextInt(0,180)°
 force = NextFloat(5, twangMaxForce)</span>
-            <p>同一种库存只评估一次。普通弹道武器每次采样先按正式武器的物理参数模拟投射物落点，再用上节的通用公式评分；<code>samples ≤ 0</code> 时，这类武器、Anchor 和 Cannon 没有采样候选。特殊武器不都受此数量控制。</p>
+            <p>同一种库存只评估一次。普通弹道武器每次采样保留正式装备起点：角色上方 10 px，Boulder 上方 30 px，不改回角色中心；按正式武器的物理参数模拟投射物落点，再用上节的通用公式评分；<code>samples ≤ 0</code> 时，这类武器、Anchor 和 Cannon 没有采样候选。特殊武器不都受此数量控制。</p>
             <ul>
               <li>Anchor 最终评分 × <code>0.5</code>。</li>
               <li>Pieces of Eight：<code>(score - 0.5) × 1.2</code>。</li>
@@ -522,7 +522,7 @@ force = NextFloat(5, twangMaxForce)</span>
             <p>预测不再统一跑固定 50/80 步，而是按原版武器类型结束：</p>
             <ul>
               <li>接触结束：Cherry、Rum、Pieces、Parachute、Cannonball。</li>
-              <li>静止结束：Dynamite、Mine、Banana。</li>
+              <li>静止结束：Dynamite、Mine；Banana 在静止或距任一角色严格小于 20 px 时结束，包含自己、队友与死者。</li>
               <li>其他普通 Weapon（如 Boulder）：最多 101 tick；Cannonball 有单独的越界/入水条件与 4096 tick 安全上限。</li>
               <li>所有 <code>hitsBoxes=true</code> 的预测读取共享箱体。</li>
             </ul>
@@ -552,7 +552,7 @@ force = NextFloat(5, twangMaxForce)</span>
           <tbody>
             <tr class="weapon-row" data-kind="normal"><td>Cherry Bomb</td><td><span class="tag normal">普通弹道</span></td><td>首次接触结束；移动评分另保留 10 次源码怪癖采样</td><td><code>SpawnAndFire</code></td></tr>
             <tr class="weapon-row" data-kind="normal"><td>Dynamite</td><td><span class="tag normal">普通弹道</span></td><td>模拟至静止或 101 tick</td><td><code>SpawnAndFire</code></td></tr>
-            <tr class="weapon-row" data-kind="normal"><td>Banana</td><td><span class="tag normal">普通弹道</span></td><td>预测至静止；正式运行静止即爆，或最近角色 &lt;20 px，或在 &lt;50 px 内距离由近转远时引爆；这些后续时机不另计候选分</td><td><code>SpawnAndFire</code></td></tr>
+            <tr class="weapon-row" data-kind="normal"><td>Banana</td><td><span class="tag normal">普通弹道</span></td><td>预测在静止或距任一角色 &lt;20 px 时结束；正式 AI 同条件引爆。包含 owner、队友及死者。源码 lastSqDistance 一直为 Infinity，&lt;50 px 的远离分支不实际触发，不新增历史距离逻辑</td><td><code>SpawnAndFire</code></td></tr>
             <tr class="weapon-row" data-kind="normal"><td>Boulder</td><td><span class="tag normal">普通弹道</span></td><td>专用重量/摩擦参数；候选速度原样执行</td><td><code>SpawnAndFire</code></td></tr>
             <tr class="weapon-row" data-kind="special"><td>Cannon</td><td><span class="tag special">专用候选</span></td><td>部署点 + 炮口角度 + Cannonball 预测</td><td><code>BeginAiFire</code></td></tr>
             <tr class="weapon-row" data-kind="special"><td>Gunpowder Barrel</td><td><span class="tag special">BoxWeapon</span></td><td>至少 3 个合法位置，连续放置</td><td><code>BeginAiPlacement</code></td></tr>

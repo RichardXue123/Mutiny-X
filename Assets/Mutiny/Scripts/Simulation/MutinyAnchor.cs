@@ -69,6 +69,11 @@ namespace Mutiny.Simulation
             PhysicsBody.State.HitsBoxes = true;
             PhysicsBody.ApplyWaterPhysics = false;
             PhysicsBody.IsActive = false;
+            // Reuse the body's completed-tick snapshots without granting it an
+            // autonomous tick. Camera and SpriteRenderer read this same clock.
+            PhysicsBody.PresentationClockAlphaOverride = SamplePresentationAlpha;
+            m_TickAccumulator = 0f;
+            m_AiWaitTicks = 0;
             // Anchor.advance calls Solid.advanceMotion directly and does not call
             // Weapon.advance. Its fall has no generic flying-weapon rotation.
             PhysicsBody.OnBeforeSimulationStep -= AdvanceOriginalRotationTick;
@@ -128,12 +133,25 @@ namespace Mutiny.Simulation
 
         protected override void Update()
         {
+            AdvanceSimulationFrame(Time.deltaTime);
+        }
+
+        internal void AdvanceSimulationFrameForVerification(float deltaTime) =>
+            AdvanceSimulationFrame(deltaTime);
+
+        private float SamplePresentationAlpha() =>
+            IsFired && !IsFinished && !m_HitBottom && m_AiWaitTicks == 0
+                ? m_TickAccumulator / MutinyPhysics.TimeStep
+                : 1f;
+
+        private void AdvanceSimulationFrame(float deltaTime)
+        {
             // Anchor.advance deliberately does not call Weapon.advance, avoiding
             // generic splash and inherited Weapon.advance finish behavior.
             if (!IsFired || IsFinished)
                 return;
 
-            m_TickAccumulator += Time.deltaTime;
+            m_TickAccumulator += deltaTime;
             while (m_TickAccumulator >= MutinyPhysics.TimeStep)
             {
                 m_TickAccumulator -= MutinyPhysics.TimeStep;
@@ -397,7 +415,10 @@ namespace Mutiny.Simulation
         private void OnDestroy()
         {
             if (PhysicsBody != null)
+            {
                 PhysicsBody.OnFloorLanded -= HitFloor;
+                PhysicsBody.PresentationClockAlphaOverride = null;
+            }
             if (m_WhiteOutMaterial != null)
                 Destroy(m_WhiteOutMaterial);
         }
