@@ -3119,10 +3119,10 @@ namespace Mutiny.Verification
                               Mathf.Approximately(steppedAction.Score, firstAction.Score) &&
                               Vector2.Distance(steppedAction.LaunchVelocity, firstAction.LaunchVelocity) < 0.001f,
                     "AI-SLICE-01 production decision iterator preserves the fixed-seed result across more than 50 resumable steps");
-                result.Assert(!MutinyAIController.ShouldYieldDecisionFrame(false, 29) &&
-                              MutinyAIController.ShouldYieldDecisionFrame(false, 30) &&
+                result.Assert(!MutinyAIController.ShouldYieldDecisionFrame(false, 2) &&
+                              MutinyAIController.ShouldYieldDecisionFrame(false, 3) &&
                               MutinyAIController.ShouldYieldDecisionFrame(true, 0),
-                    "AI-SLICE-01 production frame gate uses the original 30 ms threshold and a character boundary");
+                    "EXT-AI-SLICE-02 production frame gate uses the authorized 3 ms default and a character boundary");
 
                 ai.SetReplayTraceForVerification(recorded);
                 AIMove replayedAction = ai.EvaluateBestMove();

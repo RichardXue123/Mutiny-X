@@ -12,6 +12,7 @@
 - `Assets/Mutiny/Scripts/Simulation/MutinyAIController.cs`
 - [AI 逻辑实现进度与实现说明](AI_IMPLEMENTATION_STATUS.md)
 - [AI 完整逻辑流程（HTML）](AI_LOGIC_FLOW.html)
+- [高 Luck 非阻塞搜索：规格与实测](05-AIWeaponSelection/AI_RESPONSIVE_SEARCH_20260928.md)
 
 ## 边界
 

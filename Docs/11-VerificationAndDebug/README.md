@@ -12,6 +12,7 @@
 - `Assets/Mutiny/Scripts/Presentation/MutinyGMManager.cs`
 - [GM 命令说明](GM_COMMANDS.md)
 - [本地 tag 发布流水线验收](01-AutomatedRegression/LOCAL_RELEASE_PIPELINE.md)
+- [AI 高 Luck 分帧搜索实际验收](02-PlayModeValidation/Artifacts/AI-RESPONSIVE-20260928.txt)
 
 ## 完成口径
 

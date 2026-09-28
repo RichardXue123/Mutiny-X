@@ -586,14 +586,14 @@ force = NextFloat(5, twangMaxForce)</span>
         <p>日志 <code>AI-Decision</code> 记录阶段、候选数、胜出者、分数、速度与目标。默认 <code>SaveDecisionTrace=true</code> 时，还会在 <code>Application.persistentDataPath/ai-decisions</code> 保存 JSON，含 seed、每次随机抽样、所有候选及胜者；<code>ReplayDecisionTracePath</code> 对下一次同队同阶段决策生效一次，随机类型/边界或候选参数不一致会报错。<code>UseFixedDecisionSeed</code> 与 <code>FixedDecisionSeed</code> 可用于固定实验。可重放的是<strong>相同 Unity 棋盘上的当前实现</strong>，不是原版 Flash <code>Math.random()</code> 的内部状态。</p>
         <div class="callout"><strong>GM 测试开关：</strong><code>aiforceusewaepon 1..15</code> 把所有 AI 的有效武器候选限制为该编号，并视为无限供应；跳跃仍参加竞争，续行动仍受正分门限制，因此并不保证一定开火。<code>aiforceusewaepon 0</code> 恢复真实库存。该开关是项目授权扩展，不是原版规则。</div>
         <div class="callout"><strong>单回合接管：</strong><code>aitakeover {luck}</code>（保留 <code>aitakeoverwithluck</code> 别名）让 AI 以指定 Luck 接管当前人类队伍这一回合的剩余行动，范围 <code>0..99999</code>，允许小数。指定值只覆盖本回合 AI 的武器抽样，不修改角色原始 Luck；跳跃前走首次候选，跳跃飞行中先等稳定，落地后只评价原已选角色的武器，分数不大于 0 仍可 Pass。完整回合结束自动交还人类控制，也服从当前强制武器设置。此项为 GM-08 项目扩展。</div>
-        <div class="callout"><strong>当前关卡 Luck：</strong><code>aisetluck {luck}</code> 统一覆盖当前单人关卡敌方 AI 的有效 Luck（<code>0..99999</code>）；<code>airesetluck</code> 恢复每个角色各自的关卡默认值。0 是有效覆盖，不是重置；重开/下一关不继承，不写存档。本次决策开始时固定 Luck，思考中修改从下次决策起生效。高 Luck 增加采样量，可能明显卡顿，不保证最优解。此项为 GM-12/13 项目扩展。</div>
+        <div class="callout"><strong>当前关卡 Luck：</strong><code>aisetluck {luck}</code> 统一覆盖当前单人关卡敌方 AI 的有效 Luck（<code>0..99999</code>）；<code>airesetluck</code> 恢复每个角色各自的关卡默认值。0 是有效覆盖，不是重置；重开/下一关不继承，不写存档。本次决策开始固定 Luck；思考中修改会取消旧快照，并以新设置重算，不提交旧参数结果。生产搜索默认约 3 ms 分帧，高 Luck 增加总思考时间，不保证最优解。此项为 GM-12/13 与 EXT-AI-SNAPSHOT-01 项目扩展。</div>
       </section>
 
       <section id="timing">
         <h2>执行、行动消耗与镜头</h2>
         <div class="timeline">
-          <div class="event"><b>思考开始</b><p><code>IsEvaluatingCandidates=true</code>；逐步骤按约 30 ms 每帧预算续算，一个完整的 50 样本生成批次或单种武器求值不会在内部被抢占。镜头仍允许 speech/popup。</p></div>
-          <div class="event"><b>候选求值完成</b><p>输出决策日志并保存 JSON：种子、全部随机抽样、候选参数及最终胜出结果。</p></div>
+          <div class="event"><b>思考开始</b><p><code>IsEvaluatingCandidates=true</code>；固定搜索数据快照而不冻结游戏，按用户授权的约 3 ms 每帧预算续算；单次试射可在物理 tick 之间暂停，50 条跳跃仍先全部生成再评分。恢复与执行前校验棋盘/回合，有效变化则重算。已经死亡的角色仍保存评分位置，但其被动下沉不使搜索失效；存活→死亡仍重算。显示插值不改变权威物理快照。失效日志附具体原因。镜头仍允许 speech/popup。</p></div>
+          <div class="event"><b>候选求值完成</b><p>全部候选完成才确定胜者。逐步累计日志最高分，完整随机/候选 JSON 分块后台保存，记录 <code>traceStatus=pending</code> 时文件尚未完成；不等最终文件完成才执行。写盘队列有界，慢存储时分帧等待入队；状态为 <code>ready</code> 后可重放，IO 失败为 <code>failed</code>。</p></div>
           <div class="event"><b>镜头到胜出角色</b><p>调用生产镜头入口并等待 <code>IsPanningToTurnTarget=false</code>，不再固定等 0.35 秒。</p></div>
           <div class="event"><b>Throw Self</b><p>写入正式角色速度，只消耗 <code>CanThrow</code>；落稳及可能的宝箱收集结束后，若选中角色仍有 <code>CanShoot</code>，回合继续为同角色的第二阶段。</p></div>
           <div class="event"><b>使用武器</b><p>创建或启动正式武器，消耗移动与射击资格；回合管理器等待正式武器/连续放置序列完成。</p></div>
@@ -633,17 +633,17 @@ force = NextFloat(5, twangMaxForce)</span>
               <li>Parachute Bomb 候选恢复速度修正和顶部边界。</li>
               <li>Seagull 己方公式恢复为 <code>-(1.5-distance/40)</code>。</li>
               <li>胜出角色镜头完成门、AI 思考期宝箱镜头门已恢复。</li>
-              <li>按角色顺序先移动后武器、约 30 ms 分帧推进；随机抽样与候选可保存并重放。</li>
+              <li>按角色顺序先移动后武器、默认约 3 ms 分帧推进；每次弹道 tick / 采样可恢复，完整随机与候选可保存并重放。</li>
               <li>普通武器预测从正式武器读取物理模板，Parachute 空气修正由预测和正式执行共用。</li>
             </ul>
           </article>
           <article class="card">
             <h3>仍需运行核对的边界</h3>
             <ul>
-              <li>单次 50 条弹道生成或一件复杂武器求值仍可能超过 30 ms；原版的单次 <code>aiThink()</code> 也不被中途抢占。</li>
+              <li>3 ms 是软预算：单次工厂初始化、物理 tick、GC 仍需测量；高 Luck 总思考时间仍会增加。这是用户授权的调度扩展，原版是约 30 ms 且不在单次 <code>aiThink()</code> 中暂停。</li>
               <li>JSON 能重放相同 Unity 棋盘的随机调用和候选；原版 Flash 的 <code>Math.random()</code> 内部状态尚无证据可还原。</li>
               <li>候选读取正式武器物理参数，并与正式对象共用物理步进及 Parachute 空气修正；各武器完整生命周期仍待逐项实测。</li>
-              <li>本轮新增回归尚未在 Unity Play Mode 实际执行。</li>
+              <li>隔离 Play Mode 专项 37/37、预测 18/18、GM 66/66、箱体相关 125/125 已通过；高 Luck 极值仅实际运行了 Cherry Bomb 续行动，不推广为全武器/真机性能保证。</li>
             </ul>
           </article>
         </div>
@@ -654,11 +654,12 @@ force = NextFloat(5, twangMaxForce)</span>
         <h2>验证状态</h2>
         <div class="status-list">
           <div class="status-item ok"><b>静态确认</b><span>Team、Character、Weapon、各专用武器和 TileSystem 的 AS2 证据已核对。</span></div>
-          <div class="status-item ok"><b>已实现</b><span>15/15 候选入口、30 ms 可恢复步骤、完整抽样重放、正式武器物理模板、镜头门。</span></div>
-          <div class="status-item ok"><b>历史编译记录</b><span>此前记录过 <code>Assembly-CSharp</code> 与 <code>Assembly-CSharp-Editor</code> 0 error；本页更新未重新编译。</span></div>
-          <div class="status-item wait"><b>待运行验证</b><span>本次仅静态核对与文档更新；未重新运行分帧、随机重放、正式/预测轨迹或 15 武器整回合 Play Mode。</span></div>
+          <div class="status-item ok"><b>已实现</b><span>15/15 候选入口、3 ms/tick 可恢复步骤、棋盘快照/失效重算、分块异步回放、正式武器物理模板、镜头门。</span></div>
+          <div class="status-item ok"><b>实际测试通过</b><span>2026-09-28 Unity 6000.6.0f1 编译通过；含尸体回归的分帧专项 54/54，兼容回归 209/209；首次实施的 15 武器 × 4 个 Luck 完整决策对比 60/60 相同。实际通过第 12 关 1000/9999 原生库存搜索、尸体继续下沉时完成行动、存活→死亡与显示位置变更检查。</span></div>
+          <div class="status-item wait"><b>待运行验证</b><span>主工程可视化对局、Android 真机帧率/内存/慢存储、15 武器极高 Luck 全生命周期、多角色与长期压力；不把候选重放通过视作原版运行对照通过。</span></div>
         </div>
-        <p class="muted">编译通过只证明程序集可构建，不等于 Play Mode 行为通过。详细规则与验收矩阵见 <a href="AI_IMPLEMENTATION_STATUS.md">AI_IMPLEMENTATION_STATUS.md</a>。</p>
+        <p class="muted">默认 3 ms 是软预算；此次 luck=10000/99999 实测最大搜索分片 3.6949/5.3022 ms，不含快照、镜头和渲染。详见 <a href="05-AIWeaponSelection/AI_RESPONSIVE_SEARCH_20260928.md">规格与实测记录</a>；完整规则矩阵见 <a href="AI_IMPLEMENTATION_STATUS.md">AI_IMPLEMENTATION_STATUS.md</a>。</p>
+        <p class="muted">第 12 关重算循环：旧实现错误校验下沉尸体，不是运镜改变棋盘。修复前后与无摄像机/显示插值检查见 <a href="05-AIWeaponSelection/AI_SNAPSHOT_CORPSE_FIX_20260928.md">EXT-AI-SNAPSHOT-02/03 实测</a>。</p>
       </section>
 
       <section id="sources">
@@ -667,9 +668,9 @@ force = NextFloat(5, twangMaxForce)</span>
           <thead><tr><th>职责</th><th>原版证据</th><th>Unity 当前入口</th></tr></thead>
           <tbody>
             <tr><td>全队选择、分帧预算、两阶段</td><td><a href="../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/throwgame/Team.as">Team.as</a></td><td><a href="../../Assets/Mutiny/Scripts/Simulation/MutinyAIController.cs">MutinyAIController.ExecuteAITurnRoutine / EvaluateDecisionSteps / FinishDecisionWork</a></td></tr>
-            <tr><td>移动、武器遍历、落点评分</td><td><a href="../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/throwgame/Character.as">Character.as</a></td><td><a href="../../Assets/Mutiny/Scripts/Simulation/MutinyAIController.cs">BuildSelfThrowSamples / ScoreSelfThrow / EvaluateCharacterWeapons</a></td></tr>
+            <tr><td>移动、武器遍历、落点评分</td><td><a href="../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/throwgame/Character.as">Character.as</a></td><td><a href="../../Assets/Mutiny/Scripts/Simulation/MutinyAIController.cs">BuildSelfThrowSteps / ScoreSelfThrow / EvaluateDecisionSteps</a></td></tr>
             <tr><td>普通武器随机投掷</td><td><a href="../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/throwgame/Weapon.as">Weapon.as</a></td><td><code>SimulateWeaponImpact</code></td></tr>
-            <tr><td>专用武器</td><td><code>Anchor.as</code>、<code>BoxWeapon.as</code>、<code>Cannon.as</code>、<code>Seagull.as</code>、<code>TidalWave.as</code>、<code>VoodooDoll.as</code></td><td><code>EvaluateAnchor / BoxWeapon / Cannon / Seagull / TidalWave / Voodoo</code></td></tr>
+            <tr><td>专用武器</td><td><code>Anchor.as</code>、<code>BoxWeapon.as</code>、<code>Cannon.as</code>、<code>Seagull.as</code>、<code>TidalWave.as</code>、<code>VoodooDoll.as</code></td><td><a href="../../Assets/Mutiny/Scripts/Simulation/MutinyAISearchSteps.cs">EvaluateAnchorSteps / BoxWeaponSteps / CannonSteps / SeagullSteps / VoodooSteps / ScoreTidalWave</a></td></tr>
             <tr><td>镜头优先级</td><td><a href="../10-OriginalEvidence/Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/throwgame/TileSystem.as">TileSystem.as</a></td><td><code>MutinyCameraController.LateUpdate</code></td></tr>
             <tr><td>宝箱与后续决策</td><td><code>TreasureChest.as / Team.as</code></td><td><a href="../../Assets/Mutiny/Scripts/Simulation/MutinyTreasureChest.cs">MutinyTreasureChest</a> / <a href="../../Assets/Mutiny/Scripts/Simulation/MutinyTurnManager.cs">MutinyTurnManager</a> / <a href="../../Assets/Mutiny/Scripts/Simulation/MutinyTeam.cs">MutinyTeam</a></td></tr>
             <tr><td>Luck、随机流与重放</td><td><code>Character.as / Weapon.as</code>；原版 PRNG 状态未知</td><td><a href="../../Assets/Mutiny/Scripts/Simulation/MutinyAIRandomStream.cs">MutinyAIRandomStream</a></td></tr>

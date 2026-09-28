@@ -8,14 +8,18 @@
 
 ## 1. 当前结论
 
+2026-09-28 高 Luck 搜索优化是用户授权的性能扩展，不宣称与 Flash 30 ms 等待时序完全相同。规格与独立验收见 [EXT-AI-SLICE-02 / SNAPSHOT-01 / TRACE-02](05-AIWeaponSelection/AI_RESPONSIVE_SEARCH_20260928.md)；历史 30 ms 用例结果不能代表本次验证。
+
+同日回归修复：第 12 关死亡角色仍下沉，被错误当作棋盘变化，导致 1000/9999 均不断重算。现在保留其评分快照，但不以已死亡角色的被动物理变化使搜索失效；存活→死亡仍失效。专项 **54/54**、兼容 **209/209** 通过，两种 Luck 原生库存搜索实际完成并行动，见 [EXT-AI-SNAPSHOT-02/03](05-AIWeaponSelection/AI_SNAPSHOT_CORPSE_FIX_20260928.md)。
+
 Unity 已经具备可工作的 AI 主干：每个可行动角色生成“投掷自己”和“使用武器”候选，使用原版风格的分数挑出全队最佳候选，再经生产武器入口执行。移动评分中的高度、敌方中心、落水、敌我距离、空投和移动距离项都已接入；15 种库存武器现在都能进入普通或专用候选路径。Wooden Crate 与 Anchor 已按原版专用逻辑接入，不再被候选分发器排除。
 
 当前仍需完整的关卡运行验收，主要边界是：
 
 - 普通武器候选使用正式武器初始化后的物理状态，预测物理步进与正式对象共用 `MutinyPhysics.Step`；Parachute Bomb 的逐 tick 空气修正和顶部边界也已抽为正式/预测共用函数。候选仍使用无副作用的状态副本，专用武器的完整生命周期不在预测中播放。
-- Unity 已按原版角色顺序、先移动后武器建立可恢复的候选迭代器，每帧约 30 ms 后暂停；原版单次 `aiThink()` 本身可能超过预算，Unity 的每件武器求值同样可能超过预算。
+- Unity 保留原版角色/武器/随机顺序，按用户授权将暂停点细化至预测 tick，默认每帧约 3 ms 后暂停。预算是软上限，单次工厂初始化/物理 tick 和 GC 仍需实测；不再整件武器算完才检查预算。
 - AI 独立随机流可使用固定种子；每次随机抽样、候选和胜出结果可保存为 JSON 并逐项重放。它能复现同一 Unity 棋盘，不代表取得了原版 Flash 的 `Math.random()` 内部状态。
-- 已有若干生产入口回归断言，但没有找到本基线下 AI 整回合 Play Mode 实际通过记录。
+- 本次隔离 Unity Play Mode 专项 37/37、预测 18/18、GM 66/66、箱体相关 125/125 已通过；另与修改前实现的 60 组完整决策 JSON 相同。这些不代表 15 种武器全部真实关卡生命周期或原版运行对照已验收。
 
 ## 2. 证据与代码入口
 
@@ -32,6 +36,7 @@ Unity 已经具备可工作的 AI 主干：每个可行动角色生成“投掷�
 ### 2.2 Unity 生产入口
 
 - 总决策与执行：`Assets/Mutiny/Scripts/Simulation/MutinyAIController.cs`
+- 可恢复候选/预测/快照/记录：`MutinyAISearchSteps.cs`、`MutinyAIPrediction.cs`、`MutinyAISearchState.cs`、`MutinyAITraceWriter.cs`
 - 队伍与两阶段行动：`MutinyTeam.cs`、`MutinyTurnManager.cs`
 - 共用弹道：`MutinyPhysics.cs`、`MutinyPhysicsBody.cs`
 - 武器创建与正式效果：`MutinyWeaponFactory.cs` 及各 `Mutiny*.cs` 武器类
@@ -54,7 +59,7 @@ Unity 已经具备可工作的 AI 主干：每个可行动角色生成“投掷�
 
 ### 3.2 Unity 当前行为
 
-`ExecuteAITurnRoutine()` 进入 `IsEvaluatingCandidates=true` 后等待回合可执行门，逐步推进 `EvaluateDecisionSteps()`；每帧给重复求值约 30 ms，超预算则下一帧继续。移动的 50 条原始弹道会在角色的首次步骤中成批生成，再逐条评分；每件武器是另一个步骤，保持原版调用粒度。候选求值期间，镜头会像原版一样在 speech/popup 后提前返回。选出候选后调用 `MutinyTeam.SelectCharacter()`，用胜出角色覆盖镜头目标，并等平移目标清空后执行。
+`ExecuteAITurnRoutine()` 等待回合可执行门，以棋盘快照推进共享预测迭代器；每帧约 3 ms 预算，单条弹道也能在 tick 间暂停。仍先生成全部 50 条跳跃弹道，再逐条评分，保持随机消耗顺序；武器逐样本计算。每次恢复与执行前检查棋盘/回合身份，变化就废弃旧任务。搜索完成后才选角色、等待镜头并经正式入口执行；跳跃落稳后建立新快照，包含新拾取库存。回放异步保存，不阻塞行动提交。
 
 `EvaluateBestMove()` 已实现两个阶段：
 
@@ -69,7 +74,7 @@ Unity 已经具备可工作的 AI 主干：每个可行动角色生成“投掷�
 
 ### 3.3 当前时序差异
 
-原版是“每帧最多重复调用当前角色的 `aiThink()` 约 30 ms → 完成思考 → 选人 → 镜头移到选中的人 → 执行”。Unity 现有分帧协程遵循这一粒度。单次 50 条弹道生成或单件复杂武器求值本身仍可能超过 30 ms；原版也不在一次 `aiThink()` 中途抢占。尚需用复杂关卡运行日志测量实际帧耗时。
+原版每帧重复调用当前角色的 `aiThink()` 约 30 ms，不在一次调用内部抢占。Unity 按用户授权细化至 tick/样本并默认约 3 ms；候选语义及同分先到先得不变，但实际等待帧数不同。极高 Luck 仍需较长总思考时间，不使用超时/少算采样来自动 Pass。
 
 ## 4. 如何判断是否移动
 
@@ -201,7 +206,7 @@ Unity 普通执行走 `MutinyWeaponFactory.SpawnAndFire()`，因此不是由 AI 
 | AI-DIFF-05 | 旧 Unity 多数 AI 预测未传入箱体障碍 | `Solid.as::advanceMotion` 与各武器类 | 普通武器、角色、Voodoo、Seagull、Cannon、Anchor 预测 | 已修复为读取 `MutinyBoxRegistry`；待 Unity 运行验收 |
 | AI-DIFF-06 | 旧 Unity 海鸥对队友使用 `-1.5*(1-distance/40)`，原版为 `-(1.5-distance/40)` | `Seagull.as::aiSimulation` | `ScoreSeagullShot` | 已修复；待 Unity 运行验收 |
 | AI-DIFF-07 | 旧 Unity 选人后固定等 0.35 秒，没有等待胜出角色镜头目标完成 | `Team.as::advance` | `ExecuteAITurnRoutine`、`MutinyCameraController` | 已修复为显式 Pan 并等待清空；待 Unity 运行验收 |
-| AI-DIFF-08 | 旧 Unity 一次性求值，原版按每帧约 30 ms 重复调用当前角色的 `aiThink()` | `Team.as::advance` | `EvaluateDecisionSteps`、`ExecuteAITurnRoutine` | 已实现相同粒度的可恢复步骤；复杂关卡帧耗时待 Unity 运行验收 |
+| AI-DIFF-08 | 旧 Unity 一次性求值，原版按每帧约 30 ms 重复调用当前角色的 `aiThink()` | `Team.as::advance` | `EvaluateDecisionSteps`、`ExecuteAITurnRoutine` | 后续用户授权 EXT-AI-SLICE-02：约 3 ms/tick 分帧，不再要求相同调度粒度；专项与高 Luck 用例通过 |
 | AI-DIFF-09 | 旧 Unity 用全局随机且只记录胜出摘要，无法重放样本 | 原版各 `randomThrows/aiSimulation`；Unity 调试扩展 | `MutinyAIRandomStream`、决策 JSON | 已实现独立种子、全部抽样与候选重放；原版 PRNG 内部状态仍未知，待 Unity 运行验收 |
 | AI-DIFF-10 | 旧 Unity 在 AI 尚未完成候选时仍优先跟随下降宝箱 | `TileSystem.as::advanceScrolling:438-445` | `IsEvaluatingCandidates`、`MutinyCameraController.LateUpdate` | 已修复思考门；待 Unity 运行验收 |
 
@@ -211,7 +216,7 @@ Unity 普通执行走 `MutinyWeaponFactory.SpawnAndFire()`，因此不是由 AI 
 
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
 | --- | --- | --- | --- | --- | --- |
-| AI-SLICE-01 | 按队伍角色顺序，先逐个评价 50 个移动落点，再逐件武器评价；每帧给当前角色约 30 ms 的重复工作预算，完成后才汇总严格最高分 | `Team.as::advance:36-82`、`Character.as::aiThink:346-695` | AI 决策协程与候选迭代器 | 固定种子比较同步与分帧胜出参数，并确认迭代器跨至少 51 步；复杂关卡测帧 | 已实现；回归已写；待 Unity 运行 |
+| AI-SLICE-01 | 按队伍角色顺序，先逐个评价 50 个移动落点，再逐件武器评价；原版每帧给当前角色约 30 ms 的重复工作预算，完成后才汇总严格最高分 | `Team.as::advance:36-82`、`Character.as::aiThink:346-695` | AI 决策协程与候选迭代器 | 固定种子比较同步与分帧胜出参数，并确认迭代器跨至少 51 步；复杂关卡测帧 | 顺序/结果保持；调度按用户授权 EXT-AI-SLICE-02 改为约 3 ms/tick，独立登记已通过用例 |
 | AI-RNG-01 | AI 决策使用独立随机流，记录种子及每次随机调用的类型、边界和值；相同棋盘和记录可重放同一候选序列 | 原版各 `randomThrows/aiSimulation` 的 `Math.random()` 调用顺序；Unity 调试扩展 | `MutinyAIRandomStream`、决策 JSON | 同种子同步/分帧比较全部抽样和胜出参数；重放后校验每个候选；篡改边界应失败 | 已实现；回归已写；待 Unity 运行 |
 | AI-PHY-03 | 普通候选从正式武器初始化结果读取物理参数；预测与正式运动共用可纯调用的武器逐 tick 修正规则，候选不会触发正式武器的伤害、音效和库存副作用 | `Weapon.as::randomThrows`、各武器 `advanceMotion/contact` | `CreateFormalWeaponPredictionTemplate`、`MutinyPhysics.Step`、`MutinyParachuteBomb.ApplyOriginalAirMotion` | 比较正式 Mine 与候选模板的参数及 3 tick 轨迹；Parachute Bomb 也比较 3 tick 轨迹 | 已实现普通武器模板与共用步进；局部回归已写；待 Unity 运行 |
 
@@ -247,7 +252,7 @@ Unity 普通执行走 `MutinyWeaponFactory.SpawnAndFire()`，因此不是由 AI 
 
 ### 决策重放方法
 
-默认每次 AI 决策在 `Application.persistentDataPath/ai-decisions/` 保存 JSON，日志中的 `AI-Decision trace=` 给出完整路径。文件包含种子、每次随机抽样的类型/边界/值、全部候选参数与最终胜者。把该路径填入 AI 控制器的 `ReplayDecisionTracePath` 后，下一次同队、同阶段决策会逐项读取记录并比较每个候选；该路径只消费一次。也可启用 `UseFixedDecisionSeed` 并设置 `FixedDecisionSeed`，在相同棋盘上重新生成同一随机流。若棋盘、角色属性或库存已变化，重放会显式报错；此功能复现 Unity 决策，不声明能重建 Flash 原版的未知随机状态。
+默认每次决策在 `Application.persistentDataPath/ai-decisions/` 保存兼容 JSON。运行搜索逐小块序列化，后台只接收字符串并写盘，完整文件后发布。`AI-Action traceStatus=pending` 表示仍在保存，`AI-Decision trace ready=` 表示可读取；完整记录在文件，运行时 `LastDecisionTrace` 保留 seed/胜者/计数，不保留巨大数组；同步诊断仍可保留全部数组。`ReplayDecisionTracePath` 只消费下一次同队同阶段决策，固定 seed 仍有效。原版 PRNG 状态不在本次范围。
 
 ## 12. 验证状态汇总
 
@@ -262,7 +267,7 @@ Unity 普通执行走 `MutinyWeaponFactory.SpawnAndFire()`，因此不是由 AI 
 - 50 次移动采样及主要评分项。
 - 空投接近价值。
 - 普通武器候选已恢复原版终止语义、专用运动修正与箱体碰撞；角色、Voodoo 和 Seagull 预测同样读取箱体。
-- 30 ms 可恢复候选迭代器、独立可保存/重放随机流、正式武器初始化状态模板与正式/预测共用的 Parachute Bomb 运动修正。
+- 用户授权的约 3 ms/tick 可恢复搜索、快照失效重算、独立随机流与分块异步完整回放；正式物理模板与 Parachute Bomb 共用规则。
 - Tidal Wave、Voodoo Doll、Seagull、Cannon、BoxWeapon、Anchor 的专用候选/执行；15 种库存武器均有候选入口。
 - 胜出角色镜头完成门、AI 思考期间的空投镜头门和决策摘要日志。
 - Banana AI 引爆和 Pieces of Eight 后续重瞄等武器内部 AI 行为。
@@ -270,11 +275,13 @@ Unity 普通执行走 `MutinyWeaponFactory.SpawnAndFire()`，因此不是由 AI 
 ### 实际测试通过
 
 - `Assembly-CSharp` 与 `Assembly-CSharp-Editor` 均已编译通过（0 error）。这只证明代码可编译，不登记为 Play Mode 行为通过。
+- 2026-09-28 隔离 Unity 6000.6.0f1 Play Mode：高 Luck 分帧专项 **37/37**，预测 **18/18**，GM **66/66**，箱体相关 **125/125**；Luck `0/1/7/33` × 15 武器对修改前控制器完整记录比对 **60/60**。其中 `10000/99999` 真实跳跃后接管分别完成 10000/99999 个候选才开火并扣弹一次；停用/换回合/第 7 关重开取消通过。详见 [规格与实测](05-AIWeaponSelection/AI_RESPONSIVE_SEARCH_20260928.md)。
 
 ### 待运行验证
 
-- `AI-SEL-01..03`、`AI-MOVE-01..02`、`AI-AIR-01`、`AI-WPN-01..06`、`AI-PHY-01..03`、`AI-SLICE-01`、`AI-RNG-01`、`AI-CAM-01..02`、`AI-OBS-01`、`AI-EXE-01..02`。
+- 上述旧矩阵中未被专项具体覆盖的用例仍待运行；不以分帧/重放通过推定全部移动、空投、镜头与完整武器生命周期通过。
 - 15 种库存武器在真实关卡、真实回合门、真实镜头和真实库存消耗下的逐项行为。
+- 主工程画面、Android 真机、全武器极高 Luck、多角色与长期压力测试。
 
 ### 已知差异
 
