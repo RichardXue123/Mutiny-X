@@ -13,6 +13,7 @@
 - [AI 逻辑实现进度与实现说明](AI_IMPLEMENTATION_STATUS.md)
 - [AI 完整逻辑流程（HTML）](AI_LOGIC_FLOW.html)
 - [高 Luck 非阻塞搜索：规格与实测](05-AIWeaponSelection/AI_RESPONSIVE_SEARCH_20260928.md)
+- [AI 策略开关与隔离边界](05-AIWeaponSelection/AI_STRATEGY_BOUNDARY_20260929.md)：`aienhance 1/0`，增强入口当前明确使用兼容算法回退，尚未实现完整效果模拟。
 
 ## 边界
 

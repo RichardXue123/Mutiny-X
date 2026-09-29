@@ -16,6 +16,8 @@
 
 ## 本轮记录
 
+- 2026-09-29：`feature/aienhance` 的 `GM-14 / EXT-AI-STRAT-01..05` 在隔离 Unity 6000.6.0f1 专项 Play Mode 403/403 通过；修改前 60 份完整决策 trace 采集后，关闭/增强回退/回切的 180 份 SHA-256 全部一致。正式 GM 驱动搜索/镜头等待取消、真实跳跃续行动、八枚金币策略身份保持和实际第 7 关重开；既有高 Luck/尸体快照 54/54、预测 18/18、GM 66/66、箱体/镜头 125/125 复跑通过。增强入口当前明确回退 Legacy，不代表完整模拟已实现；主工程界面、Android 和全关卡长对局待验证。见 [策略规格与结果](../../08-ActionAgents/05-AIWeaponSelection/AI_STRATEGY_BOUNDARY_20260929.md) 与 [验收摘要](Artifacts/AI-STRATEGY-BOUNDARY-20260929.txt)。
+
 - 2026-09-29：蓄力边缘滚屏 `CAM-AIM-EDGE-01` 在隔离 Unity 6000.6.0f1 `Validate Scroll Arrows Play Mode` 113/113 通过，既有 `Validate Camera Movement` 11/11 通过。实际鼠标设备事件驱动跳跃/Cherry Bomb 四方向 × 25/60/120 FPS 等效帧时长的蓄力、滚屏、返回中央、正式松手及跟随恢复；大炮拉栓允许滚屏、炮身拖动保持锁镜。隔离工程临时恢复旧锁镜门后检出 25 个失败，未修改主工程或断言。见 [验收摘要与日志来源](Artifacts/CAM-AIM-EDGE-20260929.txt)；原版静态依据及既有授权差异见 [镜头模块](../../09-PresentationAndFeedback/04-Camera/README.md)。主工程 PIE 与 Android/实物手柄目视验收未运行。
 
 - 2026-09-29：锚下落高刷新率 `ANC-PRES-01/02` 在上述隔离工程 `Validate Anchor Animation Play Mode` 60/60 通过（新增显示规则 51 + 既有触地动画 9）。生产玩家点击/AI 执行分别验证 25/60/120 FPS 插值、AI 20 tick 等待、触地一次伤害、立即吸附及原版收尾，不提高物理或撞击时间轴频率。此项为用户授权显示扩展；主工程 PIE 与 Android 真机画面未运行，见 [锚模块](../../06-WeaponsAndEffects/19-Anchor/README.md)。

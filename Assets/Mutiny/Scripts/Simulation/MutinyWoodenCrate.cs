@@ -197,7 +197,7 @@ namespace Mutiny.Simulation
 
             if (m_CreateMore > 0)
             {
-                m_NextBox = MutinyWeaponFactory.SpawnWeapon("woodenCrate", Owner) as MutinyWoodenCrate;
+                m_NextBox = MutinyWeaponFactory.SpawnWeapon("woodenCrate", Owner, AiStrategyContext) as MutinyWoodenCrate;
                 if (m_NextBox != null)
                 {
                     m_NextBox.m_CreateMore = m_CreateMore - 1;

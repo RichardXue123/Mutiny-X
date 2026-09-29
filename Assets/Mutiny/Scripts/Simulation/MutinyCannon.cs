@@ -421,6 +421,7 @@ namespace Mutiny.Simulation
             GameObject ballObject = new GameObject("Cannonball");
             m_Cannonball = ballObject.AddComponent<MutinyCannonball>();
             m_Cannonball.Initialize(Owner);
+            m_Cannonball.BindAiStrategy(AiStrategyContext);
             m_Cannonball.SetLaunchPosition(Position);
             m_Cannonball.Fire(velocity);
             // The AS2 logical name is "cannon explosion"; the imported Unity

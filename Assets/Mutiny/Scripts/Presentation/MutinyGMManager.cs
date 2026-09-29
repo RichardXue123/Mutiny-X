@@ -498,6 +498,27 @@ namespace Mutiny.Presentation
                     succeeded = true;
                 }
             }
+            else if (lower.StartsWith("aienhance", StringComparison.Ordinal))
+            {
+                string[] parts = cmd.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length != 2 ||
+                    !string.Equals(parts[0], "aienhance", StringComparison.OrdinalIgnoreCase) ||
+                    (parts[1] != "0" && parts[1] != "1"))
+                {
+                    m_StatusColor = new Color(1.0f, 0.45f, 0.45f);
+                    m_StatusMessage = "[ERROR] Usage: aienhance 1 | 0.";
+                }
+                else
+                {
+                    MutinyAIController.SetEnhancementEnabled(parts[1] == "1");
+                    m_StatusColor = new Color(0.35f, 1.0f, 0.45f);
+                    m_StatusMessage = parts[1] == "1"
+                        ? "[SUCCESS] Enhanced strategy route enabled (bootstrap: legacy fallback; full-effect planner not implemented)."
+                        : "[SUCCESS] Legacy AI strategy selected.";
+                    m_StatusMessage += " Uncommitted decisions restart; committed weapon sequences finish unchanged.";
+                    succeeded = true;
+                }
+            }
             else if (lower.StartsWith("ailog", StringComparison.Ordinal))
             {
                 string[] parts = cmd.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
@@ -600,6 +621,7 @@ namespace Mutiny.Presentation
                                   "• aitakeover N    - This turn's AI Luck (0..99999)\n" +
                                   "• aisetluck N / airesetluck - Current level AI Luck / defaults\n" +
                                   "• ailog 1 / 0     - Enable / disable AI action decision logs\n" +
+                                  "• aienhance 1 / 0 - Enhanced route (legacy fallback) / legacy AI\n" +
                                   "• excamera 1 / excamera - Enable / disable blast camera\n" +
                                   "• setlanguage zh-cn / en - Selects Simplified Chinese / English\n" +
                                   "• Help            - Shows this help message";

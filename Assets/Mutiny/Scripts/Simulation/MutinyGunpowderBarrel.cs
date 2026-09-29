@@ -202,7 +202,7 @@ namespace Mutiny.Simulation
 
             if (m_CreateMore > 0)
             {
-                m_NextBox = MutinyWeaponFactory.SpawnWeapon("gunpowderBarrel", Owner) as MutinyGunpowderBarrel;
+                m_NextBox = MutinyWeaponFactory.SpawnWeapon("gunpowderBarrel", Owner, AiStrategyContext) as MutinyGunpowderBarrel;
                 if (m_NextBox != null)
                 {
                     m_NextBox.m_CreateMore = m_CreateMore - 1;

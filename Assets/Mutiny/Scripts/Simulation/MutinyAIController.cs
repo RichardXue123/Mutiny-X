@@ -31,6 +31,7 @@ namespace Mutiny.Simulation
         public float[] SeagullShotXs;
         public Vector2[] BoxPossibilities;
         public bool UsesForcedWeaponSupply;
+        public MutinyAIStrategyContext StrategyContext;
     }
 
     public enum MutinyAITurnGate
@@ -129,6 +130,8 @@ namespace Mutiny.Simulation
             public DecisionSnapshot Snapshot;
             public MutinyAITraceWriter Writer;
             public bool Streaming;
+            public IAIDecisionStrategy Strategy;
+            public MutinyAIStrategyContext StrategyContext;
             public readonly Dictionary<string, float> BestByAction = new Dictionary<string, float>(StringComparer.Ordinal);
             public readonly List<string> ActionOrder = new List<string>();
             public readonly Dictionary<MutinyCharacter, float> EffectiveLucks = new Dictionary<MutinyCharacter, float>();
@@ -232,9 +235,9 @@ namespace Mutiny.Simulation
                 var gate = ResolveTurnGate(m_TurnManager, m_Team);
                 CancelDecisionWork();
                 Debug.LogException(error, this);
-                if (gate == MutinyAITurnGate.Execute)
+                if (gate == MutinyAITurnGate.Execute && (work == null || StrategyIsCurrent(work)))
                 {
-                    if (ActionLogEnabled) Debug.Log($"[Mutiny:AI-Action] team={m_Team?.TeamNumber ?? 0} decision={work?.Id ?? 0} phase={work?.Phase ?? "unprepared"} action=Pass score=NA reason=evaluation-error:{error.GetType().Name} candidates={work?.CandidateCount ?? 0}", this);
+                    if (ActionLogEnabled) Debug.Log($"[Mutiny:AI-Action] team={m_Team?.TeamNumber ?? 0} decision={work?.Id ?? 0} mode={work?.StrategyContext.ModeId ?? "unknown"} strategy={work?.StrategyContext.StrategyId ?? "none"} algorithm={work?.StrategyContext.AlgorithmId ?? "none"} fallback={work?.StrategyContext.UsesFallback ?? false} strategyVersion={work?.StrategyContext.ConfigurationVersion ?? -1} phase={work?.Phase ?? "unprepared"} action=Pass score=NA reason=evaluation-error:{error.GetType().Name} candidates={work?.CandidateCount ?? 0}", this);
                     m_TurnManager.PassTurn();
                 }
                 m_TurnCoroutine = null; yield break;
@@ -244,6 +247,7 @@ namespace Mutiny.Simulation
             IsEvaluatingCandidates = false;
             if (move.MoveType == AIMoveType.Pass || move.Character == null)
             {
+                LastCommittedStrategy = move.StrategyContext;
                 LogCommittedAction(work, move);
                 m_TurnManager.PassTurn();
                 m_ActiveWork = null; m_TurnCoroutine = null; yield break;
@@ -256,6 +260,12 @@ namespace Mutiny.Simulation
                 while (camera.IsPanningToTurnTarget)
                 {
                     yield return null;
+                    if (!StrategyIsCurrent(work))
+                    {
+                        LastDecisionInvalidationReason = "ai-strategy";
+                        InvalidatedDecisionCount++;
+                        CancelDecisionWork(); m_TurnCoroutine = null; yield break;
+                    }
                     if (ResolveTurnGate(m_TurnManager, m_Team) == MutinyAITurnGate.Cancel)
                     { CancelDecisionWork(); m_TurnCoroutine = null; yield break; }
                 }
@@ -276,6 +286,7 @@ namespace Mutiny.Simulation
         {
             string reason;
             if (work == null) reason = "missing-decision";
+            else if (!StrategyIsCurrent(work)) reason = "ai-strategy";
             else if (work.ForcedWeaponType != ForcedWeaponType) reason = "forced-weapon";
             else if (work.Snapshot.Matches(this, out reason, ignoreSelection)) return true;
             LastDecisionInvalidationReason = reason;
@@ -354,6 +365,7 @@ namespace Mutiny.Simulation
                 Best = new AIMove { MoveType = AIMoveType.Pass, Score = float.NegativeInfinity },
                 ForcedWeaponType = ForcedWeaponType
             };
+            BindDecisionStrategy(work);
 
             // Flash keeps dead characters in Team.characters when calculating the
             // opposing centroid; individual distance scoring then checks alive.
@@ -426,7 +438,7 @@ namespace Mutiny.Simulation
                 !activeChar.CanThrow && activeChar.CanShoot ? activeChar : null;
             work.Phase = work.ContinuationCharacter != null ? "continuation" : "first-action";
             BeginDecisionRandom(work);
-            work.Steps = CompleteDecisionSteps(work, EvaluateDecisionSteps(work));
+            work.Steps = CompleteDecisionSteps(work, work.Strategy.Evaluate(this, work));
             return work;
         }
 
@@ -453,11 +465,7 @@ namespace Mutiny.Simulation
             finally { (steps as IDisposable)?.Dispose(); }
         }
 
-        private static AIMove ResolveDecisionWinner(DecisionWork work) =>
-            work.Phase == "continuation" && (work.Best.Character == null || work.Best.Score <= 0f)
-                ? CreatePassMove() : work.Best;
-
-        private IEnumerator EvaluateDecisionSteps(DecisionWork work)
+        private IEnumerator EvaluateLegacyDecisionSteps(DecisionWork work)
         {
             var actors = work.ContinuationCharacter != null
                 ? new List<MutinyCharacter> { work.ContinuationCharacter } : work.Allies;
@@ -497,6 +505,7 @@ namespace Mutiny.Simulation
             AIMove move = ResolveDecisionWinner(work);
             LastDecisionCandidateCount = work.CandidateCount;
             LastDecisionTracePath = work.TracePath;
+            LastDecisionStrategy = work.StrategyContext;
             if (m_Random != null)
             {
                 m_Random.AssertReplayComplete();
@@ -556,6 +565,11 @@ namespace Mutiny.Simulation
             var line = new StringBuilder(384);
             line.Append("[Mutiny:AI-Action] team=").Append(m_Team.TeamNumber)
                 .Append(" decision=").Append(work.Id)
+                .Append(" mode=").Append(work.StrategyContext.ModeId)
+                .Append(" strategy=").Append(work.StrategyContext.StrategyId)
+                .Append(" algorithm=").Append(work.StrategyContext.AlgorithmId)
+                .Append(" fallback=").Append(work.StrategyContext.UsesFallback)
+                .Append(" strategyVersion=").Append(work.StrategyContext.ConfigurationVersion)
                 .Append(" seed=").Append(trace != null ? trace.Seed.ToString(CultureInfo.InvariantCulture) : "NA")
                 .Append(" phase=").Append(work.Phase)
                 .Append(" candidates=").Append(work.CandidateCount)
@@ -1230,6 +1244,7 @@ namespace Mutiny.Simulation
             var ch = move.Character;
             if (ch == null || !ch.IsAlive)
                 return;
+            LastCommittedStrategy = move.StrategyContext;
 
             if (move.MoveType == AIMoveType.ShootWeapon && !string.IsNullOrEmpty(move.WeaponType))
             {
@@ -1238,7 +1253,7 @@ namespace Mutiny.Simulation
                     $"firing weapon={move.WeaponType} character={ch.name} velocity={move.LaunchVelocity}", this);
                 if (string.Equals(move.WeaponType, "tidalWave", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon waveWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    MutinyWeapon waveWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
                     if (waveWeapon is MutinyTidalWave wave)
                     {
                         float waterY = ch.PhysicsBody.WaterPixelY;
@@ -1248,7 +1263,7 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "seagull", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon birdWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    MutinyWeapon birdWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
                     if (birdWeapon is MutinySeagull seagull)
                     {
                         seagull.PlaceForAi(move.SeagullFlightY, move.SeagullShotXs);
@@ -1257,7 +1272,7 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "gunpowderBarrel", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon barrelWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    MutinyWeapon barrelWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
                     if (barrelWeapon is MutinyGunpowderBarrel barrel && barrel.BeginAiPlacement(move.BoxPossibilities))
                     {
                         if (consumeInventory) ch.ConsumeWeapon(move.WeaponType);
@@ -1266,7 +1281,7 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "woodenCrate", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon crateWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    MutinyWeapon crateWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
                     if (crateWeapon is MutinyWoodenCrate crate && crate.BeginAiPlacement(move.BoxPossibilities))
                     {
                         if (consumeInventory) ch.ConsumeWeapon(move.WeaponType);
@@ -1275,13 +1290,13 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "anchor", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon anchorWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    MutinyWeapon anchorWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
                     if (anchorWeapon is MutinyAnchor anchor && anchor.DropForAi(move.TargetPosition.x))
                         if (consumeInventory) ch.ConsumeWeapon(move.WeaponType);
                 }
                 else if (string.Equals(move.WeaponType, "cannon", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon cannonWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    MutinyWeapon cannonWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
                     if (cannonWeapon is MutinyCannon cannon)
                     {
                         cannon.BeginAiFire(move.TargetPosition, move.CannonRotationDegrees, move.LaunchVelocity);
@@ -1290,7 +1305,7 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "voodooDoll", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon dollWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch);
+                    MutinyWeapon dollWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
                     if (dollWeapon is MutinyVoodooDoll doll)
                     {
                         doll.BindTarget(move.TargetCharacter);
@@ -1301,7 +1316,7 @@ namespace Mutiny.Simulation
                 else
                 {
                     MutinyWeaponFactory.SpawnAndFire(move.WeaponType, ch, move.LaunchVelocity,
-                        consumeInventory);
+                        consumeInventory, move.StrategyContext);
                 }
                 ch.CanThrow = false;
                 ch.CanShoot = false;

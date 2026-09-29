@@ -16,6 +16,10 @@ namespace Mutiny.Simulation
         [Header("Weapon Identity")]
         public string WeaponType = "weapon";
         public MutinyCharacter Owner;
+        // Latched metadata only in this phase. Dedicated continuation strategies
+        // can use it later without reading a changing global GM flag.
+        public MutinyAIStrategyContext AiStrategyContext { get; private set; }
+        internal void BindAiStrategy(MutinyAIStrategyContext context) => AiStrategyContext = context;
 
         [Header("State")]
         public bool IsFired = false;
