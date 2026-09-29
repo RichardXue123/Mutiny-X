@@ -244,12 +244,15 @@ namespace Mutiny.Presentation
                 return;
             }
 
-            // TileSystem.advanceScrolling returns before every automatic camera
-            // branch while Controller.dragging is set (human player dragging).
+            // Flash distinguishes Controller.twanging (jump/weapon charge) from
+            // dragging. A mouse charge permits manual edge/key scrolling while
+            // suppressing automatic pans; do not treat all IsAiming as dragging.
             if (PlayerInput != null && PlayerInput.IsAiming)
             {
                 if (PlayerInput.IsControllerAiming)
                     AdvanceControllerScrolling(deltaTime);
+                else if (PlayerInput.ArmedCannon == null || !PlayerInput.ArmedCannon.IsDraggingBody)
+                    AdvanceEdgeScrolling(deltaTime);
                 return;
             }
 
@@ -338,7 +341,7 @@ namespace Mutiny.Presentation
                 return;
             }
 
-            AdvanceEdgeScrolling();
+            AdvanceEdgeScrolling(deltaTime);
         }
 
         internal static bool ShouldPauseForAiThinking(bool isAiControlled, bool isEvaluatingCandidates)
@@ -643,7 +646,7 @@ namespace Mutiny.Presentation
             return nearest;
         }
 
-        private void AdvanceEdgeScrolling()
+        private void AdvanceEdgeScrolling(float deltaTime)
         {
             if (IsFrontendPageVisible())
             {
@@ -653,15 +656,14 @@ namespace Mutiny.Presentation
             }
             if (MutinyInputHub.Instance != null && MutinyInputHub.Instance.IsControllerActive)
             {
-                AdvanceControllerScrolling(Time.deltaTime);
+                AdvanceControllerScrolling(deltaTime);
                 return;
             }
             bool canScroll = CanUseManualScrolling() &&
                              TurnManager.CurrentTeam != null &&
                              !TurnManager.CurrentTeam.IsAiControlled &&
                              PlayerInput != null &&
-                             !PlayerInput.IsActionMenuOpen &&
-                             !PlayerInput.IsAiming;
+                             !PlayerInput.IsActionMenuOpen;
 
             Vector2 direction = Vector2.zero;
             Mouse mouse = Mouse.current;
@@ -705,9 +707,9 @@ namespace Mutiny.Presentation
             m_EdgeVelocityPixelsPerSecond = Vector2.MoveTowards(
                 m_EdgeVelocityPixelsPerSecond,
                 direction * maximumSpeed,
-                acceleration * Time.deltaTime);
+                acceleration * deltaTime);
 
-            Vector2 movementPixels = m_EdgeVelocityPixelsPerSecond * Time.deltaTime;
+            Vector2 movementPixels = m_EdgeVelocityPixelsPerSecond * deltaTime;
             Vector3 positionWorld = transform.position;
             positionWorld.x += movementPixels.x / MutinyPhysics.PixelsPerUnit;
             positionWorld.y += movementPixels.y / MutinyPhysics.PixelsPerUnit;

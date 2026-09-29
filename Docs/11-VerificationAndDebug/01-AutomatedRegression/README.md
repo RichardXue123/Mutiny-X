@@ -1,5 +1,19 @@
 # 11.01 · 自动回归
 
+## 蓄力被炸飞时实时预览（2026-09-29）
+
+沿用 `Validate Selected Death Settlement Play Mode` 的真实 Mine/物理夹具，新增 `AIM-MOVE-01/02` 四条断言：非致命炸飞后不再提供新的指针帧，生产 `PlayerInput.LateUpdate` 必须跨至少四个真实物理 tick 刷新拉线/首条虚线；由晚序测试观察器核对它们贴合生产插值显示姿态，并使用生产预测入口检查当前方向。再经正式 `ResolveAimRelease` 检查当前位置零拉距取消，以及重新拉线后空中提交的实际初速。未修改角色位置、存活/蓄力布尔量来替代真实爆炸，不重写发射公式。
+
+本轮组合 **49/49**、既有覆盖层/取消 **32/32**、镜头 **11/11** 实际通过；完整证据和硬件边界见 [实时轨迹验证](../02-PlayModeValidation/AIM_MOVING_ORIGIN_20260929.md)。
+
+## 蓄力期间选中角色致死结算（2026-09-29）
+
+入口：`Mutiny/Parity/Validate Selected Death Settlement Play Mode`；在空场景运行 `MutinySelectedDeathVerificationRunner`。地雷在本回合开始前经正式 `Initialize/Fire` 存在，随后通过生产 `TurnManager.Initialize` 开始回合，实际选人、蓄力触发 Mine，正常 Update 推进倒计时、Explosion 命中/销毁、角色重力/地形和血条。死亡后不模拟鼠标释放也必须退出蓄力。身体与血条真正结算后只关闭回合管理器的自动计时，经正式 `AdvanceSimulationTick` 精确验证 inactivity <=10 不结束，第 11 tick 才切换。
+
+用例覆盖 `TURN-DEATH-01..03`、`TURN-DEATH-INPUT-01` 和 `MIN-AIM-01`：按住死亡、死亡后旧 release、未发射武器不扣库存、不能替换死者、正常换队只触发一次、最后角色死亡转 GameOver、非致命炸飞空中起跳后继续武器行动、未选人不自动跳过、未选中队友死亡不误结束。原版死亡结算和用户确认的输入保护分别记录于行为规格。
+
+本轮实际结果及早期夹具/隔离依赖问题记录于 [死亡结算验证](../02-PlayModeValidation/SELECTED_DEATH_SETTLEMENT_20260929.md)。完整主工程对局、鼠标硬件、Android/手柄真机和胜负对白触摸仍待验收，不因同源入口回归自动计为通过。
+
 ## 可选爆炸击退镜头（2026-09-27，授权扩展）
 
 `Validate Explosion Camera Play Mode` 经生产 GM `excamera` 解析、爆炸 `ApplyHit` 批事件和镜头 `AdvanceCamera` 检查默认关闭、合法/非法参数、历史重放、关闭立即释放、最近角色、同帧多爆炸、60/120 FPS、显示姿态、武器/空投抢占、连锁不抢换及停止后不接力。落地由真实重力、地形和摩擦完成，另检验普通角色跟随与显式 `PanToCharacter` 两个接力旁路、全批结束后新爆炸、致死飞行、落水、停用、销毁、关卡重置、零力边界、普通跳跃不触发，以及 Cherry Bomb 实际创建爆炸的生产链。隔离 Unity 6000.6.0f1 Play Mode 29/29 通过；编译通过；完整真实关卡、GM UI 及 Android 真机待验收。
@@ -48,6 +62,8 @@ Unity 6000.6.0f1 隔离工程 Play Mode 实际 13/13 断言通过；现有 `Vali
 
 ## 蓄力取消回归
 
+- `CAM-AIM-EDGE-01`：跳跃/Cherry Bomb 经正式选人、选择行动、开始蓄力入口，在真实 Input System Mouse 按住时驱动生产镜头入口。四边 × 25/60/120 FPS 验证每显示帧滚屏、箭头、轨迹起点不漂移、蓄力资格/库存不变；鼠标回中央后减速停止且不自动回移，实际松手才提交一次并恢复跟随。另外经正式大炮选择与 pin/body 开始、释放入口，分别检验拉栓可滚屏、炮身拖动仍锁镜。2026-09-29 隔离 Unity 6000.6.0f1 `Validate Scroll Arrows Play Mode` 113/113 通过（新增 102、既有 11），既有镜头 11/11 通过；主工程 PIE/真机画面待验收。
+
 - `WPN-CAN-PRESS-01`：武器/跳跃分别通过生产取消事件门校验“无新按下不取消、新按下才取消”；在正式蓄力入口开始后，按住移入叉不取消，通过生产松手入口在叉上释放仍发射/起跳，并核对库存或 `CanThrow` 的真实提交。2026-09-26 Unity 6000.6.0f1 隔离 Play Mode 复跑 `Validate Character Aim Overlay Play Mode`，31/31 通过：新增按下语义 6 条、覆盖层与更新后的触屏取消 25 条。主工程真实鼠标与安卓真机待验收。
 - `CHAR-OVR-AIM-01`：通过生产选角色、选 Throw Self、按下开始蓄力及持续按住绘制轨迹的同源入口，检查 P1 标记、选择框、血条、取消叉同时可见，队友标记/血条不受影响；右键/叉取消后轨迹消失但选中角色 UI 保留；正常松开发射才设 `IsSelfThrown` 并隐藏四项 UI，生产行动延续再恢复标记、血条和选择框。2026-09-26 Unity 6000.6.0f1 隔离 Play Mode 执行 `Validate Character Aim Overlay Play Mode`，25/25 通过：本规则 7 条、既有覆盖层 13 条、触屏取消 5 条。主工程画面与安卓真机待验收。
 - 原版来源更正：`Character` 构造设 `draggable=false、twangable=true`，`TileSystem.mouseDown` 进入 `Controller.twanging`；覆盖层的 `Controller.dragging` 隐藏门不适用于正常跳跃蓄力。此前取消专项仅证明叉的显示/操作，不曾验证 P1、选择框和血条；不能用其 5/5 结果证明旧覆盖层正确。
@@ -55,6 +71,8 @@ Unity 6000.6.0f1 隔离工程 Play Mode 实际 13/13 断言通过；现有 `Vali
 - 同日尝试运行既有 `Validate Weapon Ready And Cancel` 广域用例时，`WRDY-T01` 装备初始姿态/资源综合断言失败；新增取消断言未报失败。该旧断言原因未在本轮查明，不计入 `EXT-AIM-CAN-02` 的 5/5 专项结果。
 
 ## Cannon 范围锚点回归
+
+- `ANC-PRES-01/02`：通过玩家正式点击、AI 正式执行及锚的生产显示帧推进入口，检查 25/60/120 FPS 的出生与 AI 等待、40 px/tick 权威位置、半 tick 插值、延迟 Start、不重复自主物理、镜头同源、触地立即吸附、同 tick 一次 60 HP 伤害和原版 hold/whiteOut。2026-09-29 Unity 6000.6.0f1 隔离 `Validate Anchor Animation Play Mode` 60/60 通过（新增 51 + 既有 9）；主工程实际画面与 Android 真机待验收。
 
 - `ANC-ANI-02/03`：通过生产 `MutinyPlayerInput` 投放 Anchor，逐 25 Hz tick 检查下落 frame 1、触地后主 frame 3 的双侧镜像 1002 碎屑、主 frame 12 停止后子帧继续、子 frame 17 移除，以及 30+10 tick 的 `Global.whiteOut` 乘色/加色/透明度。2026-09-26 Unity 6000.6.0f1 隔离 Play Mode 执行 `Validate Anchor Animation Play Mode`，9/9 断言通过；实际战斗画面待验收。
 

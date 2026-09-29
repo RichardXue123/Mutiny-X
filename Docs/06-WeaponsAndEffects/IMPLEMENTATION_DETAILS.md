@@ -61,6 +61,8 @@
 
 重要：正常投掷路径由 `TileSystem.mouseUp → twanging.twang()` 提交，不经过 `Weapon.release()`。因此 `Weapon.release()` 的 20 速度上限不能用来把三种 30 力武器统一截成 20。
 
+`AIM-MOVE-01/02`：预览和松手均读取当前 Solid 位置，不缓存按下时坐标。Throw Self 蓄力中被 Mine 炸飞仍持续重画，空中释放使用当前角色位置；普通投掷读武器自己的当前位置。Unity 的绘制根部使用该 PhysicsBody 插值显示姿态，初速计算仍用权威位置。原版依据为 `Character.advance:166-178`、`Solid.drawTwangLine/twang`，验收见 [实时轨迹规格](../09-PresentationAndFeedback/08-CursorsAndTrajectory/README.md)。2026-09-29 隔离 Play Mode 新增四条实际通过，死亡/轨迹组合 49/49；主工程与硬件待验收。
+
 | ID | 可观察行为 | 来源 | Unity 入口 | 状态 |
 | --- | --- | --- | --- | --- |
 | JUMP-CAN-01 | 选择 Throw Self/跳跃但尚未拉线时，角色下方显示与武器相同的取消叉；点击回到行动菜单且不消耗跳跃 | `Character.as::updateOverlay` 的 `weaponSelected` 条件；`CancelWeaponButton.as::onPress` | `ShouldShowCancelWeapon`、`TryCancelWeaponFromOverlay` | 已实现；待运行验证 |
@@ -195,7 +197,7 @@
 | MIN-ARM-01 | `in_throw` 停 frame 1；静止时播放 arm 11..16 并停在 16 | `Mine.as::constructor/advanceMotion`；symbol 1024 frame labels/actions | `StartArmAnimation`、`AdvancePresentationTick` | 已实现；`MIN-ANI-01` 待 Unity 运行验证 |
 | MIN-WARN-01 | 激活立即进入 warn；可见帧 21..29 循环，frame 30 动作跳回 warn，形成红灯闪烁 | `Mine.as::checkForProximity`；symbol 1024 frame 30 | `StartWarningAnimation`、`AdvancePresentationTick` | 已实现；`MIN-ANI-01` 待 Unity 运行验证 |
 | MIN-TRG-01 | 角色脚点距雷 `<60` 且角色在移动时激活；正在拉 Throw Self 的静止角色也激活，普通静止角色不激活 | `Mine.as::checkForProximity` 的 velocity/`Controller.twanging` 条件 | `TryActivateForCharacter`、`NotifyCharacterBeganSelfThrowAim` | 已实现；`MIN-TRG-01/02` 待 Unity 运行验证 |
-| MIN-AIM-01 | 触发和爆炸不清除当前 Throw Self 拉线；被炸到空中仍可松开提交 | Mine 只读 `Controller.twanging`，不写该状态 | PlayerInput Aiming 状态保持与 `TryCommitCharacterThrow` | 已实现；待 Unity 运行验证 |
+| MIN-AIM-01 | 触发和非致命爆炸不清除当前 Throw Self 拉线；存活角色被炸到空中仍可松开提交；选中者死亡走 `TURN-DEATH-01..03` 正常结算 | Mine 只读 `Controller.twanging`；`Team.as::isTurnComplete` 死亡门 | PlayerInput Aiming 状态保持与 `TryCommitCharacterThrow`；回合死亡结算 | 已实现；2026-09-29 隔离 Play Mode 专项内存活炸飞与致死分支实际通过；主工程/真机待验收，见 [死亡结算规格](../03-TurnAndActions/04-ActionSettlement/README.md) |
 | MIN-TMR-01 | 激活后倒数 60 tick；经过 tick `[0,15,30,38,45,49,53,55,57,59]` 蜂鸣；到 0 爆炸 250/70 | `Mine.as::advance/explode` | `PlayInitialBeep`、倒计时调度、`Explode` | 已实现；十次 beep 与空中松开回归已写，待 Unity 运行验证 |
 | MIN-AUD-01 | 原版投掷/arm 无专用声音；只有 warn 的 `mine_beep` 与爆炸 `pop` | `Mine.as`；symbol 1024 无 StartSound | Mine 跳过通用 launch `click` | 已实现；待 Unity 运行验证 |
 

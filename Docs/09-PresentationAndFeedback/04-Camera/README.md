@@ -12,6 +12,14 @@
 
 ## 行为规格
 
+### 蓄力期间桌面边缘滚屏（2026-09-29）
+
+实现前规格 `CAM-AIM-EDGE-01`：玩家用鼠标蓄力跳跃或可投掷武器时，鼠标进入四边热区或窗口内黑边仍可通过生产边缘滚屏移动画布、显示方向箭头；回到中央停止滚屏输入。保持蓄力、轨迹、库存与资格，只有正式松手才提交跳跃/武器。鼠标蓄力不自动回角色；原有 speech/空投/武器分支在鼠标蓄力结束后恢复。手柄蓄力保留右摇杆策略；移动端不新增悬停滚屏或箭头，已有多指适配不变。过场、前端、AI、行动菜单及显式 `excamera` 击退接管仍沿用原资格。
+
+原版静态依据：`TileSystem.as::advanceScrolling:420-493` 只在 `Controller.dragging` 时早退，并未检查 `Controller.twanging`。跳跃/普通投掷属于 Twang，当前 Unity 错把统一 `IsAiming` 当成 dragging 的禁止滚屏门；本条修复恢复其区别，不改变大炮炮身拖动等专门操作。补核 `Cannon.as::advance:91-161`：拉栓只设 `draggingPin`，不会设 `Controller.dragging`，所以拉栓蓄力也应允许边缘滚屏；只有实际炮身拖动继续锁镜。证据均为 `Artifacts/ReverseEngineering/Swf/deobfuscated/scripts/__Packages/com/nitrome/throwgame/` 下 AS2。Unity 入口为 `AdvanceCamera → AdvanceEdgeScrolling`，回归须经生产选中、蓄力、Input System 鼠标设备、实际镜头推进和松手提交检查，而非只测试方向计算。
+
+2026-09-29 已实现及实际结果：Unity 6000.6.0f1 隔离工程 `Validate Scroll Arrows Play Mode` 113/113 通过（本规则新增 102、既有箭头/黑边/安卓绘制门/前端光标 11）；`Validate Camera Movement` 11/11 复跑通过。滚屏使用实际显示帧的 deltaTime，速度/加速度公式不变；蓄力期间不自动回移，松手后恢复行动跟随。主工程 PIE 的鼠标持续拖动、系统光标与 Android/实物手柄仍待目视验收。本次只修复蓄力滚屏资格，不宣称全部镜头优先级与 Flash 一致；保留既有 Unity 蓄力自动平移抑制和用户授权的黑边/高刷新率/`excamera` 策略。
+
 ### 可选爆炸击退镜头（2026-09-27，原版无此行为）
 
 原版来源：不适用，用户明确授权扩展。实现前规格：

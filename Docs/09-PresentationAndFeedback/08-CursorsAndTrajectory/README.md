@@ -12,6 +12,15 @@
 
 ## 行为规格
 
+### 蓄力对象移动时的实时轨迹（2026-09-29）
+
+| ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
+| --- | --- | --- | --- | --- | --- |
+| AIM-MOVE-01 | Throw Self 蓄力中被 Mine 非致命炸飞，不取消蓄力；鼠标不动时拉线与虚线轨迹仍随当前角色移动，并按当前对象位置到指针重新预测 | `Character.as::advance:166-178` 先运动和 update，再 drawTwangLine；`Solid.as::drawTwangLine:76-124` 每次读取 this.x/y、在 mcHolder 原点绘制 | `MutinyPlayerInput.AdvanceAimPointer/LateUpdate`、`MutinyTrajectoryRenderer.ShowTrajectory` | 真实 Mine 倒计时与爆炸后持续按住同一指针位置，跨多个物理 tick/显示帧检查角色、拉线和首条虚线同源起点，不能留在初始位置 | 静态确认；已实现；真实 Mine 后逐帧跟随/方向两条通过；冻结起点时两条均失败；主工程画面待验收 |
+| AIM-MOVE-02 | 空中松手使用松手当时对象位置计算方向、力度和最小拉距；不从初始缓存起点发射。普通投掷武器读取武器自己的实时位置；手柄保持已设置方向/力度，随对象移动重建端点 | `Solid.as::twang:60-74`、`Weapon.as::advance:60-80`；手柄为既有授权扩展 | `ResolveAimRelease`、`GetReadyActionOrigin`、`ProcessControllerFrame` | 实际 Mine 炸飞后松手，断言生产 Twang 初速与当前起点同源；小于最小拉距取消；复跑死亡/取消专项 | 静态确认；已实现；空中短拉距/实际初速两条通过；组合 49/49、取消 32/32、镜头 11/11；主工程/真机待验收 |
+
+Unity 显示层适配：角色按 25 Hz 权威状态计算预览初速和实际发射，但轨迹绘制根部采用同一 PhysicsBody 的插值显示位置，避免预览领先于可见角色。插值只影响画面，不修改速度、重力、伤害或蓄力资格。完整主工程与硬件验收另计。
+
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 当前结果 |
 | --- | --- | --- | --- | --- |
 | CUR-BOX-01 | Wooden Crate、Gunpowder Barrel 待放置期间隐藏系统鼠标并显示对应原版武器图标；落点非法时两者统一显示原版 `cross` | `TileSystem.as::advance`；DefineSprite 1813 labels `woodenCrate`、`gunpowderBarrel`、`cross` | `MutinyPlayerInput.UpdateSpecialWeaponCursor()`、`MutinySpecialWeaponCursor` | 已实现；待 Unity 运行验证 |

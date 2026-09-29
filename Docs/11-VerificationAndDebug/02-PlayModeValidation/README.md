@@ -2,6 +2,10 @@
 
 [返回上级模块](../README.md)
 
+- [蓄力角色被炸飞时的实时轨迹（2026-09-29）](AIM_MOVING_ORIGIN_20260929.md)：真实 Mine/物理与逐显示帧观察，新增实时起点、方向、短拉距取消及空中初速回归。
+
+- [蓄力角色被地雷炸死的回合结算（2026-09-29）](SELECTED_DEATH_SETTLEMENT_20260929.md)：隔离 Play Mode 死亡专项 45/45、蓄力覆盖层/取消 32/32、镜头 11/11；旧前置门的缺陷检出验证与实机待验收边界分别记录。
+
 ## 职责
 
 记录 Unity 中实际操作、画面、声音和状态结果。
@@ -11,6 +15,10 @@
 未运行的步骤不得标记通过。
 
 ## 本轮记录
+
+- 2026-09-29：蓄力边缘滚屏 `CAM-AIM-EDGE-01` 在隔离 Unity 6000.6.0f1 `Validate Scroll Arrows Play Mode` 113/113 通过，既有 `Validate Camera Movement` 11/11 通过。实际鼠标设备事件驱动跳跃/Cherry Bomb 四方向 × 25/60/120 FPS 等效帧时长的蓄力、滚屏、返回中央、正式松手及跟随恢复；大炮拉栓允许滚屏、炮身拖动保持锁镜。隔离工程临时恢复旧锁镜门后检出 25 个失败，未修改主工程或断言。见 [验收摘要与日志来源](Artifacts/CAM-AIM-EDGE-20260929.txt)；原版静态依据及既有授权差异见 [镜头模块](../../09-PresentationAndFeedback/04-Camera/README.md)。主工程 PIE 与 Android/实物手柄目视验收未运行。
+
+- 2026-09-29：锚下落高刷新率 `ANC-PRES-01/02` 在上述隔离工程 `Validate Anchor Animation Play Mode` 60/60 通过（新增显示规则 51 + 既有触地动画 9）。生产玩家点击/AI 执行分别验证 25/60/120 FPS 插值、AI 20 tick 等待、触地一次伤害、立即吸附及原版收尾，不提高物理或撞击时间轴频率。此项为用户授权显示扩展；主工程 PIE 与 Android 真机画面未运行，见 [锚模块](../../06-WeaponsAndEffects/19-Anchor/README.md)。
 
 - 2026-09-27：用户授权的可选 `excamera` 运镜在隔离 Unity 6000.6.0f1 `Validate Explosion Camera Play Mode` 29/29 通过，默认关闭时既有 `Validate Camera Movement` 11/11 复跑通过。正式 GM 解析及真实爆炸/物理/镜头入口验证最近单角色、同帧汇总、不接力、连锁锁定、新批次、60/120 FPS 显示同源、空投/武器竞争和释放边界；规格与剩余项见 [EXT-EXCAM-01..04](../../09-PresentationAndFeedback/04-Camera/README.md)。没有 Flash 原版对应；主工程完整对局与 Android 真机待验收。
 

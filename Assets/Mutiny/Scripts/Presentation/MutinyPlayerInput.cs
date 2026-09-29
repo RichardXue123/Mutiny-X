@@ -85,6 +85,8 @@ namespace Mutiny.Presentation
         }
 
         private Vector3 m_AimOrigin;
+        private Vector3 m_LastAimPointerWorld;
+        private bool m_HasAimPreview;
         private bool m_ControllerAiming;
         private bool m_ControllerTriggerMustRelease = true;
         // Pixel-space drag direction. Solid.twang launches opposite the drag endpoint.
@@ -162,6 +164,11 @@ namespace Mutiny.Presentation
 
         private void Update()
         {
+            // Death is terminal, not a player cancellation. Run before popup,
+            // phase and device gates so a held mouse/touch/pad cannot retain aim.
+            // Keep Team.SelectedCharacter for the manager's settlement decision.
+            bool selectedCharacterDied = ReleaseInputForSelectedCharacterDeath();
+
             // popup is above the game root in the Flash timeline. While it is
             // visible (including the four-tick fade) its buttons consume mouse
             // input; character selection and aiming must not see the same click.
@@ -199,6 +206,11 @@ namespace Mutiny.Presentation
                     HideTrajectory();
                 return;
             }
+
+            // Modal speech/quit controls above remain available after death,
+            // including Android's touch-to-advance ending speech.
+            if (selectedCharacterDied)
+                return;
 
             if (!CanProcessCurrentTurnInput())
             {
@@ -412,12 +424,27 @@ namespace Mutiny.Presentation
             AdvanceAimPointer(selectedCharacter, mouseWorld, pointer.IsPressed, pointer.ReleasedThisFrame);
         }
 
+        private void LateUpdate()
+        {
+            if (!m_HasAimPreview || InteractionState != MutinyPlayerInteractionState.Aiming ||
+                !CanProcessCurrentTurnInput())
+                return;
+
+            MutinyCharacter character = GetHumanSelectedCharacter();
+            if (character == null || !character.IsAlive)
+                return;
+            // Physics Update may run after input Update. Redraw from its final
+            // state and the body's shared display sample, even without pointer motion.
+            RefreshAimOrigin(character);
+            ShowTrajectory(IsControllerAiming ? GetControllerAimEndpoint() : m_LastAimPointerWorld);
+        }
+
         // Banana.advanceMotion checks Controller.tileSystem.mouseButtonDown after
         // Weapon.fire has spent CanShoot. Its next click therefore must remain
         // routable while this team is in ActionExecuting, unlike ordinary input.
         private bool CanProcessCurrentTurnInput()
         {
-            if (TurnManager == null)
+            if (TurnManager == null || TurnManager.HasSelectedCharacterDied)
                 return false;
 
             bool placingBoxWeapon = HasPendingBoxPlacement();
@@ -1068,10 +1095,8 @@ namespace Mutiny.Presentation
                 }
                 return;
             }
-            Vector2 origin = MutinyPhysics.UnityToPixel(m_AimOrigin);
-            float force = MutinyWeaponFactory.GetTwangMaxForce(ActiveWeapon) * ControllerPower;
-            Vector2 endpoint = origin + m_ControllerPullDirection * (force * 4f);
-            Vector3 worldEndpoint = MutinyPhysics.PixelToUnity(endpoint.x, endpoint.y);
+            RefreshAimOrigin(character);
+            Vector3 worldEndpoint = GetControllerAimEndpoint();
             ShowTrajectory(worldEndpoint);
             if (frame.Confirm)
             {
@@ -1290,6 +1315,30 @@ namespace Mutiny.Presentation
             m_WasTurnActive = false;
         }
 
+        private bool ReleaseInputForSelectedCharacterDeath()
+        {
+            if (TurnManager == null || !TurnManager.HasSelectedCharacterDied)
+                return false;
+
+            bool hadPendingInput = IsAiming || ActiveWeapon != null || m_EquippedWeapon != null;
+            if (m_ArmedCannon != null && !m_ArmedCannon.IsFirePending && !m_ArmedCannon.IsFired)
+                m_ArmedCannon.CancelPointer();
+            ResetControllerAction();
+            ResetControllerCharacterFocus();
+            ResetMobileGestureOwnership();
+            HideTrajectory();
+            ClearEquippedWeapon(); // Retains fired/pending-committed effects.
+            ClearSpecialWeaponCursor();
+            ClearHoveredCharacter();
+            ActiveWeapon = null;
+            InteractionState = MutinyPlayerInteractionState.CharacterSelection;
+            m_WasTurnActive = false;
+            if (hadPendingInput)
+                MutinyDebugLog.Info("Input",
+                    $"released input for selected dead character={TurnManager.CurrentTeam.SelectedCharacter.name}; waiting for settlement", this);
+            return true;
+        }
+
         public bool ShouldShowCancelWeapon(MutinyCharacter character)
         {
             MutinyCharacter selected = GetHumanSelectedCharacter();
@@ -1365,6 +1414,7 @@ namespace Mutiny.Presentation
             if (InteractionState != MutinyPlayerInteractionState.Aiming)
                 return;
 
+            RefreshAimOrigin(character);
             // MouseUp/Ended only resolves the aim; the cross owns onPress, not release.
             if (PixelDistance(pointerWorld, m_AimOrigin) >= MinDragDistancePixels)
             {
@@ -1780,9 +1830,18 @@ namespace Mutiny.Presentation
             if (m_CachedTerrain == null)
                 CacheTerrain();
 
-            if (TrajectoryRenderer == null || m_CachedTerrain == null)
+            // Original Solid prediction is unconstrained; no terrain is needed.
+            if (TrajectoryRenderer == null)
                 return;
 
+            MutinyCharacter character = GetHumanSelectedCharacter();
+            RefreshAimOrigin(character);
+            m_LastAimPointerWorld = mouseWorld;
+            m_HasAimPreview = true;
+            MutinyPhysicsBody body = !string.IsNullOrEmpty(ActiveWeapon) && EquippedWeapon != null
+                ? EquippedWeapon.PhysicsBody : character != null ? character.PhysicsBody : null;
+            Vector2 displayOrigin = MutinyPhysics.UnityToPixel(
+                body != null ? body.PresentationPosition : m_AimOrigin);
             Vector2 startPixels = MutinyPhysics.UnityToPixel(m_AimOrigin);
             Vector2 dragPixels = MutinyPhysics.UnityToPixel(mouseWorld);
             TrajectoryRenderer.ShowTrajectory(
@@ -1793,7 +1852,24 @@ namespace Mutiny.Presentation
                 m_GridHeight,
                 MutinyWeaponFactory.GetTwangMaxForce(ActiveWeapon),
                 MutinyWeaponFactory.GetPredictionWeight(ActiveWeapon),
-                ActiveWeapon);
+                ActiveWeapon,
+                displayOrigin);
+        }
+
+        private void RefreshAimOrigin(MutinyCharacter character)
+        {
+            // Solid.drawTwangLine and Solid.twang both read this.x/y, never the
+            // coordinates cached by the initial press. A mine may move the actor.
+            if (InteractionState == MutinyPlayerInteractionState.Aiming && character != null && character.IsAlive)
+                m_AimOrigin = GetReadyActionOrigin(character);
+        }
+
+        private Vector3 GetControllerAimEndpoint()
+        {
+            Vector2 origin = MutinyPhysics.UnityToPixel(m_AimOrigin);
+            float force = MutinyWeaponFactory.GetTwangMaxForce(ActiveWeapon) * ControllerPower;
+            Vector2 endpoint = origin + m_ControllerPullDirection * (force * 4f);
+            return MutinyPhysics.PixelToUnity(endpoint.x, endpoint.y);
         }
 
         private void Launch(MutinyCharacter character, Vector3 releaseWorldPosition)
@@ -1933,6 +2009,7 @@ namespace Mutiny.Presentation
 
         private void HideTrajectory()
         {
+            m_HasAimPreview = false;
             if (TrajectoryRenderer != null)
                 TrajectoryRenderer.HideTrajectory();
         }
@@ -1945,6 +2022,8 @@ namespace Mutiny.Presentation
                 return MutinyPhysics.PixelToUnity(
                     equipped.PhysicsBody.State.X, equipped.PhysicsBody.State.Y);
             }
+            if (character != null && character.PhysicsBody != null)
+                return MutinyPhysics.PixelToUnity(character.PhysicsBody.State.X, character.PhysicsBody.State.Y);
             return character != null ? character.transform.position : Vector3.zero;
         }
 

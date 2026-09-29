@@ -10,6 +10,16 @@
 
 输入层不直接修改战斗状态。
 
+## 选中角色死亡时的输入保护（2026-09-29）
+
+`TURN-DEATH-INPUT-01`：死亡时先释放蓄力、轨迹、未提交武器与桌面/触屏/手柄手势，再拒绝本回合玩法操作；保留队伍的死者引用供回合管理器正常结算。不能把死亡变成普通取消后换同队角色，旧松手也不能投掷死者。已发射或已提交的效果继续结算，未发射武器不消耗库存。speech/退出弹窗仍能响应，包括 Android 的对白触摸推进。
+
+来源：用户确认的 Unity 输入保护方案；AS2 静态依据只确认死亡无需等待 Twang 提交即可结束回合，不宣称原版 `Mine` 会主动清除拉线。存活炸飞仍保持 `MIN-AIM-01`。规格、生产入口和实际测试状态见 [TURN-DEATH-01..03](../../03-TurnAndActions/04-ActionSettlement/README.md)。隔离 Unity Play Mode 专项实际 45/45，另复跑覆盖层/取消 32/32；Android/手柄真机、胜负对白触摸仍待验收。
+
+## 蓄力中被动移动的轨迹
+
+遵循 [AIM-MOVE-01/02](../../09-PresentationAndFeedback/08-CursorsAndTrajectory/README.md)：保持原有手势，以角色或武器的实时起点重画；松手从当前权威位置计算方向、力度及最小拉距。鼠标/触屏端保持指针端点，手柄端保持既有方向/累计力度并重建端点。实际 Mine 与死亡组合 49/49、取消 32/32、镜头 11/11；设备真机仍待验收。
+
 ## Android 授权适配规格
 
 手柄扩展另见 [玩家操作手册](CONTROLLER_MANUAL.md)、[基础规格](CONTROLLER_SUPPORT.md)、[特殊武器规格](CONTROLLER_SPECIAL_WEAPONS.md)、[双扳机力度规格](CONTROLLER_TRIGGER_POWER.md)和[大炮手柄规格](CONTROLLER_CANNON.md)，分支为 `feature/controller_support`。

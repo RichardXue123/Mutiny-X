@@ -52,6 +52,10 @@ namespace Mutiny.Simulation
 
         public bool ActionCommittedThisTurn => m_ActionCommittedThisTurn;
         public bool IsAiTakeoverActive => m_AiTakeoverTeam != null;
+        // A selected actor's death ends this turn even before Twang/Fire commits.
+        // Null selection is different: it is the normal beginning of a turn.
+        public bool HasSelectedCharacterDied => CurrentTeam != null &&
+            CurrentTeam.SelectedCharacter != null && !CurrentTeam.SelectedCharacter.IsAlive;
 
         // GM-08: temporarily hand the current human turn to the normal AI.
         // Do not StartTurn/ResetTurnActions: a player jump may already be committed.
@@ -232,6 +236,15 @@ namespace Mutiny.Simulation
 
         public void AdvanceSimulationTick()
         {
+            if (HasSelectedCharacterDied && CurrentPhase != TurnPhase.NotStarted &&
+                CurrentPhase != TurnPhase.GameOver && CurrentPhase != TurnPhase.Settling)
+            {
+                CurrentPhase = TurnPhase.Settling;
+                InactivityTicks = 0;
+                MutinyDebugLog.Info("Turn",
+                    $"selected character died; settling team={TeamLabel(CurrentTeam)} selected={CharacterLabel(CurrentTeam.SelectedCharacter)} committed={m_ActionCommittedThisTurn}", this);
+            }
+
             bool allAtRest = CheckAllBodiesAtRest(out string restBlocker);
 
             if (allAtRest)
@@ -269,7 +282,7 @@ namespace Mutiny.Simulation
                 }
 
                 InactivityTicks = 0;
-                if (m_ActionCommittedThisTurn)
+                if (m_ActionCommittedThisTurn && !HasSelectedCharacterDied)
                     CurrentPhase = TurnPhase.ActionExecuting;
             }
         }
@@ -474,9 +487,10 @@ namespace Mutiny.Simulation
             }
 
             // Merely having no selected character is the normal state at the start of
-            // an original Mutiny turn. A turn may only finish after an action (or an
-            // explicit pass) has actually been committed.
-            if (!m_ActionCommittedThisTurn)
+            // an original Mutiny turn. A live actor must commit an action/pass,
+            // but Team.isTurnComplete also ends a selected dead actor's turn.
+            // Do not require the user to release an aim after a lethal mine hit.
+            if (!m_ActionCommittedThisTurn && !HasSelectedCharacterDied)
             {
                 bool resumedFromWait = CurrentPhase != TurnPhase.TurnActive;
                 CurrentPhase = TurnPhase.TurnActive;

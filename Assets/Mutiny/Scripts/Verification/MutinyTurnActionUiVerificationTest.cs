@@ -62,6 +62,8 @@ namespace Mutiny.Verification
             VerifyFrontendFlow(result);
             VerifyAndroidAdaptation(result);
             VerifyScrollArrows(result);
+            VerifyAimingEdgeScrolling(result);
+            VerifyCannonAimEdgeScrolling(result);
             VerifyBattleHud(result);
             VerifyCornerLevelControls(result);
             VerifyMutedMusicToggleStartsRequestedTrack(result);
@@ -253,6 +255,8 @@ namespace Mutiny.Verification
         {
             var result = new MutinyLevel1VerificationResult();
             VerifyScrollArrows(result);
+            VerifyAimingEdgeScrolling(result);
+            VerifyCannonAimEdgeScrolling(result);
             return result;
         }
 
@@ -758,6 +762,238 @@ namespace Mutiny.Verification
                 DestroyNow(cameraObject);
                 DestroyNow(levelObject);
                 Cursor.visible = previousCursorVisible;
+            }
+        }
+
+        private static void VerifyAimingEdgeScrolling(MutinyLevel1VerificationResult result)
+        {
+            Vector2[] directions = { Vector2.right, Vector2.left, Vector2.up, Vector2.down };
+            int[] frameRates = { 25, 60, 120 };
+            bool previousCursorVisible = Cursor.visible;
+            Mouse previousMouse = Mouse.current;
+            foreach (int frameRate in frameRates)
+            foreach (bool jump in new[] { true, false })
+            foreach (Vector2 direction in directions)
+            {
+                var objects = new List<GameObject>();
+                TextAsset levelXml = null;
+                Mouse mouse = null;
+                try
+                {
+                    var rootObject = new GameObject("AimEdgeVerification_Level");
+                    objects.Add(rootObject);
+                    MutinyLevelRoot root = rootObject.AddComponent<MutinyLevelRoot>();
+                    root.Width = 100;
+                    root.Height = 100;
+                    root.WaterLevelY = -80f;
+                    var levelController = rootObject.AddComponent<MutinyLevelController>();
+                    levelXml = new TextAsset("<level width=\"1\" height=\"1\" players=\"1\"><row>-</row><bgRow>-</bgRow></level>");
+                    levelController.LevelXml = levelXml;
+                    var turn = rootObject.AddComponent<MutinyTurnManager>();
+                    var input = rootObject.AddComponent<MutinyPlayerInput>();
+                    var trajectoryObject = new GameObject("AimEdgeVerification_Trajectory");
+                    trajectoryObject.transform.SetParent(rootObject.transform, false);
+                    input.TrajectoryRenderer = trajectoryObject.AddComponent<MutinyTrajectoryRenderer>();
+                    LineRenderer pullLine = trajectoryObject.GetComponent<LineRenderer>();
+                    input.CacheTerrain();
+
+                    var teamObject = new GameObject("AimEdgeVerification_Red");
+                    objects.Add(teamObject);
+                    var team = teamObject.AddComponent<MutinyTeam>();
+                    team.TeamNumber = 1;
+                    var enemyTeamObject = new GameObject("AimEdgeVerification_Blue");
+                    objects.Add(enemyTeamObject);
+                    var enemyTeam = enemyTeamObject.AddComponent<MutinyTeam>();
+                    enemyTeam.TeamNumber = 2;
+                    enemyTeam.IsAiControlled = true;
+                    var characterObject = new GameObject("AimEdgeVerification_Character");
+                    objects.Add(characterObject);
+                    var character = characterObject.AddComponent<MutinyCharacter>();
+                    character.PhysicsBody.State = PhysicsBodyState.CreateDefault(1000f, 1000f);
+                    character.transform.position = MutinyPhysics.PixelToUnity(1000f, 1000f);
+                    team.RegisterCharacter(character);
+                    var enemyObject = new GameObject("AimEdgeVerification_Enemy");
+                    objects.Add(enemyObject);
+                    enemyTeam.RegisterCharacter(enemyObject.AddComponent<MutinyCharacter>());
+                    turn.Initialize(team, enemyTeam);
+                    input.TurnManager = turn;
+
+                    var cameraObject = new GameObject("AimEdgeVerification_Camera");
+                    objects.Add(cameraObject);
+                    var gameCamera = cameraObject.AddComponent<Camera>();
+                    gameCamera.orthographic = true;
+                    gameCamera.orthographicSize = 200f / MutinyPhysics.PixelsPerUnit;
+                    var camera = cameraObject.AddComponent<MutinyCameraController>();
+                    camera.ResetForLevel(root);
+                    input.GameCamera = gameCamera;
+                    cameraObject.transform.position = character.transform.position + new Vector3(0f, 0f, -10f);
+                    character.AddWeapon("cherryBomb");
+                    int ammunition = character.GetAmmunition("cherryBomb");
+                    bool selected = input.TrySelectCharacterForVerification(team, new Vector2(1000f, 1000f));
+                    bool ready = jump ? input.SelectCharacterThrow() : input.SelectWeapon("cherryBomb");
+                    MutinyWeapon weapon = input.EquippedWeapon;
+                    if (weapon != null)
+                        objects.Add(weapon.gameObject);
+                    Vector3 originWorld = jump ? character.transform.position : weapon.transform.position;
+                    bool began = input.TryBeginAimFromPrimaryPointerForVerification(
+                        character, MutinyPhysics.UnityToPixel(originWorld));
+                    string label = $"CAM-AIM-EDGE-01 {(jump ? "jump" : "cherryBomb")} {direction} {frameRate} FPS";
+                    result.Assert(selected && ready && began && input.IsAiming &&
+                                  turn.CurrentPhase == TurnPhase.TurnActive,
+                        label + " enters charge via production selection and pointer begin");
+
+                    mouse = InputSystem.AddDevice<Mouse>();
+                    mouse.MakeCurrent();
+                    Vector2 centre = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+                    Vector2 edge = centre;
+                    if (direction.x != 0f) edge.x = direction.x > 0f ? Screen.width - 1f : 1f;
+                    if (direction.y != 0f) edge.y = direction.y > 0f ? Screen.height - 1f : 1f;
+                    InputSystem.QueueStateEvent(mouse, new MouseState { position = edge }.WithButton(MouseButton.Left));
+                    InputSystem.Update();
+                    Vector3 before = cameraObject.transform.position;
+                    float deltaTime = 1f / frameRate;
+                    bool continuous = true;
+                    for (int frame = 0; frame < Mathf.CeilToInt(frameRate * 0.4f); frame++)
+                    {
+                        Vector3 pointerWorld = gameCamera.ScreenToWorldPoint(new Vector3(edge.x, edge.y, 10f));
+                        input.AdvanceAimPointerForVerification(character, MutinyPhysics.UnityToPixel(pointerWorld),
+                            mouse.leftButton.isPressed, false);
+                        Vector3 last = cameraObject.transform.position;
+                        camera.AdvanceCameraForVerification(deltaTime);
+                        continuous &= Vector2.Dot((Vector2)(cameraObject.transform.position - last), direction) > 0f;
+                    }
+                    result.Assert(continuous && Vector2.Dot((Vector2)(cameraObject.transform.position - before), direction) > 0f &&
+                                  camera.DesktopScrollDirectionForVerification == direction && camera.IsDesktopScrollArrowVisible &&
+                                  input.IsAiming && pullLine.enabled && pullLine.positionCount == 2 &&
+                                  Vector3.Distance(pullLine.GetPosition(0), originWorld) < 0.001f &&
+                                  character.CanThrow && character.CanShoot && !character.IsSelfThrown &&
+                                  character.GetAmmunition("cherryBomb") == ammunition && (jump || !weapon.IsFired) &&
+                                  turn.CurrentPhase == TurnPhase.TurnActive,
+                        label + " scrolls every display frame with arrow while retaining charge, origin, trajectory and inventory" +
+                        $" [continuous={continuous}, delta={cameraObject.transform.position - before}, direction={camera.DesktopScrollDirectionForVerification}, " +
+                        $"screen={Screen.width}x{Screen.height}, pointer={mouse.position.ReadValue()}, viewport={gameCamera.pixelRect}, held={mouse.leftButton.isPressed}, " +
+                        $"aim={input.IsAiming}, line={pullLine.enabled}, origin={(pullLine.positionCount > 0 ? pullLine.GetPosition(0) : Vector3.zero)}]");
+
+                    InputSystem.QueueStateEvent(mouse, new MouseState { position = centre }.WithButton(MouseButton.Left));
+                    InputSystem.Update();
+                    for (int frame = 0; frame < frameRate; frame++)
+                        camera.AdvanceCameraForVerification(deltaTime);
+                    Vector3 stopped = cameraObject.transform.position;
+                    camera.AdvanceCameraForVerification(deltaTime);
+                    result.Assert(input.IsAiming && mouse.leftButton.isPressed &&
+                                  camera.DesktopScrollDirectionForVerification == Vector2.zero && !camera.IsDesktopScrollArrowVisible &&
+                                  Vector3.Distance(cameraObject.transform.position, stopped) < 0.00001f,
+                        label + " centre clears arrow and stops manual inertia without auto-snapping during charge" +
+                        $" [direction={camera.DesktopScrollDirectionForVerification}, held={mouse.leftButton.isPressed}, delta={cameraObject.transform.position - stopped}]");
+
+                    bool heldBeforeRelease = mouse.leftButton.isPressed;
+                    InputSystem.QueueStateEvent(mouse, new MouseState { position = edge });
+                    InputSystem.Update();
+                    Vector3 releaseWorld = gameCamera.ScreenToWorldPoint(new Vector3(edge.x, edge.y, 10f));
+                    // This synchronous fixture can run before the first runtime
+                    // Input System update. Sample the actual queued button transition
+                    // instead of its frame-counter dependent wasReleasedThisFrame.
+                    input.AdvanceAimPointerForVerification(character, MutinyPhysics.UnityToPixel(releaseWorld),
+                        mouse.leftButton.isPressed, heldBeforeRelease && !mouse.leftButton.isPressed);
+                    bool committed = jump
+                        ? character.IsSelfThrown && !character.CanThrow && character.GetAmmunition("cherryBomb") == ammunition
+                        : weapon.IsFired && input.EquippedWeapon == null && character.GetAmmunition("cherryBomb") == ammunition - 1;
+                    result.Assert(committed && !input.IsAiming && !pullLine.enabled &&
+                                  turn.CurrentPhase == TurnPhase.ActionExecuting &&
+                                  camera.FindActionTargetForVerification() == (jump ? character.transform : weapon.transform),
+                        label + " production release commits once and restores action tracking" +
+                        $" [held={mouse.leftButton.isPressed}, committed={committed}, " +
+                        $"aim={input.IsAiming}, phase={turn.CurrentPhase}, target={camera.FindActionTargetForVerification()}]");
+                }
+                finally
+                {
+                    if (mouse != null) InputSystem.RemoveDevice(mouse);
+                    for (int i = objects.Count - 1; i >= 0; i--) DestroyNow(objects[i]);
+                    if (levelXml != null) Object.DestroyImmediate(levelXml);
+                    if (previousMouse != null && previousMouse.added) previousMouse.MakeCurrent();
+                    Cursor.visible = previousCursorVisible;
+                }
+            }
+            if (previousMouse != null && previousMouse.added) previousMouse.MakeCurrent();
+            Cursor.visible = previousCursorVisible;
+        }
+
+        private static void VerifyCannonAimEdgeScrolling(MutinyLevel1VerificationResult result)
+        {
+            foreach (bool pin in new[] { true, false })
+            {
+                var objects = new List<GameObject>();
+                Mouse previousMouse = Mouse.current;
+                Mouse mouse = null;
+                try
+                {
+                    var rootObject = new GameObject("CannonAimEdge_Level");
+                    objects.Add(rootObject);
+                    var root = rootObject.AddComponent<MutinyLevelRoot>();
+                    root.Width = root.Height = 100;
+                    root.WaterLevelY = -80f;
+                    var turn = rootObject.AddComponent<MutinyTurnManager>();
+                    var input = rootObject.AddComponent<MutinyPlayerInput>();
+                    input.TurnManager = turn;
+                    var teamObject = new GameObject("CannonAimEdge_Team");
+                    objects.Add(teamObject);
+                    var team = teamObject.AddComponent<MutinyTeam>();
+                    team.TeamNumber = 1;
+                    var characterObject = new GameObject("CannonAimEdge_Character");
+                    objects.Add(characterObject);
+                    var character = characterObject.AddComponent<MutinyCharacter>();
+                    character.PhysicsBody.State = PhysicsBodyState.CreateDefault(1000f, 1000f);
+                    character.transform.position = MutinyPhysics.PixelToUnity(1000f, 1000f);
+                    team.RegisterCharacter(character);
+                    team.SelectCharacter(character);
+                    turn.CurrentTeam = team;
+                    turn.CurrentPhase = TurnPhase.TurnActive;
+                    character.AddWeapon("cannon");
+                    var cameraObject = new GameObject("CannonAimEdge_Camera");
+                    objects.Add(cameraObject);
+                    var gameCamera = cameraObject.AddComponent<Camera>();
+                    var camera = cameraObject.AddComponent<MutinyCameraController>();
+                    camera.ResetForLevel(root);
+                    input.GameCamera = gameCamera;
+                    cameraObject.transform.position = character.transform.position + new Vector3(0f, 0f, -10f);
+                    bool selected = input.SelectWeapon("cannon");
+                    MutinyCannon cannon = input.ArmedCannon;
+                    objects.Add(cannon.gameObject);
+                    Vector2 cannonPosition = new Vector2(cannon.PhysicsBody.State.X, cannon.PhysicsBody.State.Y);
+                    bool began = pin
+                        ? cannon.TryBeginPinDrag(cannonPosition + new Vector2(cannon.PinX, 0f))
+                        : cannon.TryBeginBodyDrag(cannonPosition);
+                    result.Assert(selected && began && input.IsAiming &&
+                                  input.InteractionState == MutinyPlayerInteractionState.WeaponReady,
+                        "CAM-AIM-EDGE-01 cannon starts production " + (pin ? "pin aim" : "body drag") + " without generic Aiming state");
+                    mouse = InputSystem.AddDevice<Mouse>();
+                    mouse.MakeCurrent();
+                    InputSystem.QueueStateEvent(mouse, new MouseState {
+                        position = new Vector2(Screen.width - 1f, Screen.height * 0.5f)
+                    }.WithButton(MouseButton.Left));
+                    InputSystem.Update();
+                    Vector3 before = cameraObject.transform.position;
+                    for (int frame = 0; frame < 24; frame++)
+                        camera.AdvanceCameraForVerification(1f / 60f);
+                    bool correctPan = pin
+                        ? cameraObject.transform.position.x > before.x && camera.DesktopScrollDirectionForVerification == Vector2.right && camera.IsDesktopScrollArrowVisible
+                        : cameraObject.transform.position == before && camera.DesktopScrollDirectionForVerification == Vector2.zero && !camera.IsDesktopScrollArrowVisible;
+                    result.Assert(correctPan && input.IsAiming && !cannon.IsFired && !cannon.IsFirePending &&
+                                  character.CanThrow && character.CanShoot && turn.CurrentPhase == TurnPhase.TurnActive,
+                        "CAM-AIM-EDGE-01 cannon pin permits edge pan; physical body drag retains original camera lock");
+                    if (pin) cannon.DragPinTo(cannonPosition + new Vector2(-50f, 0f));
+                    bool committed = cannon.ReleasePointer(turn);
+                    result.Assert(!input.IsAiming && (pin
+                        ? committed && cannon.IsFirePending && turn.CurrentPhase == TurnPhase.ActionExecuting
+                        : !committed && !cannon.IsFirePending && turn.CurrentPhase == TurnPhase.TurnActive),
+                        "CAM-AIM-EDGE-01 cannon ends pin/body operation through production release without premature shot");
+                }
+                finally
+                {
+                    if (mouse != null) InputSystem.RemoveDevice(mouse);
+                    if (previousMouse != null && previousMouse.added) previousMouse.MakeCurrent();
+                    for (int i = objects.Count - 1; i >= 0; i--) DestroyNow(objects[i]);
+                }
             }
         }
 
