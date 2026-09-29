@@ -104,3 +104,11 @@
 - **实际构建通过**：生产发布入口在独立 worktree 执行 Unity 6000.6.0f1，Android、Windows 报告均成功，BuildPipeline 用时分别为 `279.892`、`84.810` 秒。Inno Setup 编译成功，用时 `24.781` 秒；安装包 ProductVersion 为 `1.0.5`。APK 实测包名 `com.RichardXue.MutinyX`、versionName `1.0.5`、versionCode `9`、ARM64、minSdk 26、targetSdk 36。Windows ZIP 223 条，禁止发布的调试/备份条目为 0。
 - **实际发布通过**：首次读取 GitHub API 遇到 `unexpected EOF` 后，使用生产 `-Resume` 校验并复用完整 manifest，无重新构建。四个资产上传、大小与 SHA256 核验后正式发布；Release ID `397719200`，发布时间 `2026-09-27T16:21:50Z`，`draft=false`、`prerelease=false`，源码提交与 tag 一致。临时源码目录已清理。[正式 Release](https://github.com/RichardXue123/Mutiny-X/releases/tag/v1.0.5)。摘要证据：[LOCAL-RELEASE-V1.0.5-20260928.json](Artifacts/LOCAL-RELEASE-V1.0.5-20260928.json)。
 - **待运行验证 / 已知差异**：仅发布 Windows ZIP、Setup EXE、Android APK 和 SHA256，不发布 iOS。本轮未执行 Windows 安装/卸载、Android 真机运行及完整游戏目视验收；发布流程没有修改原版玩法规格。
+
+### v1.0.6 增强 AI 与地雷修复发布（2026-09-30）
+
+- **静态确认**：发布前 main 工作区干净，源码已包含 `aienhance 1/0` GM 开关、增强效果模拟和地雷相关修复。GM-14 为用户授权的 Unity 扩展；既有增强专项证据记录 490/490、异步 54/54。此次没有重跑专项测试，也不把旧结果作为本次构建后的游戏运行验收。
+- **已实现**：版本 `1.0.6`、Android 构建号 `10` 和两条润色后的说明提交到 `1530a494c17d0837d8f41ab1d7c78920fac2ac3d`。注解 tag `v1.0.6` 对象为 `77d9bc6ab43912c4ba1dbe74bb3c6f505d5b9817`，指向该提交；main 和 tag 已原子推送。首次推送 TLS 握手失败后重试成功，tag 未移动。
+- **实际构建通过**：生产发布入口在独立源码目录运行 Unity 6000.6.0f1。Android、Windows 的 BuildPipeline 均成功，用时分别为 `273.456`、`75.851` 秒。Inno Setup 编译成功，用时 `24.766` 秒；安装包 ProductVersion 为 `1.0.6`。APK 内实测 `com.RichardXue.MutinyX`、versionName `1.0.6`、versionCode `10`、ARM64、minSdk 26、targetSdk 36。Windows ZIP 223 条，PDB / Unity 备份 / Burst 调试条目为 0。
+- **实际发布通过**：GitHub Release ID `399409482` 于 `2026-09-29T18:18:23Z` 发布，`draft=false`、`prerelease=false`；四个资产均为 uploaded，大小和 SHA256 digest 与本地 manifest 及文件哈希相同。说明与固定源码提交一致，临时 worktree 已清理。[正式 Release](https://github.com/RichardXue123/Mutiny-X/releases/tag/v1.0.6)。摘要证据：[LOCAL-RELEASE-V1.0.6-20260930.json](Artifacts/LOCAL-RELEASE-V1.0.6-20260930.json)。
+- **待运行验证 / 已知差异**：仅发布 Windows ZIP、Setup EXE、Android APK 和 SHA256，不发布 iOS。Windows 安装/卸载、Android 真机运行、整局增强 AI 性能与地雷场景目视验收未在本轮执行。增强 AI 是有界近似模型，既有规格中的局限仍适用。
