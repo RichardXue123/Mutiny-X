@@ -51,12 +51,22 @@ namespace Mutiny.Simulation
     {
         public readonly MutinyPhysicsBody Body;
         public readonly PhysicsBodyState State;
+        private readonly bool m_DataOnly;
+        public bool IsValid => m_DataOnly || Body != null;
 
         public PhysicsBoxObstacle(MutinyPhysicsBody body, PhysicsBodyState state)
         {
             Body = body;
             State = state;
+            m_DataOnly = false;
         }
+
+        private PhysicsBoxObstacle(PhysicsBodyState state)
+        { Body = null; State = state; m_DataOnly = true; }
+
+        // Value-only obstacles let the enhanced world reuse authoritative Solid
+        // collision without creating scene objects or retaining Unity references.
+        internal static PhysicsBoxObstacle FromSnapshot(PhysicsBodyState state) => new PhysicsBoxObstacle(state);
     }
 
     /// <summary>
@@ -295,7 +305,7 @@ namespace Mutiny.Simulation
                     for (int i = 0; i < boxes.Count; i++)
                     {
                         PhysicsBoxObstacle obstacle = boxes[i];
-                        if (obstacle.Body == null || obstacle.Body == self)
+                        if (!obstacle.IsValid || (self != null && obstacle.Body == self))
                             continue;
                         PhysicsBodyState box = obstacle.State;
                         if (box.X - box.LeftExtent > body.X + body.RightExtent ||
@@ -419,7 +429,7 @@ namespace Mutiny.Simulation
                     for (int i = 0; i < boxes.Count; i++)
                     {
                         PhysicsBoxObstacle obstacle = boxes[i];
-                        if (obstacle.Body == null || obstacle.Body == self)
+                        if (!obstacle.IsValid || (self != null && obstacle.Body == self))
                             continue;
                         PhysicsBodyState box = obstacle.State;
                         if (box.Y - box.TopExtent > body.Y + body.BottomExtent ||

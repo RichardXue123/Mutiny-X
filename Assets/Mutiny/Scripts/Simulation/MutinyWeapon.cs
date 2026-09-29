@@ -20,6 +20,8 @@ namespace Mutiny.Simulation
         // can use it later without reading a changing global GM flag.
         public MutinyAIStrategyContext AiStrategyContext { get; private set; }
         internal void BindAiStrategy(MutinyAIStrategyContext context) => AiStrategyContext = context;
+        public MutinyAIActionPlan AiActionPlan { get; private set; }
+        internal void BindAiActionPlan(MutinyAIActionPlan plan) => AiActionPlan = plan;
 
         [Header("State")]
         public bool IsFired = false;

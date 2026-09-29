@@ -26,19 +26,21 @@
 | GM-11 | `excamera 1` / `excamera` | `excamera 0` 也关闭；大小写不敏感 | 可选爆炸击退运镜：同帧最近被炸飞者优先，一批只选一人，不接力；关闭立即释放。 | 当前运行会话；切关保留，新 Play／重启默认关闭；不写存档。 |
 | GM-12 | `aisetluck {luck}` | 大小写不敏感；范围 `0..99999`，允许英文小数点 | 统一覆盖当前单人关卡敌方 AI 的决策 Luck，`0` 是有效覆盖。 | 当前关卡；重开/下一关不继承，不改角色原始 Luck/XML/存档。 |
 | GM-13 | `airesetluck` | 大小写不敏感；不带参数 | 清除当前单人关卡覆盖，恢复每名敌方角色各自的默认 Luck。 | 只影响当前关卡敌方，不影响玩家单回合接管。 |
-| GM-14 | `aienhance 1` / `aienhance 0` | 大小写不敏感；恰好一个 `0/1` 参数 | 切换增强策略入口／当前兼容策略；增强入口当前明确回退到兼容算法，完整效果模拟尚未实现。 | 会话设置；跨关卡保留，新 Play／重启默认关闭，不写存档，不自动接管人类。 |
+| GM-14 | `aienhance 1` / `aienhance 0` | 大小写不敏感；恰好一个 `0/1` 参数 | 开启 effects-v1 完整效果模拟初版／恢复原兼容策略；增强评分以模拟后双方 HP 为主。 | 会话设置；跨关卡保留，新 Play／重启默认关闭，不写存档，不自动接管人类。 |
 
 `GM-06` 尚未分配给命令。旧回归中的 `GM-02` 至 `GM-06` 字样是断言标题，分别检查 GM-01 的武器效果和按钮几何，并非同名命令 ID；新增命令不得据此复用现有 ID。
 
 ## GM-14 · AI 策略开关
 
-`aienhance 1` 选择 `enhanced-bootstrap` 入口；本阶段实际算法仍是 `legacy`，GM 成功提示明确显示 `legacy fallback; full-effect planner not implemented`。`aienhance 0` 恢复兼容入口。此命令是建立隔离框架，不宣称已增加完整伤害模拟、扇风或新评分。
+`aienhance 1` 使用 `enhanced-effects-v1`，实际算法为 `effects-v1`、`fallback=False`；`aienhance 0` 恢复原兼容算法。增强初版包含 15 种武器的作用过程、爆炸击退后的落水、桶连锁、朗姆酒平台火焰、八枚金币和气球固定扇风控制。它是有界近似模型，不是逐帧权威副本或全局最优解；朗姆酒的随机击飞尤其可能改变落水结果。
+
+增强 Luck 仍接受 `0..99999`，普通武器随机粗筛次数按原 Luck/存活比例计算后限制到 `4..128`；最多 256 次完整模拟，每次最多 2048 tick，不完整的试验排除。默认沿用每帧 3 ms 软预算，不能把 99999 理解为增强模式穷举 99999 次。每名可行动角色的武器候选按轮次交错精算。主分为敌方损失 HP 减 1.15 倍友方损失，再加击杀/胜负、库存消耗及小幅移动分；首次与续行动均可在无正收益时 Pass。
 
 只接受一个精确的 `0/1` 参数；缺参、额外参数、负值、`2`、非数字失败，不改变模式及成功历史。重复设置相同值成功但不使正在运行的搜索失效。切关/重开保留模式，重启默认关闭；不写存档、不改 XML、库存、行动资格和角色 Luck，也不会自动接管人类。已是 AI 的队伍和 `aitakeover` 接管统一使用当前路由；强制武器、Luck、日志开关保持独立。
 
 切换实际改变时使未提交搜索和镜头等待中的旧结果失效，随后重新求值；即使在两帧间开→关，也不可恢复旧版本。已经提交的跳跃/发射不撤销；连续武器保留提交时的策略上下文直到结束，下一独立决策采集最新设置。`ailog 1` 的实际行动行显示 `mode`、`strategy`、`algorithm`、`fallback` 与 `strategyVersion`。
 
-规格、代码职责、生产入口回归和结果见 [GM-14 / EXT-AI-STRAT-01..05](../08-ActionAgents/05-AIWeaponSelection/AI_STRATEGY_BOUNDARY_20260929.md)。
+开关历史规格见 [GM-14 / EXT-AI-STRAT-01..05](../08-ActionAgents/05-AIWeaponSelection/AI_STRATEGY_BOUNDARY_20260929.md)；现行算法、具体武器、生产入口回归和近似边界见 [EXT-AI-FX-01..10](../08-ActionAgents/05-AIWeaponSelection/AI_ENHANCED_SIMULATION_V1.md)。
 
 ## GM-11 · 爆炸击退运镜
 
@@ -50,7 +52,9 @@
 
 ## GM-10 · AI 行动决策日志
 
-输入 `ailog 1` 开启，`ailog 0` 关闭；只接受恰好一个 `0` 或 `1` 参数。日志直接出现在 Unity Console 和玩家版本的 `Player.log`，以 `[Mutiny:AI-Action]` 开头。每次**实际提交**的 AI 跳跃、射击、主动 Pass 各打印一条；镜头等待中取消的动作不打印。日志写出队伍、决策序号／随机种子、首次或续行动阶段、候选数、角色、武器、有效 Luck、该动作分数和适用的速度／预测位置／专用参数，并列出跳跃与每种武器的最高候选分及完整候选 JSON 路径；分块后台保存的文件状态为 `traceStatus=pending/ready/failed`，`ready` 后才可重放。首次行动即使最高分为负仍会执行；续行动最佳分不大于 0 则 Pass，日志显示被拒绝的最高分与原因。评分是原版风格的候选评分，不是真实伤害预言。
+输入 `ailog 1` 开启，`ailog 0` 关闭；只接受恰好一个 `0` 或 `1` 参数。日志直接出现在 Unity Console 和玩家版本的 `Player.log`，以 `[Mutiny:AI-Action]` 开头。每次**实际提交**的 AI 跳跃、射击、主动 Pass 各打印一条；镜头等待中取消的动作不打印。日志写出队伍、决策序号／随机种子、首次或续行动阶段、候选数、角色、武器、有效 Luck、该动作分数和适用的速度／预测位置／专用参数，并列出跳跃与每种武器的最高候选分及完整候选 JSON 路径；分块后台保存的文件状态为 `traceStatus=pending/ready/failed`，`ready` 后才可重放。Legacy 首次行动即使最高分为负仍会执行，续行动最佳分不大于 0 则 Pass；增强模式首次也可 Pass。日志显示被拒绝的最高分与原因。
+
+增强行动额外记录 `coarseCandidates/fullSimulations/truncated/budgetSkipped`、双方模拟 HP 前后、伤害/击杀/终局/资源/位置分项、`simulationSeed`、结算 tick、扇风方向、八枚金币的控制计划及 `modelLimits`。在启用决策文件保存时，完整精算详情写到原 trace 路径追加 `.enhanced.json` 的独立 sidecar；原 Legacy JSON 字段不变。sidecar 的写盘是异步的，不以原 trace 的 `ready` 保证 sidecar 同时存在。所有分数均是预测，不是真实伤害预言。
 
 关闭后只停止这条详细日志；已有普通 AI 运行日志和 JSON 决策轨迹各有自己的行为，不受 `ailog` 控制。缺参、`2`、负值、非数字、额外参数报错且保持开关原值。此项是 Unity 调试扩展，原版来源不适用。隔离 Play Mode 的 GM 解析 39/39（含 3 条新断言）及实际 AI 协程 5/5 已通过；范围和未验收项见 [GM-10 规格](04-Logging/AI_ACTION_LOG_SPEC.md)。
 

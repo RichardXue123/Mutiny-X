@@ -7,10 +7,11 @@ namespace Mutiny.Verification
     public sealed class MutinyAiStrategyVerificationRunner : MonoBehaviour
     {
         public Action<MutinyLevel1VerificationResult> Completed;
+        public Func<MutinyLevel1VerificationResult, IEnumerator> TestFactory;
         private IEnumerator Start()
         {
             var result = new MutinyLevel1VerificationResult();
-            IEnumerator tests = MutinyAiStrategyVerificationTest.Run(result);
+            IEnumerator tests = TestFactory != null ? TestFactory(result) : MutinyAiStrategyVerificationTest.Run(result);
             try
             {
                 while (true)

@@ -39,6 +39,7 @@ namespace Mutiny.Simulation
         public bool IsStored => m_Stored;
         public bool IsActive => m_Active;
         public int CountdownRemaining => m_Countdown;
+        internal int IgnoreTicksRemaining => Mathf.Max(0, m_IgnoreTicks);
         public bool BlocksTurn => !m_Stored || m_Active;
         public int CurrentAnimationFrame => m_AnimationFrame + 1;
         public bool IsArmingAnimation => m_PresentationState == PresentationState.Arming;

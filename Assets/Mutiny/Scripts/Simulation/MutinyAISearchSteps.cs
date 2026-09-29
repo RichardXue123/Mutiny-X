@@ -11,6 +11,7 @@ namespace Mutiny.Simulation
             string weapon = weaponType.ToLowerInvariant();
             int samples = Mathf.FloorToInt(work.EffectiveLucks[shooter] * work.Snapshot.TeamCharacterCount /
                 Mathf.Max(1, work.Snapshot.AliveCount));
+            if (work.Enhanced != null) samples = Mathf.Clamp(samples, 4, EnhancedMaxWeaponSamples);
             IEnumerable<object> special = null;
             switch (weapon)
             {
@@ -28,7 +29,9 @@ namespace Mutiny.Simulation
                 case "cannon": special = EvaluateCannonSteps(shooter, work.Enemies, work.Allies, work.Terrain, work.GridW, work.GridH, work.WaterY, samples, work); break;
                 default:
                     if (!MutinyWeaponFactoryCanFire(weaponType)) yield break;
-                    PhysicsBodyState template = CreateFormalWeaponPredictionTemplate(shooter, weaponType);
+                    PhysicsBodyState template = work.Enhanced != null
+                        ? MutinyAIEffectWorld.ProjectileBody(weapon, StateOf(shooter, work).Body)
+                        : CreateFormalWeaponPredictionTemplate(shooter, weaponType);
                     yield return null;
                     for (int sample = 0; sample < samples; sample++)
                     {

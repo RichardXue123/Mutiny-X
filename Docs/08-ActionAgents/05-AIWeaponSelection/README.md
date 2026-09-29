@@ -18,4 +18,4 @@
 
 高 Luck 分帧搜索见 [实现与验收](AI_RESPONSIVE_SEARCH_20260928.md)；第 12 关尸体导致反复重算的修复、具体失效日志及 54/54 实测见 [EXT-AI-SNAPSHOT-02/03](AI_SNAPSHOT_CORPSE_FIX_20260928.md)。
 
-2026-09-29：`aienhance` 选择独立策略入口，兼容模式保持原有候选/评分/随机顺序；增强入口为明确的 `enhanced-bootstrap / legacy-fallback`，不代表完整效果模拟已完成。切换与输出绑定规格、当前实现及实际验收见 [EXT-AI-STRAT-01..05](AI_STRATEGY_BOUNDARY_20260929.md)。
+2026-09-29：`aienhance` 开关与输出边界的历史规格见 [EXT-AI-STRAT-01..05](AI_STRATEGY_BOUNDARY_20260929.md)。其后用户授权实现 [完整效果模拟初版 effects-v1](AI_ENHANCED_SIMULATION_V1.md)：增强入口不再 fallback；有限粗筛后模拟武器、击退、落水及持续效果，以双方 HP 变化评分。关闭增强时仍使用原候选/评分/随机顺序，不把该扩展登记为原版 AI 复刻。

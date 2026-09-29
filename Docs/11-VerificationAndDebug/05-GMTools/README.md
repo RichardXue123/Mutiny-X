@@ -17,7 +17,7 @@ GM 是当前 Unity 工程的调试扩展，不是 Flash 原版玩法规则。以
 
 ### GM-14 · AI 策略开关
 
-用户授权扩展，原版来源不适用。`aienhance 1/0` 选择增强入口／当前兼容入口，默认关闭、跨关卡保留、不写存档。增强入口当前为显式 `enhanced-bootstrap / legacy-fallback`，不是已完成的增强伤害模拟。正式 GM 解析、历史重放、安全取消、已提交动作绑定与验收见 [策略边界规格](../../08-ActionAgents/05-AIWeaponSelection/AI_STRATEGY_BOUNDARY_20260929.md)；玩家说明见 [GM-14](../GM_COMMANDS.md#gm-14--ai-策略开关)。
+用户授权扩展，原版来源不适用。`aienhance 1/0` 选择 effects-v1 增强入口／原兼容入口，默认关闭、跨关卡保留、不写存档。正式 GM 解析、历史重放、安全取消与动作身份的历史验收见 [策略边界规格](../../08-ActionAgents/05-AIWeaponSelection/AI_STRATEGY_BOUNDARY_20260929.md)；现行 [完整效果模拟初版](../../08-ActionAgents/05-AIWeaponSelection/AI_ENHANCED_SIMULATION_V1.md) 不再使用 fallback，包含八枚金币、扇风计划及 HP 评分，同时明确保留随机/组件顺序近似。玩家说明见 [GM-14](../GM_COMMANDS.md#gm-14--ai-策略开关)。
 
 ### GM-11 · 可选爆炸击退镜头
 

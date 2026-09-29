@@ -23,7 +23,7 @@ namespace Mutiny.Simulation
         }
 
         public static MutinyWeapon SpawnWeapon(string weaponType, MutinyCharacter owner,
-            MutinyAIStrategyContext aiStrategyContext = default)
+            MutinyAIStrategyContext aiStrategyContext = default, MutinyAIActionPlan aiActionPlan = null)
         {
             if (string.IsNullOrEmpty(weaponType) || owner == null)
                 return null;
@@ -75,6 +75,7 @@ namespace Mutiny.Simulation
 
             weapon.Initialize(owner);
             weapon.BindAiStrategy(aiStrategyContext);
+            weapon.BindAiActionPlan(aiActionPlan);
             weapon.PrepareForEquip();
             return weapon;
         }
@@ -92,9 +93,9 @@ namespace Mutiny.Simulation
         }
 
         public static MutinyWeapon SpawnAndFire(string weaponType, MutinyCharacter owner, Vector2 velocity,
-            bool consumeInventory = true, MutinyAIStrategyContext aiStrategyContext = default)
+            bool consumeInventory = true, MutinyAIStrategyContext aiStrategyContext = default, MutinyAIActionPlan aiActionPlan = null)
         {
-            var weapon = SpawnWeapon(weaponType, owner, aiStrategyContext);
+            var weapon = SpawnWeapon(weaponType, owner, aiStrategyContext, aiActionPlan);
             if (weapon != null)
             {
                 weapon.Fire(velocity);

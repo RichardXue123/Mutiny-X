@@ -41,6 +41,8 @@ namespace Mutiny.Simulation
         private float m_AiOffset;
         private int m_AiDelay;
         private int m_AiDelayAfter;
+        private bool m_FixedAiPlan;
+        private int m_FixedAiPlanIndex;
 
         public MutinyWoodenCrate NextBox => m_NextBox;
         public bool HasPlacedAny => IsFired;
@@ -93,6 +95,8 @@ namespace Mutiny.Simulation
             m_AiList = null;
             m_AiDelay = 0;
             m_AiDelayAfter = 0;
+            m_FixedAiPlan = false;
+            m_FixedAiPlanIndex = 0;
             SetVisible(false);
         }
 
@@ -197,7 +201,7 @@ namespace Mutiny.Simulation
 
             if (m_CreateMore > 0)
             {
-                m_NextBox = MutinyWeaponFactory.SpawnWeapon("woodenCrate", Owner, AiStrategyContext) as MutinyWoodenCrate;
+                m_NextBox = MutinyWeaponFactory.SpawnWeapon("woodenCrate", Owner, AiStrategyContext, AiActionPlan) as MutinyWoodenCrate;
                 if (m_NextBox != null)
                 {
                     m_NextBox.m_CreateMore = m_CreateMore - 1;
@@ -267,7 +271,7 @@ namespace Mutiny.Simulation
         }
 
         /// <summary>BoxWeapon.aiPerform: retain the first three source candidates.</summary>
-        public bool BeginAiPlacement(Vector2[] possibilities)
+        public bool BeginAiPlacement(Vector2[] possibilities, bool fixedPlan = false)
         {
             if (possibilities == null || possibilities.Length < 3 || Owner == null || !Owner.IsAlive)
                 return false;
@@ -280,6 +284,8 @@ namespace Mutiny.Simulation
             m_AiNext = new Vector2(float.NaN, float.NaN);
             m_AiDelay = 0;
             m_AiDelayAfter = 0;
+            m_FixedAiPlan = fixedPlan;
+            m_FixedAiPlanIndex = 0;
             AiContinue();
             MutinyDebugLog.Info("WoodenCrate", $"AI armed candidates={count} firstDelay={m_AiDelay}", this);
             return m_AiList != null && m_AiDelay > 0;
@@ -291,6 +297,14 @@ namespace Mutiny.Simulation
                 return;
 
             m_AiDelay = AiPlaceDelayTicks;
+            if (m_FixedAiPlan)
+            {
+                if (m_FixedAiPlanIndex < m_AiList.Length && CanPlace(m_AiList[m_FixedAiPlanIndex]))
+                { m_AiNext = m_AiList[m_FixedAiPlanIndex++]; return; }
+                m_AiList = null;
+                MutinyDebugLog.Warning("WoodenCrate", "submitted enhanced placement became invalid", this);
+                return;
+            }
             // Preserve BoxWeapon.aiContinue ordering: first advance the index,
             // then search downward in 32 px bands; later placements may stack 48 px.
             if (!float.IsNaN(m_AiNext.x) && CanPlace(m_AiNext + Vector2.up * -48f) && UnityEngine.Random.value >= 0.4f)

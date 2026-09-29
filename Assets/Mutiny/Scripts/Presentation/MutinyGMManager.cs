@@ -513,7 +513,7 @@ namespace Mutiny.Presentation
                     MutinyAIController.SetEnhancementEnabled(parts[1] == "1");
                     m_StatusColor = new Color(0.35f, 1.0f, 0.45f);
                     m_StatusMessage = parts[1] == "1"
-                        ? "[SUCCESS] Enhanced strategy route enabled (bootstrap: legacy fallback; full-effect planner not implemented)."
+                        ? "[SUCCESS] Enhanced AI effects-v1 enabled (bounded full-effect simulation; see ailog for model limits)."
                         : "[SUCCESS] Legacy AI strategy selected.";
                     m_StatusMessage += " Uncommitted decisions restart; committed weapon sequences finish unchanged.";
                     succeeded = true;
@@ -621,7 +621,7 @@ namespace Mutiny.Presentation
                                   "• aitakeover N    - This turn's AI Luck (0..99999)\n" +
                                   "• aisetluck N / airesetluck - Current level AI Luck / defaults\n" +
                                   "• ailog 1 / 0     - Enable / disable AI action decision logs\n" +
-                                  "• aienhance 1 / 0 - Enhanced route (legacy fallback) / legacy AI\n" +
+                                  "• aienhance 1 / 0 - Full-effect AI v1 / legacy AI\n" +
                                   "• excamera 1 / excamera - Enable / disable blast camera\n" +
                                   "• setlanguage zh-cn / en - Selects Simplified Chinese / English\n" +
                                   "• Help            - Shows this help message";

@@ -13,7 +13,8 @@
 - [AI 逻辑实现进度与实现说明](AI_IMPLEMENTATION_STATUS.md)
 - [AI 完整逻辑流程（HTML）](AI_LOGIC_FLOW.html)
 - [高 Luck 非阻塞搜索：规格与实测](05-AIWeaponSelection/AI_RESPONSIVE_SEARCH_20260928.md)
-- [AI 策略开关与隔离边界](05-AIWeaponSelection/AI_STRATEGY_BOUNDARY_20260929.md)：`aienhance 1/0`，增强入口当前明确使用兼容算法回退，尚未实现完整效果模拟。
+- [AI 策略开关与隔离边界](05-AIWeaponSelection/AI_STRATEGY_BOUNDARY_20260929.md)：开关、取消及提交身份的历史规格。
+- [增强 AI 完整效果模拟初版](05-AIWeaponSelection/AI_ENHANCED_SIMULATION_V1.md)：`aienhance 1` 使用 `effects-v1`，以完整效果后的双方 HP 评分；`0` 保持原算法。包含 15 武器、连续控制、预算和已知近似。
 
 ## 边界
 

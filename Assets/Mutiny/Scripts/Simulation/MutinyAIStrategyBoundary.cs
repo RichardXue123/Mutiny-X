@@ -32,7 +32,7 @@ namespace Mutiny.Simulation
     {
         public static bool EnhancementEnabled { get; private set; }
         public static int StrategyConfigurationVersion { get; private set; }
-        public static bool EnhancedPlannerImplemented => false;
+        public static bool EnhancedPlannerImplemented => true;
         public MutinyAIStrategyContext CurrentDecisionStrategy => m_ActiveWork?.StrategyContext ?? default;
         public MutinyAIStrategyContext LastDecisionStrategy { get; private set; }
         public MutinyAIStrategyContext LastCommittedStrategy { get; private set; }
@@ -78,24 +78,23 @@ namespace Mutiny.Simulation
                     ? CreatePassMove() : input.Best;
         }
 
-        private sealed class EnhancedBootstrapStrategy : IAIDecisionStrategy
+        private sealed class EnhancedEffectsStrategy : IAIDecisionStrategy
         {
-            public string Id => "enhanced-bootstrap";
-            public string AlgorithmId => "legacy";
-            public bool UsesFallback => true;
-            // Intentionally explicit until the separately specified full-effect
-            // planner exists. No duplicate formulas or extra RNG draws here.
+            public string Id => "enhanced-effects-v1";
+            public string AlgorithmId => MutinyAIEnhancedDecision.Algorithm;
+            public bool UsesFallback => false;
             public IEnumerator Evaluate(MutinyAIController controller, DecisionWork input) =>
-                LegacyStrategy.Evaluate(controller, input);
-            public AIMove ResolveWinner(DecisionWork input) => LegacyStrategy.ResolveWinner(input);
+                controller.EvaluateEnhancedDecisionSteps(input);
+            public AIMove ResolveWinner(DecisionWork input) =>
+                input.Best.Character != null && input.Best.Score > 0f ? input.Best : CreatePassMove();
         }
 
         private static readonly IAIDecisionStrategy LegacyStrategy = new LegacyDecisionStrategy();
-        private static readonly IAIDecisionStrategy BootstrapStrategy = new EnhancedBootstrapStrategy();
+        private static readonly IAIDecisionStrategy EnhancedStrategy = new EnhancedEffectsStrategy();
 
         private static void BindDecisionStrategy(DecisionWork work)
         {
-            work.Strategy = EnhancementEnabled ? BootstrapStrategy : LegacyStrategy;
+            work.Strategy = EnhancementEnabled ? EnhancedStrategy : LegacyStrategy;
             work.StrategyContext = new MutinyAIStrategyContext(
                 EnhancementEnabled ? MutinyAIStrategyMode.Enhanced : MutinyAIStrategyMode.Legacy,
                 StrategyConfigurationVersion, work.Strategy.Id, work.Strategy.AlgorithmId, work.Strategy.UsesFallback);

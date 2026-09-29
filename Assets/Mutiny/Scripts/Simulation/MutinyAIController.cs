@@ -32,6 +32,7 @@ namespace Mutiny.Simulation
         public Vector2[] BoxPossibilities;
         public bool UsesForcedWeaponSupply;
         public MutinyAIStrategyContext StrategyContext;
+        public MutinyAIActionPlan ActionPlan;
     }
 
     public enum MutinyAITurnGate
@@ -132,6 +133,7 @@ namespace Mutiny.Simulation
             public bool Streaming;
             public IAIDecisionStrategy Strategy;
             public MutinyAIStrategyContext StrategyContext;
+            public EnhancedDecisionState Enhanced;
             public readonly Dictionary<string, float> BestByAction = new Dictionary<string, float>(StringComparer.Ordinal);
             public readonly List<string> ActionOrder = new List<string>();
             public readonly Dictionary<MutinyCharacter, float> EffectiveLucks = new Dictionary<MutinyCharacter, float>();
@@ -288,6 +290,7 @@ namespace Mutiny.Simulation
             if (work == null) reason = "missing-decision";
             else if (!StrategyIsCurrent(work)) reason = "ai-strategy";
             else if (work.ForcedWeaponType != ForcedWeaponType) reason = "forced-weapon";
+            else if (!EnhancedInputsAreCurrent(work, out reason)) { }
             else if (work.Snapshot.Matches(this, out reason, ignoreSelection)) return true;
             LastDecisionInvalidationReason = reason;
             return false;
@@ -513,6 +516,7 @@ namespace Mutiny.Simulation
                 LastDecisionTrace = m_Random.Trace;
                 m_Random = null;
             }
+            FinishEnhancedDiagnostics(work);
             LogDecisionSummary(work.Id, work.Phase, work.CandidateCount, move);
             return move;
         }
@@ -592,6 +596,7 @@ namespace Mutiny.Simulation
                 if (usesArcSamples)
                 {
                     int samples = Mathf.FloorToInt(luck * m_Team.Characters.Count / Mathf.Max(1, m_Team.AliveCount));
+                    if (work.Enhanced != null) samples = Mathf.Clamp(samples, 4, EnhancedMaxWeaponSamples);
                     line.Append(" weaponSamples=").Append(samples);
                 }
                 bool hasVelocity = move.MoveType == AIMoveType.SelfThrow ||
@@ -618,6 +623,7 @@ namespace Mutiny.Simulation
             }
 
             line.Append(" bestByAction=").Append(BestScoresByAction(work));
+            AppendEnhancedLog(line, work, move);
             if (!string.IsNullOrEmpty(work.TracePath))
                 line.Append(" trace=").Append(work.TracePath).Append(" traceStatus=")
                     .Append(work.Writer.Error != null ? "failed" : work.Writer.Completion.IsCompleted ? "ready" : "pending");
@@ -633,13 +639,13 @@ namespace Mutiny.Simulation
                 line.Append(" bestRejectedScore=")
                     .Append(work.Best.Character != null ? Number(work.Best.Score) : "NA")
                     .Append(" reason=")
-                    .Append(work.Phase == "continuation" && work.Best.Character != null
+                    .Append(work.Enhanced != null ? "no-positive-settled-full-effect-outcome" : work.Phase == "continuation" && work.Best.Character != null
                         ? "continuation-best-score-not-positive"
                         : "no-valid-candidate");
             }
             else
             {
-                line.Append(" reason=").Append(work.Phase == "continuation"
+                line.Append(" reason=").Append(work.Enhanced != null ? "highest-full-effect-score-above-pass" : work.Phase == "continuation"
                     ? "highest-score-above-zero"
                     : "highest-score-first-action-no-positive-threshold")
                     .Append(" tieRule=first-candidate-wins");
@@ -1148,6 +1154,7 @@ namespace Mutiny.Simulation
         private void ConsiderCandidate(ref AIMove bestMove, AIMove candidate, ref int candidateCount, DecisionWork work = null)
         {
             candidateCount++;
+            if (work?.Enhanced != null && work.Enhanced.Collecting) work.Enhanced.Group(candidate).Add(candidate);
             if (work != null)
             {
                 string action = candidate.MoveType == AIMoveType.SelfThrow ? "jump" :
@@ -1253,7 +1260,7 @@ namespace Mutiny.Simulation
                     $"firing weapon={move.WeaponType} character={ch.name} velocity={move.LaunchVelocity}", this);
                 if (string.Equals(move.WeaponType, "tidalWave", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon waveWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
+                    MutinyWeapon waveWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
                     if (waveWeapon is MutinyTidalWave wave)
                     {
                         float waterY = ch.PhysicsBody.WaterPixelY;
@@ -1263,7 +1270,7 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "seagull", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon birdWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
+                    MutinyWeapon birdWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
                     if (birdWeapon is MutinySeagull seagull)
                     {
                         seagull.PlaceForAi(move.SeagullFlightY, move.SeagullShotXs);
@@ -1272,8 +1279,9 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "gunpowderBarrel", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon barrelWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
-                    if (barrelWeapon is MutinyGunpowderBarrel barrel && barrel.BeginAiPlacement(move.BoxPossibilities))
+                    MutinyWeapon barrelWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
+                    if (barrelWeapon is MutinyGunpowderBarrel barrel && barrel.BeginAiPlacement(
+                        move.ActionPlan?.BoxCount > 0 ? move.ActionPlan.CopyBoxPositions() : move.BoxPossibilities, move.ActionPlan?.BoxCount > 0))
                     {
                         if (consumeInventory) ch.ConsumeWeapon(move.WeaponType);
                         MutinyDebugLog.Info("AI", $"gunpowder barrel AI sequence armed candidates={move.BoxPossibilities.Length}", this);
@@ -1281,8 +1289,9 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "woodenCrate", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon crateWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
-                    if (crateWeapon is MutinyWoodenCrate crate && crate.BeginAiPlacement(move.BoxPossibilities))
+                    MutinyWeapon crateWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
+                    if (crateWeapon is MutinyWoodenCrate crate && crate.BeginAiPlacement(
+                        move.ActionPlan?.BoxCount > 0 ? move.ActionPlan.CopyBoxPositions() : move.BoxPossibilities, move.ActionPlan?.BoxCount > 0))
                     {
                         if (consumeInventory) ch.ConsumeWeapon(move.WeaponType);
                         MutinyDebugLog.Info("AI", $"wooden crate AI sequence armed candidates={move.BoxPossibilities.Length}", this);
@@ -1290,13 +1299,13 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "anchor", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon anchorWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
+                    MutinyWeapon anchorWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
                     if (anchorWeapon is MutinyAnchor anchor && anchor.DropForAi(move.TargetPosition.x))
                         if (consumeInventory) ch.ConsumeWeapon(move.WeaponType);
                 }
                 else if (string.Equals(move.WeaponType, "cannon", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon cannonWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
+                    MutinyWeapon cannonWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
                     if (cannonWeapon is MutinyCannon cannon)
                     {
                         cannon.BeginAiFire(move.TargetPosition, move.CannonRotationDegrees, move.LaunchVelocity);
@@ -1305,7 +1314,7 @@ namespace Mutiny.Simulation
                 }
                 else if (string.Equals(move.WeaponType, "voodooDoll", StringComparison.OrdinalIgnoreCase))
                 {
-                    MutinyWeapon dollWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext);
+                    MutinyWeapon dollWeapon = MutinyWeaponFactory.SpawnWeapon(move.WeaponType, ch, move.StrategyContext, move.ActionPlan);
                     if (dollWeapon is MutinyVoodooDoll doll)
                     {
                         doll.BindTarget(move.TargetCharacter);
@@ -1316,7 +1325,7 @@ namespace Mutiny.Simulation
                 else
                 {
                     MutinyWeaponFactory.SpawnAndFire(move.WeaponType, ch, move.LaunchVelocity,
-                        consumeInventory, move.StrategyContext);
+                        consumeInventory, move.StrategyContext, move.ActionPlan);
                 }
                 ch.CanThrow = false;
                 ch.CanShoot = false;

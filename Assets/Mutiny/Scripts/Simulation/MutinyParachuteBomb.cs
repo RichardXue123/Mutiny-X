@@ -221,6 +221,15 @@ namespace Mutiny.Simulation
 
         private void ApplyFanInput()
         {
+            if (AiActionPlan != null)
+            {
+                int direction = AiActionPlan.FanDirection;
+                IsFanActive = direction != 0;
+                PhysicsBody.State.VelocityX += direction * FanImpulsePerTick;
+                if (IsFanActive && m_FramesFromFire % FanSoundIntervalTicks == 0)
+                    MutinyAudioManager.Instance?.PlaySFX("fan");
+                return;
+            }
             if (!IsHumanOwned() || !TryGetFanInput(out bool held, out float mousePixelX))
             {
                 IsFanActive = false;

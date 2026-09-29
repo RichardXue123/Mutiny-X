@@ -41,6 +41,8 @@ namespace Mutiny.Simulation
         private float m_AiOffset;
         private int m_AiDelay;
         private int m_AiDelayAfter;
+        private bool m_FixedAiPlan;
+        private int m_FixedAiPlanIndex;
 
         public MutinyGunpowderBarrel NextBox => m_NextBox;
         public bool HasPlacedAny => IsFired;
@@ -93,6 +95,8 @@ namespace Mutiny.Simulation
             m_AiList = null;
             m_AiDelay = 0;
             m_AiDelayAfter = 0;
+            m_FixedAiPlan = false;
+            m_FixedAiPlanIndex = 0;
             SetVisible(false);
         }
 
@@ -202,7 +206,7 @@ namespace Mutiny.Simulation
 
             if (m_CreateMore > 0)
             {
-                m_NextBox = MutinyWeaponFactory.SpawnWeapon("gunpowderBarrel", Owner, AiStrategyContext) as MutinyGunpowderBarrel;
+                m_NextBox = MutinyWeaponFactory.SpawnWeapon("gunpowderBarrel", Owner, AiStrategyContext, AiActionPlan) as MutinyGunpowderBarrel;
                 if (m_NextBox != null)
                 {
                     m_NextBox.m_CreateMore = m_CreateMore - 1;
@@ -270,12 +274,12 @@ namespace Mutiny.Simulation
         internal void AdvancePlacementTickForVerification() => AdvanceSequenceTick();
 
         /// <summary>BoxWeapon.aiPerform: retain the first three source candidates.</summary>
-        public bool BeginAiPlacement(Vector2[] possibilities)
+        public bool BeginAiPlacement(Vector2[] possibilities, bool fixedPlan = false)
         {
-            if (possibilities == null || possibilities.Length < 3 || Owner == null || !Owner.IsAlive)
+            if (possibilities == null || possibilities.Length < (fixedPlan ? OriginalPlacementCount : 3) || Owner == null || !Owner.IsAlive)
                 return false;
 
-            int count = Mathf.Min(3, possibilities.Length);
+            int count = Mathf.Min(fixedPlan ? OriginalPlacementCount : 3, possibilities.Length);
             m_AiList = new Vector2[count];
             Array.Copy(possibilities, m_AiList, count);
             m_AiIndex = 0;
@@ -283,6 +287,8 @@ namespace Mutiny.Simulation
             m_AiNext = new Vector2(float.NaN, float.NaN);
             m_AiDelay = 0;
             m_AiDelayAfter = 0;
+            m_FixedAiPlan = fixedPlan;
+            m_FixedAiPlanIndex = 0;
             AiContinue();
             MutinyDebugLog.Info("GunpowderBarrel", $"AI armed candidates={count} firstDelay={m_AiDelay}", this);
             return m_AiList != null && m_AiDelay > 0;
@@ -294,6 +300,14 @@ namespace Mutiny.Simulation
                 return;
 
             m_AiDelay = AiPlaceDelayTicks;
+            if (m_FixedAiPlan)
+            {
+                if (m_FixedAiPlanIndex < m_AiList.Length && CanPlace(m_AiList[m_FixedAiPlanIndex]))
+                { m_AiNext = m_AiList[m_FixedAiPlanIndex++]; return; }
+                m_AiList = null;
+                MutinyDebugLog.Warning("GunpowderBarrel", "submitted enhanced placement became invalid", this);
+                return;
+            }
             // Original quirk: first call has undefined aiNext coordinates, then
             // advances aiIndex before selecting a candidate. Keep that ordering.
             if (!float.IsNaN(m_AiNext.x) && CanPlace(m_AiNext + Vector2.up * -48f) && UnityEngine.Random.value >= 0.4f)

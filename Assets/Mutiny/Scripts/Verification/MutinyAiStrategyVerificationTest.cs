@@ -96,8 +96,8 @@ namespace Mutiny.Verification
             int version = MutinyAIController.StrategyConfigurationVersion;
             result.Assert(gm.ExecuteCommand("  AIEnhance   1  ") && MutinyAIController.EnhancementEnabled &&
                 MutinyAIController.StrategyConfigurationVersion == version + 1 &&
-                !MutinyAIController.EnhancedPlannerImplemented && Status(gm).Contains("legacy fallback"),
-                "GM-14 enable routes enhanced bootstrap and explicitly discloses fallback");
+                MutinyAIController.EnhancedPlannerImplemented && Status(gm).Contains("effects-v1"),
+                "GM-14 enable routes full effects-v1 and explicitly discloses model limits");
             version = MutinyAIController.StrategyConfigurationVersion;
             result.Assert(gm.ExecuteCommand("aienhance 1") && MutinyAIController.StrategyConfigurationVersion == version,
                 "EXT-AI-STRAT-03 repeated same setting does not invalidate decisions");
@@ -136,9 +136,12 @@ namespace Mutiny.Verification
                 baseline.Seed == 13731 && baseline.Entries.Length == 60,
                 "EXT-AI-STRAT-02 committed pre-refactor baseline evidence is available");
             if (baseline == null) return;
-            foreach (bool enabled in new[] { false, true, false })
+            // Effects-v1 intentionally differs. Preserve the independent Legacy
+            // evidence and check it on both sides of a real GM mode switch.
+            foreach (bool switched in new[] { false, true })
             {
-                gm.ExecuteCommand(enabled ? "aienhance 1" : "aienhance 0");
+                if (switched) gm.ExecuteCommand("aienhance 1");
+                gm.ExecuteCommand("aienhance 0");
                 foreach (int luck in Lucks)
                     using (var fixture = new MutinyAiResponsiveSearchVerificationTest.Fixture(luck))
                         foreach (string weapon in Weapons)
@@ -147,11 +150,10 @@ namespace Mutiny.Verification
                             AIMove move = fixture.Ai.EvaluateBestMove();
                             BaselineEntry expected = Array.Find(baseline.Entries, entry => entry.Luck == luck && entry.Weapon == weapon);
                             result.Assert(expected != null && expected.Sha256 == Checksum(JsonUtility.ToJson(fixture.Ai.LastDecisionTrace)),
-                                "EXT-AI-STRAT-02 complete 10c99ea trace unchanged mode=" + enabled + " " + luck + "/" + weapon);
+                                "EXT-AI-STRAT-02 complete 10c99ea legacy trace unchanged after switch " + luck + "/" + weapon);
                             result.Assert(move.StrategyContext.IsBound && move.StrategyContext.Mode ==
-                                (enabled ? MutinyAIStrategyMode.Enhanced : MutinyAIStrategyMode.Legacy) &&
-                                move.StrategyContext.UsesFallback == enabled && move.StrategyContext.AlgorithmId == "legacy" &&
-                                fixture.Ai.LastDecisionStrategy.StrategyId == (enabled ? "enhanced-bootstrap" : "legacy"),
+                                MutinyAIStrategyMode.Legacy && !move.StrategyContext.UsesFallback &&
+                                move.StrategyContext.AlgorithmId == "legacy" && fixture.Ai.LastDecisionStrategy.StrategyId == "legacy",
                                 "EXT-AI-STRAT-02 result carries selected immutable strategy " + luck + "/" + weapon);
                         }
             }
@@ -163,6 +165,9 @@ namespace Mutiny.Verification
             using (var fixture = new MutinyAiResponsiveSearchVerificationTest.Fixture(99999, runtime: true))
             {
                 fixture.Ai.SaveDecisionTrace = true;
+                // Effects-v1 intentionally bounds high luck. A small real pump
+                // budget makes cancellation observable even on a fast machine.
+                fixture.Ai.DecisionBudgetMilliseconds = 0.1f;
                 var manager = fixture.Host.AddComponent<MutinyTurnManager>(); manager.Initialize(fixture.Team, fixture.EnemyTeam);
                 result.Assert(gm.ExecuteCommand("aitakeover 99999"), "EXT-AI-STRAT-03 start real GM takeover search");
                 double deadline = Time.realtimeSinceStartupAsDouble + 15;
@@ -304,7 +309,7 @@ namespace Mutiny.Verification
                     MutinyAIStrategyContext finishedIdentity = default;
                     coins.OnFinished += () => { finished = true; total = coins.TimesFired; finishedIdentity = coins.AiStrategyContext; };
                     gm.ExecuteCommand("aienhance 0");
-                    result.Assert(identity.IsBound && identity.Mode == MutinyAIStrategyMode.Enhanced && identity.UsesFallback &&
+                    result.Assert(identity.IsBound && identity.Mode == MutinyAIStrategyMode.Enhanced && !identity.UsesFallback &&
                         coins.AiStrategyContext.ConfigurationVersion == identity.ConfigurationVersion &&
                         fixture.Actor.WeaponInventory["piecesOfEight"] == 4,
                         "EXT-AI-STRAT-04 submitted coin sequence retains enhanced identity and one inventory debit");
@@ -313,9 +318,9 @@ namespace Mutiny.Verification
                     result.Assert(finished && total == 8 && finishedIdentity.ConfigurationVersion == identity.ConfigurationVersion &&
                         finishedIdentity.Mode == MutinyAIStrategyMode.Enhanced && fixture.Actor.WeaponInventory["piecesOfEight"] == 4,
                         "EXT-AI-STRAT-04 all eight coins finish under latched identity after GM disable");
-                    result.Assert(logs.Count == 1 && logs[0].Contains("mode=enhanced") && logs[0].Contains("strategy=enhanced-bootstrap") &&
-                        logs[0].Contains("algorithm=legacy") && logs[0].Contains("fallback=True"),
-                        "EXT-AI-STRAT-05 committed action log distinguishes bootstrap from actual legacy algorithm");
+                    result.Assert(logs.Count == 1 && logs[0].Contains("mode=enhanced") && logs[0].Contains("strategy=enhanced-effects-v1") &&
+                        logs[0].Contains("algorithm=effects-v1") && logs[0].Contains("fallback=False"),
+                        "EXT-AI-STRAT-05 committed action log distinguishes effects-v1 from legacy algorithm");
                 }
                 finally { Application.logMessageReceived -= capture; }
             }
@@ -338,7 +343,7 @@ namespace Mutiny.Verification
                 deadline = Time.realtimeSinceStartupAsDouble + 10;
                 while (!native.LastCommittedStrategy.IsBound && Time.realtimeSinceStartupAsDouble < deadline) yield return null;
                 result.Assert(native.LastCommittedStrategy.IsBound && native.LastCommittedStrategy.Mode == MutinyAIStrategyMode.Enhanced &&
-                    native.LastCommittedStrategy.UsesFallback && !fixture.Team.IsAiControlled,
+                    !native.LastCommittedStrategy.UsesFallback && !fixture.Team.IsAiControlled,
                     "EXT-AI-STRAT-02 native enemy AI uses selected route without human takeover");
                 native.enabled = false;
             }

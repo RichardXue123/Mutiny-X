@@ -1,5 +1,11 @@
 # 11.01 · 自动回归
 
+## 增强 AI 完整效果初版（2026-09-29）
+
+入口：`Mutiny/Parity/Validate Enhanced AI Effects Play Mode`，必须在隔离空场景运行；批处理使用 `MutinyAiEnhancedVerificationMenu.RunBatch`。测试经过真实 GM、生产预算泵、武器工厂/发射、物理推进与效果回调，不靠修改 fired/finished/active 标志模拟成功。覆盖 15 武器、连续计划、现有雷与桶连锁、平台火焰、HP 评分、分帧预算、回放、取消及旧模式独立基线。
+
+实际结果、受控 tick 时钟口径、Rum 随机差异及待实机项见 [EXT-AI-FX-01..10](../../08-ActionAgents/05-AIWeaponSelection/AI_ENHANCED_SIMULATION_V1.md)。该扩展不属于 Flash 原版一致性验收。
+
 ## 蓄力被炸飞时实时预览（2026-09-29）
 
 沿用 `Validate Selected Death Settlement Play Mode` 的真实 Mine/物理夹具，新增 `AIM-MOVE-01/02` 四条断言：非致命炸飞后不再提供新的指针帧，生产 `PlayerInput.LateUpdate` 必须跨至少四个真实物理 tick 刷新拉线/首条虚线；由晚序测试观察器核对它们贴合生产插值显示姿态，并使用生产预测入口检查当前方向。再经正式 `ResolveAimRelease` 检查当前位置零拉距取消，以及重新拉线后空中提交的实际初速。未修改角色位置、存活/蓄力布尔量来替代真实爆炸，不重写发射公式。

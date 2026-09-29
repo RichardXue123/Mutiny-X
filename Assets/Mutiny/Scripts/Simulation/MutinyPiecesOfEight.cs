@@ -142,7 +142,7 @@ namespace Mutiny.Simulation
                     return;
                 }
 
-                AdvanceAiWait();
+                AdvanceAiWait(Time.deltaTime);
             }
         }
 
@@ -263,12 +263,14 @@ namespace Mutiny.Simulation
             return coinPosition + Owner.PhysicsBody.PresentationPosition - ownerAuthoritative;
         }
 
-        private void AdvanceAiWait()
+        internal void AdvanceAiWaitForVerification(float deltaTime) => AdvanceAiWait(deltaTime);
+
+        private void AdvanceAiWait(float deltaTime)
         {
             if (m_AiWaitTicks <= 0 || !IsAwaitingNextCoin || Owner == null || !Owner.IsAlive)
                 return;
 
-            m_AiTickAccumulator += Time.deltaTime;
+            m_AiTickAccumulator += deltaTime;
             while (m_AiTickAccumulator >= MutinyPhysics.TimeStep && m_AiWaitTicks > 0)
             {
                 m_AiTickAccumulator -= MutinyPhysics.TimeStep;
@@ -283,6 +285,17 @@ namespace Mutiny.Simulation
         {
             if (!TryGetOwnerTeam(out MutinyTeam ownTeam) || !ownTeam.IsAiControlled || Owner == null || !Owner.IsAlive)
                 return;
+
+            if (AiActionPlan != null && TimesFired < AiActionPlan.CoinCount)
+            {
+                // Submitted effects-v1 plan, latched for all eight coins even if
+                // GM is switched off. No global flag or fresh random search here.
+                HoldAtOwner();
+                Vector2 velocity = AiActionPlan.CoinVelocity(TimesFired);
+                MutinyDebugLog.Info("PiecesOfEight", $"AI planned continuation index={TimesFired + 1} velocity={velocity}", this);
+                Fire(velocity);
+                return;
+            }
 
             MutinyTeam enemyTeam = FindOpponent(ownTeam);
             Vector2 bestVelocity = Vector2.zero;
