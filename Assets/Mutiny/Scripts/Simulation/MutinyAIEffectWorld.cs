@@ -36,6 +36,16 @@ namespace Mutiny.Simulation
             m_Command.Weapon == "piecesofeight" ? m_CoinVelocities : null,
             m_BoxPositions.Count > 0 ? m_BoxPositions.ToArray() : null, m_Seed);
         internal MutinyAIEffectCharacter CharacterAt(int index) => m_Characters[index];
+        internal MutinyAIEffectInput CaptureSettledInput()
+        {
+            if (!Outcome.Settled) throw new InvalidOperationException("Cannot continue an unsettled effect world.");
+            var boxes = new List<MutinyAIEffectBox>();
+            foreach (var box in m_Boxes) if (!box.Removed) boxes.Add(box);
+            var mines = new List<MutinyAIEffectMine>();
+            foreach (var mine in m_Mines) if (!mine.Removed) mines.Add(mine);
+            return new MutinyAIEffectInput(m_Input.Terrain, m_Input.Width, m_Input.Height, m_Input.WaterY,
+                m_Input.OwnTeam, m_Characters, boxes.ToArray(), mines.ToArray(), m_Input.Chests);
+        }
 
         private struct Projectile { public PhysicsBodyState Body; public string Kind; public float Visibility; }
         private struct Explosion { public Vector2 Position; public float Size, Damage; public int Due; }

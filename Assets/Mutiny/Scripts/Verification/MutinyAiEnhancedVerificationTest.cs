@@ -20,6 +20,7 @@ namespace Mutiny.Verification
             {
                 gm.ExecuteCommand("aiforceusewaepon 0"); gm.ExecuteCommand("aienhance 1");
                 VerifyScoreRules(result);
+                VerifyJumpRules(result);
                 var effectWeapons = new List<string>(MutinyAiStrategyVerificationTest.Weapons) { "cannonball" };
                 foreach (string weapon in effectWeapons)
                 {
@@ -72,6 +73,41 @@ namespace Mutiny.Verification
             result.Assert(Mathf.Approximately(outcome.Score, 19.5f), "EXT-AI-FX-09 kill/death/resource score components");
             outcome.Settled = false; MutinyAIEffectScore.Evaluate(outcome, false, true, false);
             result.Assert(outcome.Score == 0f && !outcome.Settled, "EXT-AI-FX-09 unfinished outcome not assigned partial success");
+        }
+
+        private static void VerifyJumpRules(MutinyLevel1VerificationResult result)
+        {
+            result.Assert(MutinyAIController.EnhancedJumpSampleCount(0) == 50 &&
+                MutinyAIController.EnhancedJumpSampleCount(49) == 50 &&
+                MutinyAIController.EnhancedJumpSampleCount(50) == 50 &&
+                MutinyAIController.EnhancedJumpSampleCount(100) == 100 &&
+                MutinyAIController.EnhancedJumpSampleCount(99999) == 99999,
+                "EXT-AI-JUMP-01 enhanced jump samples use max(50, luck) without a high-luck cap");
+            using (var fixture = new MutinyAiResponsiveSearchVerificationTest.Fixture(50))
+            {
+                var input = Input(fixture);
+                float overlapping = MutinyAIController.EnhancedPositionScore(input, 0, new Vector2(176f, 312f));
+                float separated = MutinyAIController.EnhancedPositionScore(input, 0, new Vector2(16f, 312f));
+                result.Assert(overlapping < -100f && separated > overlapping,
+                    "EXT-AI-JUMP-02 overlapping landing cannot win through a speculative next shot");
+            }
+            using (var fixture = new MutinyAiResponsiveSearchVerificationTest.Fixture(50))
+            {
+                fixture.Enemy.PhysicsBody.State.X = 592f;
+                fixture.Actor.WeaponInventory.Clear(); fixture.Actor.AddWeapon("woodenCrate", 5);
+                AIMove move = fixture.Ai.EvaluateBestMove();
+                var summary = fixture.Ai.LastEnhancedDecision;
+                result.Assert(summary != null && summary.JumpSamples == 50 && move.MoveType == AIMoveType.SelfThrow &&
+                    move.Score > 0f && Vector2.Distance(move.TargetPosition, new Vector2(592f, 312f)) < 496f &&
+                    Vector2.Distance(move.TargetPosition, new Vector2(592f, 312f)) >= 90f,
+                    "EXT-AI-JUMP-03 when a weapon cannot deal immediate damage the enhanced AI approaches safely");
+                fixture.Actor.AddWeapon("cherryBomb", 5);
+                fixture.Ai.EvaluateBestMove();
+                summary = fixture.Ai.LastEnhancedDecision;
+                result.Assert(summary != null && summary.JumpFollowUps > 0 &&
+                    summary.Simulations <= MutinyAIController.EnhancedMaxFullSimulations,
+                    "EXT-AI-JUMP-04 jump candidates simulate a real following shot within the shared effect budget");
+            }
         }
 
         private static MutinyAIEffectInput Input(MutinyAiResponsiveSearchVerificationTest.Fixture fixture)
@@ -338,6 +374,9 @@ namespace Mutiny.Verification
             using (var fixture = new MutinyAiResponsiveSearchVerificationTest.Fixture(99999, runtime: true))
             {
                 fixture.Actor.WeaponInventory.Clear(); foreach (string weapon in MutinyAiStrategyVerificationTest.Weapons) fixture.Actor.AddWeapon(weapon, 5);
+                // This case exercises mutation during full refinement; the jump
+                // budget itself is covered above without delaying that checkpoint.
+                fixture.Actor.CanThrow = false;
                 fixture.Ai.DecisionBudgetMilliseconds = 0.1f; fixture.Ai.SaveDecisionTrace = true;
                 var mine = (MutinyMine)MutinyWeaponFactory.SpawnAndFire("mine", fixture.Enemy, Vector2.zero, false);
                 mine.PhysicsBody.State.X = 110; mine.PhysicsBody.State.Y = 306;
@@ -392,7 +431,7 @@ namespace Mutiny.Verification
                 result.Assert(manager.CurrentPhase == TurnPhase.TurnActive && manager.CurrentTeam == root.Team1,
                     "EXT-AI-FX-03 real level manager Start establishes initial human turn before Pass");
                 manager.PassTurn();
-                double start = Time.realtimeSinceStartupAsDouble, deadline = start + 30;
+                double start = Time.realtimeSinceStartupAsDouble, deadline = start + (luck > 100 ? 120 : 30);
                 while (!ai.LastCommittedStrategy.IsBound && Time.realtimeSinceStartupAsDouble < deadline) yield return null;
                 result.Assert(ai.LastCommittedStrategy.IsBound && ai.LastCommittedStrategy.Mode == MutinyAIStrategyMode.Enhanced &&
                     ai.LastEnhancedDecision != null && ai.LastEnhancedDecision.Simulations <= MutinyAIController.EnhancedMaxFullSimulations,

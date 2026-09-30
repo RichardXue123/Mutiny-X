@@ -480,13 +480,22 @@ namespace Mutiny.Simulation
                 {
                     if (work.ContinuationCharacter == null && state.CanThrow)
                     {
-                        // All 50 trajectories are generated before the first score/RNG follow-up.
-                        var throws = new List<SelfThrowSample>(50);
-                        foreach (object step in BuildSelfThrowSteps(actor, work, throws)) yield return null;
-                        foreach (var sample in throws)
+                        if (work.Enhanced != null)
                         {
-                            EvaluateSelfThrowSample(actor, sample, work, ref work.Best, ref work.CandidateCount);
-                            yield return null;
+                            // Enhanced movement has its own sampling and ranking.
+                            // Keep the original 50-sample RNG order in Legacy.
+                            foreach (object step in EvaluateEnhancedJumpSteps(actor, work)) yield return null;
+                        }
+                        else
+                        {
+                            // All 50 trajectories are generated before the first score/RNG follow-up.
+                            var throws = new List<SelfThrowSample>(50);
+                            foreach (object step in BuildSelfThrowSteps(actor, work, throws)) yield return null;
+                            foreach (var sample in throws)
+                            {
+                                EvaluateSelfThrowSample(actor, sample, work, ref work.Best, ref work.CandidateCount);
+                                yield return null;
+                            }
                         }
                     }
                     if (state.CanShoot)

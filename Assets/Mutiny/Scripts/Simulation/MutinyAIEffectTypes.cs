@@ -72,7 +72,7 @@ namespace Mutiny.Simulation
         public int Ticks, FanDirection, SimulationSeed, TargetActor, CoinsFired, BoxesPlaced, Explosions, FlameSegments;
         public float AllyHpBefore, AllyHpAfter, EnemyHpBefore, EnemyHpAfter;
         public int AlliesLost, EnemiesLost;
-        public float DamageScore, KillScore, TerminalScore, ResourceScore, PositionScore, Score;
+        public float DamageScore, KillScore, TerminalScore, ResourceScore, PositionScore, FollowUpScore, Score;
         public Vector2 Velocity, Target, FinalActorPosition;
         public float FlightY;
         public float[] ShotXs;
@@ -86,7 +86,7 @@ namespace Mutiny.Simulation
         public const string Algorithm = "effects-v1";
         public string AlgorithmId = Algorithm;
         public string Limitations = "fixed-tick-order; rum-kick-deterministic-sample; voodoo-camera-wait-approx; no-next-enemy-turn";
-        public int Seed, CoarseCandidates, Simulations, Truncated, BudgetSkipped;
+        public int Seed, CoarseCandidates, JumpSamples, JumpFollowUps, Simulations, Truncated, BudgetSkipped;
         public float WinnerScore;
         public List<MutinyAIEffectEvaluation> Evaluations = new List<MutinyAIEffectEvaluation>();
     }
