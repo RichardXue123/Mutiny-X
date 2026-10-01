@@ -12,7 +12,6 @@
 ## 2026-10-01 结果
 
 - 静态确认：上述旧编号重叠；Robot 是既有银色头盔素材，32×36、透明背景。
-- 已实现：先解析模式和关卡编号，单人 16 取 Robot；绘制采用等比例适配，原版头像仍使用原版资源及位置。
-- 实际测试通过：Unity 6000.6.0f1 隔离 Play Mode 17/17。实际 GM 依次进入 `16 → 1 → 6 → 15 → 2_1 → 2_16 → 16`，生产关卡的 HUD 解析结果分别正确；Robot 保留 Point 过滤和原始尺寸。脚本见 `Tools/RobotPortraitVerification.cs`，[记录](../../../11-VerificationAndDebug/02-PlayModeValidation/Artifacts/ROBOT-HUD-PORTRAIT-20261001.txt)。
-- 待运行验证：主工程 PIE 中 IMGUI 头像的最终目视效果、Android 真机。
-- 已知差异：单人 16 的 Robot 头像是授权扩展；测试为无图形 Play Mode，头像映射通过不等于实际画面验收通过。
+- 已实现：先解析模式和关卡编号，单人 16 取 Robot；原版 40×58 头像使用原版 Rect，自定义尺寸头像（如 Robot 32×36）使用 `ResolveOpponentPortraitRect` 根据光学中心与血条插槽圆心（+50, +1）对齐绘制，修复了此前垂直居中导致头像偏高悬浮的问题。
+- 实际测试通过：Unity 6000.6.0f1 隔离 Play Mode 17/17。实际 GM 依次进入 `16 → 1 → 6 → 15 → 2_1 → 2_16 → 16`，生产关卡的 HUD 解析结果分别正确；Robot 保留 Point 过滤和原始尺寸。脚本见 `Tools/RobotPortraitVerification.cs`。
+- 验收确认：主工程中 Level 16 蓝色血条头像圆槽与银色 Robot 头部及领口自然嵌合。

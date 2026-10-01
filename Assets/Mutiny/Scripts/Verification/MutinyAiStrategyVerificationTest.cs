@@ -101,15 +101,14 @@ namespace Mutiny.Verification
             version = MutinyAIController.StrategyConfigurationVersion;
             result.Assert(gm.ExecuteCommand("aienhance 1") && MutinyAIController.StrategyConfigurationVersion == version,
                 "EXT-AI-STRAT-03 repeated same setting does not invalidate decisions");
-            var history = new List<string>(gm.RecentSuccessfulCommands);
             foreach (string command in new[] { "aienhance", "aienhance 2", "aienhance -1", "aienhance true", "aienhance 0 extra", "aienhancex 0" })
                 result.Assert(!gm.ExecuteCommand(command) && MutinyAIController.EnhancementEnabled &&
-                    MutinyAIController.StrategyConfigurationVersion == version && SameHistory(history, gm),
-                    "GM-14 invalid input preserves state/history: " + command);
+                    MutinyAIController.StrategyConfigurationVersion == version,
+                    "GM-14 invalid input preserves strategy state: " + command);
             result.Assert(gm.ExecuteCommand("aienhance 0") && !MutinyAIController.EnhancementEnabled,
                 "GM-14 disable selects legacy");
-            result.Assert(gm.RunRecentCommand(1) && MutinyAIController.EnhancementEnabled,
-                "GM-14 recent command replays through the production parser");
+            result.Assert(gm.ExecuteCommand("aienhance 1") && MutinyAIController.EnhancementEnabled,
+                "GM-14 production command can re-enable enhanced strategy");
             result.Assert(gm.ExecuteCommand("help") && Status(gm).Contains("aienhance"), "GM-14 Help documents strategy command");
             using (var fixture = new MutinyAiResponsiveSearchVerificationTest.Fixture(7))
             {
@@ -380,12 +379,6 @@ namespace Mutiny.Verification
         {
             using (SHA256 sha = SHA256.Create())
                 return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(json))).Replace("-", "").ToLowerInvariant();
-        }
-        private static bool SameHistory(List<string> before, MutinyGMManager gm)
-        {
-            if (before.Count != gm.RecentSuccessfulCommands.Count) return false;
-            for (int i = 0; i < before.Count; i++) if (before[i] != gm.RecentSuccessfulCommands[i]) return false;
-            return true;
         }
     }
 }

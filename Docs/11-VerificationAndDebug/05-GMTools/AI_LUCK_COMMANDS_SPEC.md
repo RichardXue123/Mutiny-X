@@ -6,7 +6,7 @@
 
 | 稳定 ID | 可观察行为 / 状态转换 | Unity 入口 | 验收 |
 | --- | --- | --- | --- |
-| GM-08-RANGE-02 | `aitakeover {luck}`（保留 `aitakeoverwithluck` 别名）接受有限数值 0..99999，允许小数；仍只接管当前玩家剩余一回合，允许跳跃后接管。非法值不改变控制权或成功历史。 | GM → TurnManager.TryTakeOverCurrentPlayerTurn | 0、7.5、10000、99999；负值、99999.1、NaN、Infinity、缺参、多参；保留原接管生命周期回归。 |
+| GM-08-RANGE-02 | `aitakeover {luck}`（保留 `aitakeoverwithluck` 别名）接受有限数值 0..99999，允许小数；仍只接管当前玩家剩余一回合，允许跳跃后接管。非法值不改变控制权。 | GM → TurnManager.TryTakeOverCurrentPlayerTurn | 0、7.5、10000、99999；负值、99999.1、NaN、Infinity、缺参、多参；保留原接管生命周期回归。 |
 | GM-12 | `aisetluck {luck}` 将当前单人关卡原生敌方 AI 的有效 Luck 统一覆盖为指定有限数值 0..99999。0 是有效覆盖，不是重置。角色原始 Luck 不变，玩家/其他关卡不受影响。 | GM → LevelController.TrySetCurrentAiLuck → AIController.SetLevelLuckOverride | 正式解析入口检查小数、0、99999、非法输入、双人模式、无关卡；经生产武器评估检查采样数量变化。 |
 | GM-13 | `airesetluck` 清除当前单人关卡覆盖，恢复每个敌方角色各自的关卡默认 Luck，而非统一常数；不影响单回合接管。多参、无关卡、双人模式拒绝。 | 同 GM-12 | 正式解析入口设置/重置；按 XML 角色默认值检查；重建关卡不继承覆盖。 |
 

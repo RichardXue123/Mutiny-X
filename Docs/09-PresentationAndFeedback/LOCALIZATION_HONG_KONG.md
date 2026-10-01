@@ -5,9 +5,9 @@
 | ID | 可观察行为及状态转换 | 来源 | Unity 入口 | 验收用例 | 结果 |
 | --- | --- | --- | --- | --- | --- |
 | LOC-HK-01 | 以用户 CSV 中的英文、简体中文、香港繁体中文三列替换当前译文，保留 150 个键、格式参数、实际换行及 `\n` 换行；注释不作为文案 | 用户提供 `Mutiny_Gemini_3_8_flash_zh-hk.csv`；翻译是授权扩展，原版来源不适用 | `Mutiny.tsv` → 表生成器/运行时 `MutinyLocalization.Text` | 逐项对照原 CSV，检查键集、三语言非空、占位符和转义后的换行 | 已实现；逐项数据及表资源静态检查通过 |
-| LOC-HK-02 | `lang en`、`lang zh-cn`、`lang zh-hk` 分别选择英文、简中、香港繁中，切换立即更新菜单、对白、提示及字体并保存；首启继续英文 | 用户当前要求 | `MutinyGMManager.ExecuteCommand` → `MutinyLocalization.Select` | 经实际 GM 入口往返三语言，重放最近命令，重启核对保存值 | 已实现及编译；生产入口回归用例已补充，运行验收由用户执行 |
+| LOC-HK-02 | `lang en`、`lang zh-cn`、`lang zh-hk` 分别选择英文、简中、香港繁中，切换立即更新菜单、对白、提示及字体并保存；首启继续英文 | 用户当前要求 | `MutinyGMManager.ExecuteCommand` → `MutinyLocalization.Select` | 经实际 GM 入口往返三语言，重启核对保存值 | 已实现及编译；生产入口回归用例已补充，运行验收由用户执行 |
 | LOC-HK-03 | 繁中使用 HK 地区的随包动态字体，粤语字及标点均有字形；英语仍用原版位图字库 | 用户香港本地化要求；Noto CJK 地区字体设计 | `MutinyLocalizedText` → `Resources/Localization/Fonts` | 检查全部繁中字符及对白布局；实际屏幕核对可读性、悬停、命中区域、按钮点击、揭示/停留时序 | 字形及自适应布局静态检查通过；画面与点击待用户运行 |
-| GM-09-REV2 | 推荐命令简化为 `lang`，大小写及空白分隔不敏感；缺参、未知代码及额外参数失败且不改语言/存档/成功历史；旧 `setlanguage` 作为兼容别名沿用同一解析入口 | 用户新命令要求；保留旧别名遵循 GM 文档兼容约定 | `MutinyGMManager.ExecuteCommand` | `LANG ZH-HK`、重复选择、三语言、非法参数、旧命令、历史重放 | 已实现及编译；运行验收由用户执行 |
+| GM-09-REV2 | 推荐命令简化为 `lang`，大小写及空白分隔不敏感；缺参、未知代码及额外参数失败且不改语言/存档；旧 `setlanguage` 作为兼容别名沿用同一解析入口 | 用户新命令要求；保留旧别名遵循 GM 文档兼容约定 | `MutinyGMManager.ExecuteCommand` | `LANG ZH-HK`、重复选择、三语言、非法参数、旧命令 | 已实现及编译；运行验收由用户执行 |
 
 ## 证据和验收边界
 

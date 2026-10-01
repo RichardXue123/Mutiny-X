@@ -1,6 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using Mutiny.Levels;
 using Mutiny.Persistence;
 using Mutiny.Simulation;
@@ -16,7 +16,63 @@ namespace Mutiny.Presentation
         public const float CanvasReferenceHeight = 400f;
         public const float BaseButtonSize = 30f;
         public const float BaseButtonMargin = 4f;
-        public const int MaxRecentSuccessfulCommands = 5;
+
+        public enum CommandCategory { Levels, AI, Weapons, Camera, System }
+
+        private sealed class CommandDefinition
+        {
+            public readonly string Name;
+            public readonly CommandCategory Category;
+            public readonly string Label;
+            public readonly string Template;
+            public readonly string Description;
+            public readonly string ShortAlias;
+
+            public CommandDefinition(string name, CommandCategory category, string label, bool requiresParameter,
+                string description, string shortAlias = null)
+            {
+                Name = name;
+                Category = category;
+                Label = label;
+                Template = name + (requiresParameter ? " " : string.Empty);
+                Description = description;
+                ShortAlias = shortAlias;
+            }
+        }
+
+        private static readonly CommandDefinition[] Commands =
+        {
+            new CommandDefinition("enterlevel", CommandCategory.Levels, "enterlevel {level_id}", true,
+                "进入指定关卡。纯数字为单人；1_XX、2_XX 可指定模式；关卡资源必须存在。", "level"),
+            new CommandDefinition("unlockalllevels", CommandCategory.Levels, "unlockalllevels", false,
+                "解锁全部关卡并保存最高解锁进度。", "unlocklevels"),
+            new CommandDefinition("resetlevels", CommandCategory.Levels, "resetlevels", false,
+                "将关卡解锁进度重置为第 1 关；不清除分数和音频设置。"),
+            new CommandDefinition("aienhance", CommandCategory.AI, "aienhance {flag}", true,
+                "AI 效果模拟开关：1 启用增强策略，0 恢复原兼容策略。"),
+            new CommandDefinition("aisetluck", CommandCategory.AI, "aisetluck {luck}", true,
+                "设置当前单人关卡敌方 AI 的 Luck，范围 0–99999；0 也是有效值。", "ailuck"),
+            new CommandDefinition("airesetluck", CommandCategory.AI, "airesetluck", false,
+                "清除当前单人关卡的 AI Luck 覆盖，恢复每名敌人的默认值。"),
+            new CommandDefinition("aiweapon", CommandCategory.AI, "aiweapon {weapon_id}", true,
+                "强制 AI 只考虑指定编号的无限武器：1–15；输入 0 关闭覆盖。"),
+            new CommandDefinition("aitakeover", CommandCategory.AI, "aitakeover {luck}", true,
+                "以指定 Luck 接管当前人类队伍本回合剩余行动，范围 0–99999。"),
+            new CommandDefinition("ailog", CommandCategory.AI, "ailog {flag}", true,
+                "AI 行动详细日志：1 开启，0 关闭；日志写入 Player.log。"),
+            new CommandDefinition("unlockweapons", CommandCategory.Weapons, "unlockweapons", false,
+                "按照 GM 目标优先级，为一名存活角色解锁 15 种无限弹药武器。"),
+            new CommandDefinition("unlockweaponsallteam", CommandCategory.Weapons, "unlockweaponsallteam", false,
+                "为所有存活的 Team 1 角色解锁 15 种无限弹药武器。", "unlockteamweapons"),
+            new CommandDefinition("excamera", CommandCategory.Camera, "excamera {flag}", true,
+                "爆炸击退运镜：1 开启；0 或不带参数关闭。", "blastcam"),
+            new CommandDefinition("lang", CommandCategory.System, "lang {code}", true,
+                "切换界面语言：en 英文、zh-cn 简中、zh-hk 香港繁中。"),
+            new CommandDefinition("help", CommandCategory.System, "help", false,
+                "显示全部 GM 命令、简写和说明。")
+        };
+
+        private static readonly string[] CategoryLabels = { "关卡", "AI", "武器", "镜头", "系统" };
 
         // Kept for backward compatibility
         public const float ButtonSize = BaseButtonSize;
@@ -50,8 +106,13 @@ namespace Mutiny.Presentation
         private string m_InputText = "";
         private string m_StatusMessage = "Mutiny GM Console ready. Type 'help' for commands.";
         private Color m_StatusColor = new Color(0.4f, 1.0f, 0.5f, 1.0f);
-        private readonly List<string> m_RecentSuccessfulCommands = new List<string>();
-        public IReadOnlyList<string> RecentSuccessfulCommands => m_RecentSuccessfulCommands;
+        private CommandCategory m_SelectedCategory = CommandCategory.Levels;
+        private string m_SelectedDescription = "";
+        private Vector2 m_CommandScroll;
+        private Vector2 m_OutputScroll;
+        private bool m_FocusCaretAtEnd;
+        public string InputText => m_InputText;
+        public CommandCategory SelectedCategory => m_SelectedCategory;
 
         // GUI Styles and Textures
         private Texture2D m_CircleNormalTex;
@@ -70,8 +131,12 @@ namespace Mutiny.Presentation
         private GUIStyle m_LockActionButtonStyle;
         private GUIStyle m_LockActiveButtonStyle;
         private GUIStyle m_StatusLabelStyle;
-        private GUIStyle m_RecentButtonStyle;
-        private GUIStyle m_RecentHeaderStyle;
+        private GUIStyle m_CommandButtonStyle;
+        private GUIStyle m_TabStyle;
+        private GUIStyle m_ActiveTabStyle;
+        private GUIStyle m_TooltipStyle;
+        private GUIStyle m_DescriptionStyle;
+        private Font m_ChineseFont;
 
         private const string FocusControlName = "GM_Command_Input";
         private bool m_NeedsFocus = false;
@@ -164,20 +229,36 @@ namespace Mutiny.Presentation
                 };
                 m_StatusLabelStyle.normal.textColor = m_StatusColor;
 
-                m_RecentButtonStyle = new GUIStyle(GUI.skin.button)
+                m_CommandButtonStyle = new GUIStyle(GUI.skin.button)
                 {
                     alignment = TextAnchor.MiddleLeft,
                     padding = new RectOffset(6, 4, 2, 2)
                 };
-                m_RecentButtonStyle.normal.background = m_ButtonBackgroundTex;
-                m_RecentButtonStyle.normal.textColor = Color.white;
-                m_RecentButtonStyle.hover.textColor = new Color(1f, 0.92f, 0.45f);
+                m_CommandButtonStyle.normal.background = m_ButtonBackgroundTex;
+                m_CommandButtonStyle.normal.textColor = Color.white;
+                m_CommandButtonStyle.hover.textColor = new Color(1f, 0.92f, 0.45f);
 
-                m_RecentHeaderStyle = new GUIStyle(m_StatusLabelStyle)
+                m_ChineseFont = Resources.Load<Font>(MutinyLocalizedText.CjkFontResource(MutinyLocalization.SimplifiedChinese));
+                m_StatusLabelStyle.font = m_ChineseFont;
+                m_DescriptionStyle = new GUIStyle(m_StatusLabelStyle);
+                m_DescriptionStyle.normal.textColor = new Color(0.82f, 0.88f, 0.95f);
+                m_TabStyle = new GUIStyle(m_CommandButtonStyle)
                 {
+                    alignment = TextAnchor.MiddleCenter,
+                    font = m_ChineseFont,
                     fontStyle = FontStyle.Bold
                 };
-                m_RecentHeaderStyle.normal.textColor = new Color(0.75f, 0.81f, 0.91f);
+                m_ActiveTabStyle = new GUIStyle(m_TabStyle);
+                m_ActiveTabStyle.normal.background = m_LockActiveBackgroundTex;
+                m_TooltipStyle = new GUIStyle(GUI.skin.box)
+                {
+                    alignment = TextAnchor.UpperLeft,
+                    wordWrap = true,
+                    padding = new RectOffset(6, 6, 5, 5)
+                };
+                m_TooltipStyle.normal.background = m_PanelBackgroundTex;
+                m_TooltipStyle.normal.textColor = Color.white;
+                m_TooltipStyle.font = m_ChineseFont;
             }
 
             // Dynamically scale fonts and paddings relative to canvas scale
@@ -195,9 +276,12 @@ namespace Mutiny.Presentation
             m_LockActiveButtonStyle.padding = new RectOffset(lockPad, lockPad, lockPad, lockPad);
 
             m_StatusLabelStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(9.5f * scale));
-            m_RecentButtonStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(9f * scale));
-            m_RecentHeaderStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(9f * scale));
-            m_RecentButtonStyle.padding = new RectOffset(
+            m_DescriptionStyle.fontSize = m_StatusLabelStyle.fontSize;
+            m_CommandButtonStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(9f * scale));
+            m_TabStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(10f * scale));
+            m_ActiveTabStyle.fontSize = m_TabStyle.fontSize;
+            m_TooltipStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(9f * scale));
+            m_CommandButtonStyle.padding = new RectOffset(
                 Mathf.Max(4, Mathf.RoundToInt(6f * scale)), 4, 2, 2);
         }
 
@@ -245,8 +329,8 @@ namespace Mutiny.Presentation
 
         private void DrawCommandPanel(float originX, float centerY, float scale)
         {
-            float panelWidth = Mathf.Min(360f * scale, Screen.width - (originX + 10f * scale));
-            float panelHeight = Mathf.Min(320f * scale, Screen.height - 20f * scale);
+            float panelWidth = Mathf.Min(450f * scale, Screen.width - (originX + 10f * scale));
+            float panelHeight = Mathf.Min(370f * scale, Screen.height - 20f * scale);
             float panelY = Mathf.Clamp(centerY - panelHeight * 0.5f, 10f * scale, Screen.height - panelHeight - 10f * scale);
             Rect panelRect = new Rect(originX, panelY, panelWidth, panelHeight);
 
@@ -275,7 +359,7 @@ namespace Mutiny.Presentation
 
             Texture2D lockTex = m_LockOpen ? m_LockLockedTex : m_LockUnlockedTex;
             GUIStyle lockStyle = m_LockOpen ? m_LockActiveButtonStyle : m_LockActionButtonStyle;
-            string lockTooltip = m_LockOpen ? "Pinned: Console stays open on run" : "Unpinned: Auto-closes console on run";
+            string lockTooltip = m_LockOpen ? "已固定：执行后保持面板打开" : "未固定：执行后自动关闭面板";
             if (GUI.Button(lockRect, new GUIContent(lockTex, lockTooltip), lockStyle))
             {
                 m_LockOpen = !m_LockOpen;
@@ -286,29 +370,14 @@ namespace Mutiny.Presentation
                 m_IsOpen = false;
             }
 
-            // Bottom section: Hint, Input row
             float inputHeight = 28f * scale;
             float buttonWidth = 56f * scale;
-            float hintHeight = 16f * scale;
-
-            float hintY = panelRect.yMax - padding - hintHeight;
-            float inputY = hintY - inputHeight - 6f * scale;
-
-            // Status / Log Display Area (fills space between header and input)
-            float statusY = headerRect.yMax + 6f * scale;
-            float statusHeight = inputY - statusY - 6f * scale;
-            float recentHeight = m_RecentSuccessfulCommands.Count > 0 ? 106f * scale : 0f;
-            float statusTextHeight = Mathf.Max(0f, statusHeight - recentHeight - (recentHeight > 0f ? 6f * scale : 0f));
-            Rect statusRect = new Rect(panelRect.x + padding, statusY, contentWidth, statusTextHeight);
-            m_StatusLabelStyle.normal.textColor = m_StatusColor;
-            GUI.Label(statusRect, m_StatusMessage, m_StatusLabelStyle);
-
-            if (recentHeight > 0f)
-            {
-                Rect recentRect = new Rect(panelRect.x + padding, statusRect.yMax + 6f * scale,
-                    contentWidth, recentHeight);
-                DrawRecentCommands(recentRect, scale);
-            }
+            float outputHeight = 98f * scale;
+            float outputTitleHeight = 14f * scale;
+            float outputY = panelRect.yMax - padding - outputHeight;
+            float inputY = outputY - outputTitleHeight - inputHeight - 8f * scale;
+            Rect commandArea = new Rect(panelRect.x + padding, headerRect.yMax + 8f * scale,
+                contentWidth, inputY - headerRect.yMax - 16f * scale);
 
             // Input field & Submit button
             Rect inputRect = new Rect(panelRect.x + padding, inputY, contentWidth - buttonWidth - 6f * scale, inputHeight);
@@ -320,6 +389,13 @@ namespace Mutiny.Presentation
             if (m_NeedsFocus)
             {
                 GUI.FocusControl(FocusControlName);
+                if (m_FocusCaretAtEnd)
+                {
+                    TextEditor editor = (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl);
+                    editor.cursorIndex = m_InputText.Length;
+                    editor.selectIndex = m_InputText.Length;
+                    m_FocusCaretAtEnd = false;
+                }
                 m_NeedsFocus = false;
             }
 
@@ -336,41 +412,119 @@ namespace Mutiny.Presentation
                 SubmitCommand();
             }
 
-            // Quick command shortcut hint
-            Rect hintRect = new Rect(panelRect.x + padding, hintY, contentWidth, hintHeight);
-            var hintStyle = new GUIStyle(m_StatusLabelStyle)
+            // Process template clicks after the text field so its old editor state cannot overwrite the trailing space.
+            DrawCommandCategories(commandArea, scale);
+
+            GUI.Label(new Rect(panelRect.x + padding, inputY + inputHeight + 3f * scale,
+                contentWidth, outputTitleHeight), "OUTPUT", m_PanelHeaderStyle);
+            Rect outputRect = new Rect(panelRect.x + padding, outputY, contentWidth, outputHeight);
+            GUI.DrawTexture(outputRect, m_InputBackgroundTex);
+            DrawOutline(outputRect, new Color(0.32f, 0.36f, 0.45f, 0.8f), Mathf.Max(1f, scale));
+            float outputPadding = 6f * scale;
+            float outputTextWidth = Mathf.Max(20f, outputRect.width - 24f * scale);
+            float outputTextHeight = Mathf.Max(outputRect.height - outputPadding * 2f,
+                m_StatusLabelStyle.CalcHeight(new GUIContent(m_StatusMessage), outputTextWidth) + outputPadding);
+            m_OutputScroll = GUI.BeginScrollView(outputRect, m_OutputScroll,
+                new Rect(0f, 0f, outputTextWidth + outputPadding, outputTextHeight));
+            m_StatusLabelStyle.normal.textColor = m_StatusColor;
+            GUI.Label(new Rect(outputPadding, outputPadding, outputTextWidth,
+                outputTextHeight - outputPadding), m_StatusMessage, m_StatusLabelStyle);
+            GUI.EndScrollView();
+
+            if (!string.IsNullOrEmpty(GUI.tooltip))
             {
-                fontSize = Mathf.Max(8, Mathf.RoundToInt(8f * scale)),
-                normal = { textColor = new Color(0.65f, 0.70f, 0.80f, 0.9f) }
-            };
-            GUI.Label(hintRect, "Tip: 'lang en' / 'lang zh-cn' / 'lang zh-hk'. Type 'help' for more.", hintStyle);
+                float tooltipWidth = Mathf.Min(260f * scale, panelRect.width - padding * 2f);
+                float tooltipHeight = m_TooltipStyle.CalcHeight(new GUIContent(GUI.tooltip), tooltipWidth);
+                Vector2 mouse = Event.current.mousePosition;
+                Rect tooltipRect = new Rect(
+                    Mathf.Clamp(mouse.x + 12f * scale, panelRect.x + padding, panelRect.xMax - padding - tooltipWidth),
+                    Mathf.Clamp(mouse.y + 12f * scale, panelRect.y + padding, panelRect.yMax - padding - tooltipHeight),
+                    tooltipWidth, tooltipHeight);
+                GUI.Label(tooltipRect, GUI.tooltip, m_TooltipStyle);
+            }
         }
 
-        private void DrawRecentCommands(Rect area, float scale)
+        private void DrawCommandCategories(Rect area, float scale)
         {
-            GUI.Label(new Rect(area.x, area.y, area.width, 16f * scale),
-                "RECENT SUCCESSFUL COMMANDS", m_RecentHeaderStyle);
-            float buttonHeight = 26f * scale;
-            float gap = 3f * scale;
-            float buttonWidth = (area.width - gap) * 0.5f;
-            int count = Mathf.Min(m_RecentSuccessfulCommands.Count, MaxRecentSuccessfulCommands);
-            for (int i = 0; i < count; i++)
+            float tabWidth = 76f * scale;
+            float tabHeight = 27f * scale;
+            float gap = 5f * scale;
+            for (int i = 0; i < CategoryLabels.Length; i++)
             {
-                int row = i / 2;
-                int column = i % 2;
-                Rect buttonRect = new Rect(area.x + column * (buttonWidth + gap),
-                    area.y + 20f * scale + row * (buttonHeight + gap), buttonWidth, buttonHeight);
-                string command = m_RecentSuccessfulCommands[i];
-                if (GUI.Button(buttonRect, command, m_RecentButtonStyle))
-                {
-                    RunRecentCommand(i);
-                    if (!m_LockOpen)
-                    {
-                        m_IsOpen = false;
-                    }
-                    break;
-                }
+                CommandCategory category = (CommandCategory)i;
+                Rect tabRect = new Rect(area.x, area.y + i * (tabHeight + 3f * scale), tabWidth, tabHeight);
+                if (GUI.Button(tabRect, CategoryLabels[i], m_SelectedCategory == category ? m_ActiveTabStyle : m_TabStyle))
+                    SelectCategory(category);
             }
+
+            Rect rightArea = new Rect(area.x + tabWidth + gap, area.y,
+                area.width - tabWidth - gap, area.height);
+            float descriptionHeight = 40f * scale;
+            Rect listRect = new Rect(rightArea.x, rightArea.y, rightArea.width,
+                Mathf.Max(20f * scale, rightArea.height - descriptionHeight - gap));
+            float buttonHeight = 26f * scale;
+            int count = 0;
+            foreach (CommandDefinition definition in Commands)
+                if (definition.Category == m_SelectedCategory) count++;
+            float listHeight = Mathf.Max(listRect.height, count * (buttonHeight + 3f * scale));
+            float buttonWidth = listRect.width - (listHeight > listRect.height ? 18f * scale : 2f * scale);
+            m_CommandScroll = GUI.BeginScrollView(listRect, m_CommandScroll,
+                new Rect(0f, 0f, listRect.width - 2f * scale, listHeight));
+            int row = 0;
+            foreach (CommandDefinition definition in Commands)
+            {
+                if (definition.Category != m_SelectedCategory) continue;
+                Rect buttonRect = new Rect(0f, row * (buttonHeight + 3f * scale), buttonWidth, buttonHeight);
+                if (GUI.Button(buttonRect, new GUIContent(definition.Label, definition.Description), m_CommandButtonStyle))
+                    ChooseCommandTemplate(definition.Name);
+                row++;
+            }
+            GUI.EndScrollView();
+            GUI.Label(new Rect(rightArea.x, listRect.yMax + gap, rightArea.width, descriptionHeight),
+                m_SelectedDescription, m_DescriptionStyle);
+        }
+
+        public void SelectCategory(CommandCategory category)
+        {
+            if (!Enum.IsDefined(typeof(CommandCategory), category) || m_SelectedCategory == category) return;
+            m_SelectedCategory = category;
+            m_CommandScroll = Vector2.zero;
+            m_SelectedDescription = "";
+        }
+
+        public bool ChooseCommandTemplate(string commandName)
+        {
+            foreach (CommandDefinition definition in Commands)
+            {
+                if (!string.Equals(definition.Name, commandName, StringComparison.OrdinalIgnoreCase)) continue;
+                m_InputText = definition.Template;
+                m_SelectedDescription = definition.Description;
+                m_NeedsFocus = true;
+                m_FocusCaretAtEnd = true;
+                return true;
+            }
+            return false;
+        }
+
+        public string GetCommandDescription(string commandName)
+        {
+            foreach (CommandDefinition definition in Commands)
+                if (string.Equals(definition.Name, commandName, StringComparison.OrdinalIgnoreCase))
+                    return definition.Description;
+            return null;
+        }
+
+        private static string BuildHelpMessage()
+        {
+            var help = new StringBuilder("可用 GM 命令：");
+            foreach (CommandDefinition definition in Commands)
+            {
+                help.Append('\n').Append("• ").Append(definition.Label);
+                if (!string.IsNullOrEmpty(definition.ShortAlias))
+                    help.Append("（简写：").Append(definition.ShortAlias).Append('）');
+                help.Append(" — ").Append(definition.Description);
+            }
+            return help.ToString();
         }
 
         private void SubmitCommand()
@@ -389,16 +543,17 @@ namespace Mutiny.Presentation
             }
         }
 
-        public bool RunRecentCommand(int index)
-        {
-            if (index < 0 || index >= m_RecentSuccessfulCommands.Count)
-                return false;
-            return ExecuteCommand(m_RecentSuccessfulCommands[index]);
-        }
-
         public bool ExecuteCommand(string rawCommand)
         {
             string cmd = rawCommand.Trim();
+            int separator = cmd.IndexOfAny(new[] { ' ', '\t', '\r', '\n' });
+            string commandWord = separator < 0 ? cmd : cmd.Substring(0, separator);
+            foreach (CommandDefinition definition in Commands)
+            {
+                if (!string.Equals(definition.ShortAlias, commandWord, StringComparison.OrdinalIgnoreCase)) continue;
+                cmd = definition.Name + cmd.Substring(commandWord.Length);
+                break;
+            }
             string lower = cmd.ToLowerInvariant();
             bool succeeded = false;
 
@@ -633,19 +788,7 @@ namespace Mutiny.Presentation
             else if (lower == "help" || lower == "?")
             {
                 m_StatusColor = new Color(0.5f, 0.85f, 1.0f);
-                m_StatusMessage = "Available GM Commands:\n" +
-                                  "• enterlevel N / 1_XX / 2_XX - Enter a map (N = single player)\n" +
-                                  "• UnlockWeapons   - Unlocks all 15 weapons (infinite ammo) for current character\n" +
-                                  $"• unlockalllevels - Unlocks all 1..{MutinySaveSystem.MaxLevel} levels\n" +
-                                  "• ResetLevels     - Resets progress to level 1\n" +
-                                  "• aiweapon 1..15  - Forces one infinite AI weapon; 0 disables\n" +
-                                  "• aitakeover N    - This turn's AI Luck (0..99999)\n" +
-                                  "• aisetluck N / airesetluck - Current level AI Luck / defaults\n" +
-                                  "• ailog 1 / 0     - Enable / disable AI action decision logs\n" +
-                                  "• aienhance 1 / 0 - Full-effect AI v1 / legacy AI\n" +
-                                  "• excamera 1 / excamera - Enable / disable blast camera\n" +
-                                  "• lang en / zh-cn / zh-hk - Selects English / Simplified Chinese / Traditional Chinese (HK)\n" +
-                                  "• Help            - Shows this help message";
+                m_StatusMessage = BuildHelpMessage();
                 succeeded = true;
             }
             else
@@ -654,12 +797,7 @@ namespace Mutiny.Presentation
                 m_StatusMessage = $"[ERROR] Unknown command: '{cmd}'\nType 'help' to view available commands.";
             }
 
-            if (succeeded)
-            {
-                m_RecentSuccessfulCommands.Insert(0, cmd);
-                if (m_RecentSuccessfulCommands.Count > MaxRecentSuccessfulCommands)
-                    m_RecentSuccessfulCommands.RemoveAt(MaxRecentSuccessfulCommands);
-            }
+            m_OutputScroll = Vector2.zero;
             return succeeded;
         }
 

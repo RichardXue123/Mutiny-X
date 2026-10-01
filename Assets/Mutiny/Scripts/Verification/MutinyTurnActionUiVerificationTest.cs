@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using Mutiny.Levels;
 using Mutiny.Persistence;
 using Mutiny.Presentation;
@@ -7106,19 +7107,15 @@ namespace Mutiny.Verification
                               Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel ==
                                   Mutiny.Persistence.MutinySaveSystem.MaxLevel &&
                               PlayerPrefs.GetInt("mutiny_highest_unlocked_level", 1) ==
-                                  Mutiny.Persistence.MutinySaveSystem.MaxLevel &&
-                              gm.RecentSuccessfulCommands.Count > 0 &&
-                              gm.RecentSuccessfulCommands[0] == "unlockalllevels",
-                    "GM-03 lowercase unlockalllevels unlocks every level, persists progress and enters recent history");
+                                  Mutiny.Persistence.MutinySaveSystem.MaxLevel,
+                    "GM-03 lowercase unlockalllevels unlocks every level and persists progress");
 
                 Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel = 1;
-                bool replaySucceeded = gm.RunRecentCommand(0);
-                result.Assert(replaySucceeded &&
+                bool aliasSucceeded = gm.ExecuteCommand("unlocklevels");
+                result.Assert(aliasSucceeded &&
                               Mutiny.Persistence.MutinySaveSystem.HighestUnlockedLevel ==
-                                  Mutiny.Persistence.MutinySaveSystem.MaxLevel &&
-                              gm.RecentSuccessfulCommands.Count > 0 &&
-                              gm.RecentSuccessfulCommands[0] == "unlockalllevels",
-                    "GM-03 recent command button repeats the production all-level unlock");
+                                  Mutiny.Persistence.MutinySaveSystem.MaxLevel,
+                    "GM-PARSE-02 unlocklevels uses the production all-level unlock");
             }
             finally
             {
@@ -7142,21 +7139,19 @@ namespace Mutiny.Verification
                     "enterlevelx 1", "enterlevel level_01" };
                 foreach (string command in invalidLevelCommands)
                 {
-                    int historyCount = gm.RecentSuccessfulCommands.Count;
-                    result.Assert(!gm.ExecuteCommand(command) && gm.RecentSuccessfulCommands.Count == historyCount,
-                        $"GM-15 invalid syntax '{command}' preserves successful history");
+                    result.Assert(!gm.ExecuteCommand(command),
+                        $"GM-15 invalid syntax '{command}' is rejected");
                 }
                 VerifyGMUnlockAllLevels(gm, result);
                 VerifyExplosionCameraCommands(gm, result);
                 bool logEnabled = gm.ExecuteCommand("  AiLoG 1  ") && MutinyAIController.ActionLogEnabled;
                 result.Assert(logEnabled, "GM-10 production GM parser enables AI action logging with case and outer whitespace tolerance");
-                int logHistoryCount = gm.RecentSuccessfulCommands.Count;
                 bool invalidLogCommandsRejected = !gm.ExecuteCommand("ailog") &&
                     !gm.ExecuteCommand("ailog 2") && !gm.ExecuteCommand("ailog -1") &&
                     !gm.ExecuteCommand("ailog 1 extra") && !gm.ExecuteCommand("ailog nope") &&
-                    MutinyAIController.ActionLogEnabled && gm.RecentSuccessfulCommands.Count == logHistoryCount;
+                    MutinyAIController.ActionLogEnabled;
                 result.Assert(invalidLogCommandsRejected,
-                    "GM-10 invalid AI log commands preserve the production toggle and successful command history");
+                    "GM-10 invalid AI log commands preserve the production toggle");
                 bool logDisabled = gm.ExecuteCommand("ailog 0") && !MutinyAIController.ActionLogEnabled;
                 result.Assert(logDisabled, "GM-10 production GM parser disables AI action logging");
                 MutinyCharacter character = characterObject.AddComponent<MutinyCharacter>();
@@ -7184,6 +7179,19 @@ namespace Mutiny.Verification
                                   RectApproximately(MutinyGMManager.ResolveButtonRect(3840f, 2160f), new Rect(456.6f, 999f, 162f, 162f)),
                         "GM-06 GM button anchors to the left edge of the visible letterboxed game canvas and scales dynamically with resolution");
                 }
+
+                GameObject teamWeaponTarget = new GameObject("GM_TeamWeaponAliasTarget");
+                try
+                {
+                    MutinyCharacter teamCharacter = teamWeaponTarget.AddComponent<MutinyCharacter>();
+                    teamCharacter.TeamIndex = 1;
+                    teamCharacter.PhysicsBody.State = PhysicsBodyState.CreateDefault(10000f, 100f);
+                    result.Assert(gm.ExecuteCommand("unlockteamweapons") &&
+                                  teamCharacter.IsInfinite("cherryBomb") && teamCharacter.CanShoot &&
+                                  !gm.ExecuteCommand("unlockteamweaponsx"),
+                        "GM-PARSE-02 unlockteamweapons uses the production Team 1 unlock with exact word matching");
+                }
+                finally { DestroyNow(teamWeaponTarget); }
 
                 aiTeamObject = new GameObject("GM_ForceAiTeam");
                 MutinyTeam aiTeam = aiTeamObject.AddComponent<MutinyTeam>();
@@ -7290,35 +7298,57 @@ namespace Mutiny.Verification
                 result.Assert(allIdsMapToMenuWeapons,
                     "GM-07 IDs 1..15 map to the 15 selectable weapons in menu order");
 
-                bool sixSucceeded = gm.ExecuteCommand("Help") &&
-                                    gm.ExecuteCommand("aiforceusewaepon 1") &&
-                                    gm.ExecuteCommand("aiforceusewaepon 2") &&
-                                    gm.ExecuteCommand("Help") &&
-                                    gm.ExecuteCommand("aiforceusewaepon 3") &&
-                                    gm.ExecuteCommand("  hElP  ");
-                result.Assert(sixSucceeded && gm.RecentSuccessfulCommands.Count == 5 &&
-                              gm.RecentSuccessfulCommands[0] == "hElP" &&
-                              gm.RecentSuccessfulCommands[1] == "aiforceusewaepon 3" &&
-                              gm.RecentSuccessfulCommands[2] == "Help" &&
-                              gm.RecentSuccessfulCommands[3] == "aiforceusewaepon 2" &&
-                              gm.RecentSuccessfulCommands[4] == "aiforceusewaepon 1",
-                    "GM-UI-02 keeps the five most recent successful executions, including repeats");
+                bool helpSucceeded = gm.ExecuteCommand("Help");
+                string helpText = (string)typeof(MutinyGMManager)
+                    .GetField("m_StatusMessage", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(gm);
+                bool descriptionsMatch = true;
+                foreach (string name in new[] { "enterlevel", "unlockalllevels", "resetlevels", "aienhance",
+                             "aisetluck", "airesetluck", "aiweapon", "aitakeover", "ailog", "unlockweapons",
+                             "unlockweaponsallteam", "excamera", "lang", "help" })
+                {
+                    string description = gm.GetCommandDescription(name);
+                    bool hasChinese = false;
+                    if (description != null)
+                        foreach (char glyph in description)
+                            hasChinese |= glyph >= '\u4e00' && glyph <= '\u9fff';
+                    descriptionsMatch &= hasChinese && helpText.Contains(description);
+                }
+                result.Assert(helpSucceeded && descriptionsMatch && helpText.Contains("简写：level") &&
+                              helpText.Contains("简写：ailuck") &&
+                              Resources.Load<Font>(MutinyLocalizedText.CjkFontResource(MutinyLocalization.SimplifiedChinese)) != null,
+                    "GM-UI-05-A Help and command button descriptions share Chinese text with a bundled CJK font");
 
-                bool invalidSucceeded = gm.ExecuteCommand("aiforceusewaepon 16") ||
-                                        gm.ExecuteCommand("UnknownGM");
-                result.Assert(!invalidSucceeded && gm.RecentSuccessfulCommands.Count == 5 &&
-                              gm.RecentSuccessfulCommands[0] == "hElP" &&
-                              gm.RecentSuccessfulCommands[4] == "aiforceusewaepon 1",
-                    "GM-UI-02 excludes failed commands without changing the history");
+                gm.SelectCategory(MutinyGMManager.CommandCategory.AI);
+                bool aiTemplate = gm.ChooseCommandTemplate("aienhance") &&
+                                  gm.InputText == "aienhance " &&
+                                  gm.SelectedCategory == MutinyGMManager.CommandCategory.AI &&
+                                  !MutinyAIController.EnhancementEnabled;
+                bool luckTemplate = gm.ChooseCommandTemplate("aisetluck") && gm.InputText == "aisetluck ";
+                gm.SelectCategory(MutinyGMManager.CommandCategory.Levels);
+                bool levelTemplate = gm.ChooseCommandTemplate("enterlevel") && gm.InputText == "enterlevel ";
+                bool directTemplate = gm.ChooseCommandTemplate("unlockalllevels") &&
+                                      gm.InputText == "unlockalllevels" &&
+                                      (string)typeof(MutinyGMManager)
+                                          .GetField("m_StatusMessage", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(gm)
+                                      == helpText;
+                result.Assert(aiTemplate && luckTemplate && levelTemplate && directTemplate &&
+                              !gm.ChooseCommandTemplate("unknown"),
+                    "GM-UI-04 category and button production handlers fill templates without executing them");
 
-                bool replaySucceeded = gm.RunRecentCommand(3);
-                result.Assert(replaySucceeded && MutinyAIController.ForcedWeaponId == 2 &&
-                              gm.RecentSuccessfulCommands.Count == 5 &&
-                              gm.RecentSuccessfulCommands[0] == "aiforceusewaepon 2" &&
-                              gm.RecentSuccessfulCommands[1] == "hElP" &&
-                              gm.RecentSuccessfulCommands[4] == "aiforceusewaepon 2" &&
-                              !gm.RunRecentCommand(-1) && !gm.RunRecentCommand(5),
-                    "GM-UI-02 recent button reruns the production command and moves that execution to the front");
+                bool parameterSpaces = true;
+                foreach (string name in new[] { "enterlevel", "aienhance", "aisetluck", "aiweapon",
+                             "aitakeover", "ailog", "excamera", "lang" })
+                    parameterSpaces &= gm.ChooseCommandTemplate(name) && gm.InputText == name + " ";
+                foreach (string name in new[] { "unlockalllevels", "resetlevels", "airesetluck",
+                             "unlockweapons", "unlockweaponsallteam", "help" })
+                    parameterSpaces &= gm.ChooseCommandTemplate(name) && gm.InputText == name;
+                result.Assert(parameterSpaces && !MutinyAIController.EnhancementEnabled,
+                    "GM-UI-04-A parameter templates end with exactly one space; direct commands do not execute or add space");
+
+                result.Assert(gm.ExecuteCommand("aiweapon 2") && MutinyAIController.ForcedWeaponId == 2 &&
+                              !gm.ExecuteCommand("aiforceusewaepon 16") &&
+                              !gm.ExecuteCommand("UnknownGM") && MutinyAIController.ForcedWeaponId == 2,
+                    "GM-07 valid command executes; invalid commands keep the forced weapon unchanged");
                 result.Assert(gm.LockOpen && gm.IsPinned, "GM-UI-03 LockOpen defaults to true (keep open enabled by default)");
                 gm.LockOpen = false;
                 result.Assert(!gm.LockOpen && !gm.IsPinned, "GM-UI-03 LockOpen toggle works");
@@ -7356,10 +7386,8 @@ namespace Mutiny.Verification
             try
             {
                 var controller = host.AddComponent<MutinyLevelController>();
-                int history = gm.RecentSuccessfulCommands.Count;
-                result.Assert(!gm.ExecuteCommand("aisetluck 5") && !gm.ExecuteCommand("airesetluck") &&
-                              gm.RecentSuccessfulCommands.Count == history,
-                    "GM-12/13 reject missing current level without recording success");
+                result.Assert(!gm.ExecuteCommand("aisetluck 5") && !gm.ExecuteCommand("airesetluck"),
+                    "GM-12/13 reject missing current level");
                 controller.ConfigureSession(MutinyGameMode.SinglePlayer);
                 controller.LevelXml = Resources.Load<TextAsset>("Data/Levels/level_1_05");
                 controller.BuildLevel();
@@ -7376,6 +7404,9 @@ namespace Mutiny.Verification
                               ai.GetEffectiveLuck(shooter) == 101.5f && shooter.Luck == defaults[shooter] &&
                               root.Team1.Characters[0].Luck == playerLuck,
                     "GM-12 changes effective native AI Luck above 100 without altering authored/player Luck");
+                result.Assert(gm.ExecuteCommand("ailuck 101.5") && ai.LevelLuckOverride == 101.5f &&
+                              !gm.ExecuteCommand("ailuckx 10") && ai.LevelLuckOverride == 101.5f,
+                    "GM-PARSE-02 ailuck is a readable alias with exact command-word matching");
                 gm.ExecuteCommand("aiweapon 1");
                 ai.SaveDecisionTrace = false;
                 ai.EvaluateCharacterWeaponsForVerification(shooter,
@@ -7383,13 +7414,12 @@ namespace Mutiny.Verification
                     null, 0, 0, 1000f, out int candidates);
                 result.Assert(candidates == 101,
                     "GM-12 production weapon dispatcher uses level override for actual candidate count");
-                history = gm.RecentSuccessfulCommands.Count;
                 string[] invalid = { "aisetluck", "aisetluck -1", "aisetluck 99999.1", "aisetluck NaN",
                     "aisetluck Infinity", "aisetluck x", "aisetluck 1,5", "aisetluck 1 extra", "airesetluck 1" };
                 bool rejected = true;
                 foreach (string command in invalid) rejected &= !gm.ExecuteCommand(command);
-                result.Assert(rejected && ai.LevelLuckOverride == 101.5f && gm.RecentSuccessfulCommands.Count == history,
-                    "GM-12/13 invalid commands retain override and success history");
+                result.Assert(rejected && ai.LevelLuckOverride == 101.5f,
+                    "GM-12/13 invalid commands retain the active override");
                 result.Assert(gm.ExecuteCommand("aisetluck 0") && ai.LevelLuckOverride == 0f,
                     "GM-12 zero is a valid override, not a reset");
                 ai.EvaluateCharacterWeaponsForVerification(shooter,
@@ -7399,9 +7429,8 @@ namespace Mutiny.Verification
                 result.Assert(gm.ExecuteCommand("aisetluck 99999") && ai.LevelLuckOverride == 99999f,
                     "GM-12 upper boundary Luck 99999 is accepted");
                 controller.ConfigureSession(MutinyGameMode.LocalTwoPlayer);
-                history = gm.RecentSuccessfulCommands.Count;
                 result.Assert(!gm.ExecuteCommand("aisetluck 3") && !gm.ExecuteCommand("airesetluck") &&
-                              ai.LevelLuckOverride == 99999f && gm.RecentSuccessfulCommands.Count == history,
+                              ai.LevelLuckOverride == 99999f,
                     "GM-12/13 reject two-player session even if the XML was authored for single-player");
                 controller.ConfigureSession(MutinyGameMode.SinglePlayer);
                 bool reset = gm.ExecuteCommand("  AiResetLuck  ") && ai.LevelLuckOverride == null;
@@ -7500,26 +7529,20 @@ namespace Mutiny.Verification
                               !MutinyLocalization.UseOriginalFont,
                     "GM-09 parsing accepts case changes and whitespace separators");
                 result.Assert(gm.ExecuteCommand("lang zh-cn") &&
-                              gm.RecentSuccessfulCommands[0] == "lang zh-cn" &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.SimplifiedChinese,
-                    "GM-09 reselecting the current language succeeds and joins recent history");
+                    "GM-09 reselecting the current language succeeds and persists");
 
-                var history = new List<string>(gm.RecentSuccessfulCommands);
                 bool rejected = !gm.ExecuteCommand("lang") && !gm.ExecuteCommand("lang jp") &&
                                 !gm.ExecuteCommand("lang en extra") && !gm.ExecuteCommand("langcn") &&
                                 !gm.ExecuteCommand("lang cn");
-                bool unchangedHistory = history.Count == gm.RecentSuccessfulCommands.Count;
-                for (int i = 0; unchangedHistory && i < history.Count; i++)
-                    unchangedHistory = history[i] == gm.RecentSuccessfulCommands[i];
-                result.Assert(rejected && unchangedHistory &&
+                result.Assert(rejected &&
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.SimplifiedChinese,
-                    "GM-09 invalid parameters preserve runtime language, saved preference and successful history");
-                result.Assert(gm.ExecuteCommand("lang en") && gm.RunRecentCommand(1) &&
+                    "GM-09 invalid parameters preserve runtime language and saved preference");
+                result.Assert(gm.ExecuteCommand("lang en") && gm.ExecuteCommand("lang zh-cn") &&
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
-                              gm.RecentSuccessfulCommands[0] == "lang zh-cn" &&
                               MutinyLocalization.Text("frontend.play", "play") == "开始游戏",
-                    "GM-09 a recent command replays through the production parser and changes language again");
+                    "GM-09 repeated production commands switch language again");
 
                 result.Assert(gm.ExecuteCommand("  LaNg\tZH-HK  ") &&
                               MutinyLocalization.Code == MutinyLocalization.TraditionalChineseHongKong &&
@@ -7531,20 +7554,15 @@ namespace Mutiny.Verification
                               MutinyLocalization.Text("frontend.points", "{0} pts", 123) == "123 分" &&
                               MutinyGameHUD.ResolveLocalizedCornerTooltip(MutinyCornerControl.Quit) == "離開",
                     "LOC-HK-02 production lang zh-hk selects HK text, formatted values, regional font and persistent code");
-                var hkHistory = new List<string>(gm.RecentSuccessfulCommands);
                 bool hkRejected = !gm.ExecuteCommand("lang") && !gm.ExecuteCommand("lang zh-tw") &&
                                   !gm.ExecuteCommand("lang zh-hk extra") && !gm.ExecuteCommand("language zh-hk");
-                bool hkHistoryUnchanged = hkHistory.Count == gm.RecentSuccessfulCommands.Count;
-                for (int i = 0; hkHistoryUnchanged && i < hkHistory.Count; i++)
-                    hkHistoryUnchanged = hkHistory[i] == gm.RecentSuccessfulCommands[i];
-                result.Assert(hkRejected && hkHistoryUnchanged &&
+                result.Assert(hkRejected &&
                               MutinyLocalization.Code == MutinyLocalization.TraditionalChineseHongKong &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.TraditionalChineseHongKong,
-                    "GM-09-REV2 malformed lang commands preserve HK language, preference and successful history");
+                    "GM-09-REV2 malformed lang commands preserve HK language and preference");
                 result.Assert(gm.ExecuteCommand("lang zh-hk") && gm.ExecuteCommand("lang en") &&
-                              gm.RunRecentCommand(1) && MutinyLocalization.Code == MutinyLocalization.TraditionalChineseHongKong &&
-                              gm.RecentSuccessfulCommands[0] == "lang zh-hk",
-                    "LOC-HK-02 repeating and replaying the HK command uses the same production entry");
+                              gm.ExecuteCommand("lang zh-hk") && MutinyLocalization.Code == MutinyLocalization.TraditionalChineseHongKong,
+                    "LOC-HK-02 repeated HK selection uses the same production entry");
                 result.Assert(gm.ExecuteCommand("setlanguage zh-hk") &&
                               MutinyLocalization.Code == MutinyLocalization.TraditionalChineseHongKong,
                     "GM-09-REV2 setlanguage remains a compatibility alias");
@@ -7617,7 +7635,6 @@ namespace Mutiny.Verification
                 human.SelectCharacter(owner);
                 input.SelectWeapon("banana");
                 MutinyWeapon readyWeapon = input.EquippedWeapon;
-                int historyCount = gm.RecentSuccessfulCommands.Count;
                 MutinyAIController.TrySetForcedWeaponId(0);
                 result.Assert(!gm.ExecuteCommand("aitakeover") &&
                               !gm.ExecuteCommand("aitakeoverwithluck") &&
@@ -7628,8 +7645,8 @@ namespace Mutiny.Verification
                               !gm.ExecuteCommand("aitakeoverwithluck x") &&
                               !gm.ExecuteCommand("aitakeoverwithluck 1,5") &&
                               !gm.ExecuteCommand("aitakeoverwithluck 1 extra") && !human.IsAiControlled &&
-                              !manager.IsAiTakeoverActive && gm.RecentSuccessfulCommands.Count == historyCount,
-                    "GM-08 rejects invalid Luck without changing ownership or success history");
+                              !manager.IsAiTakeoverActive,
+                    "GM-08 rejects invalid Luck without changing ownership");
 
                 int turns = human.TotalTurnsTaken;
                 result.Assert(gm.ExecuteCommand("  AiTakeOverWithLuck 7.5  ") && manager.IsAiTakeoverActive &&
@@ -8069,22 +8086,18 @@ namespace Mutiny.Verification
             {
                 result.Assert(gm.ExecuteCommand("excamera") && !MutinyCameraController.ExplosionCameraEnabled,
                     "GM-11 bare excamera disables the extension through production parsing");
-                result.Assert(gm.ExecuteCommand("  ExCamera   1  ") && MutinyCameraController.ExplosionCameraEnabled &&
-                              gm.RecentSuccessfulCommands[0] == "ExCamera   1",
-                    "GM-11 valid case/whitespace command enables the extension and enters successful history");
-                var history = new List<string>(gm.RecentSuccessfulCommands);
+                result.Assert(gm.ExecuteCommand("  ExCamera   1  ") && MutinyCameraController.ExplosionCameraEnabled,
+                    "GM-11 valid case/whitespace command enables the extension");
                 bool rejected = true;
                 foreach (string command in new[] { "excamera 2", "excamera -1", "excamera true", "excamera 1 0", "excamerax 1" })
                     rejected &= !gm.ExecuteCommand(command);
-                bool unchanged = history.Count == gm.RecentSuccessfulCommands.Count;
-                for (int i = 0; unchanged && i < history.Count; i++)
-                    unchanged &= history[i] == gm.RecentSuccessfulCommands[i];
-                result.Assert(rejected && unchanged && MutinyCameraController.ExplosionCameraEnabled,
-                    "GM-11 invalid parameters preserve the switch and successful history");
+                result.Assert(rejected && MutinyCameraController.ExplosionCameraEnabled,
+                    "GM-11 invalid parameters preserve the switch");
                 result.Assert(gm.ExecuteCommand("excamera 0") && !MutinyCameraController.ExplosionCameraEnabled,
                     "GM-11 explicit zero is a valid disable alias");
-                result.Assert(gm.RunRecentCommand(1) && MutinyCameraController.ExplosionCameraEnabled,
-                    "GM-11 replay uses the same production parser to re-enable");
+                result.Assert(gm.ExecuteCommand("blastcam 1") && MutinyCameraController.ExplosionCameraEnabled &&
+                              !gm.ExecuteCommand("blastcamx 1") && MutinyCameraController.ExplosionCameraEnabled,
+                    "GM-PARSE-02 blastcam uses the production camera switch with exact word matching");
                 MutinyCameraController.ResetExplosionCameraSetting();
                 result.Assert(!MutinyCameraController.ExplosionCameraEnabled,
                     "GM-11 the production SubsystemRegistration initializer resets the session default to disabled");

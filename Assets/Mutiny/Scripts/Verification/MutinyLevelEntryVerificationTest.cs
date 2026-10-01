@@ -52,18 +52,17 @@ namespace Mutiny.Verification
                     controller.LevelXml.name == "level_1_16" &&
                     controller.CurrentLevel.LevelName == MutinyLevelXmlParser.Parse(controller.LevelXml.text).Name &&
                     controller.CurrentLevel.Team2.IsAiControlled &&
-                    camera.TurnManager == controller.CurrentLevel.GetComponent<MutinyTurnManager>() &&
-                    gm.RecentSuccessfulCommands[0] == "EnTeRlEvEl   16",
-                    "GM-15 title-to-temporary-16 loads the actual resource, AI, camera, page and history");
+                    camera.TurnManager == controller.CurrentLevel.GetComponent<MutinyTurnManager>(),
+                    "GM-15 title-to-temporary-16 loads the actual resource, AI, camera and page");
                 MutinyAudioManager audio = MutinyAudioManager.Instance;
                 result.Assert(audio.MusicSource.clip ==
                     Resources.Load<AudioClip>("Audio/Music/game_music"),
                     "GM-15 gameplay entry resolves combat music, including its logical target while muted");
 
                 MutinyLevelRoot oldRoot = controller.CurrentLevel;
-                result.Assert(gm.RunRecentCommand(0) && controller.CurrentLevel != oldRoot &&
+                result.Assert(gm.ExecuteCommand("level 16") && controller.CurrentLevel != oldRoot &&
                     !oldRoot.gameObject.activeSelf && controller.CurrentLevelIndex == 16,
-                    "GM-15 history replay rebuilds the same identity and immediately retires the old root");
+                    "GM-PARSE-02 level alias rebuilds the same identity and immediately retires the old root");
                 DestroyNow(oldRoot.gameObject);
                 oldRoot = controller.CurrentLevel;
                 controller.RestartCurrentLevel();
@@ -115,13 +114,11 @@ namespace Mutiny.Verification
                     "enterlevelx 1", "enterlevel level_01", "enterlevel 99", "enterlevel 2_99" })
                 {
                     oldRoot = controller.CurrentLevel;
-                    string history = string.Join("|", gm.RecentSuccessfulCommands);
                     result.Assert(!gm.ExecuteCommand(command) && controller.CurrentLevel == oldRoot &&
                         controller.CurrentLevelId.Equals(new MutinyLevelId(MutinyGameMode.SinglePlayer, 1)) &&
                         controller.ActiveGameMode == MutinyGameMode.SinglePlayer &&
-                        controller.SinglePlayerScore == scoreBefore && frontend.CurrentPage == MutinyFrontendPage.Gameplay &&
-                        string.Join("|", gm.RecentSuccessfulCommands) == history,
-                        $"GM-15-INVALID '{command}' leaves the board, session, page, score and history intact");
+                        controller.SinglePlayerScore == scoreBefore && frontend.CurrentPage == MutinyFrontendPage.Gameplay,
+                        $"GM-15-INVALID '{command}' leaves the board, session, page and score intact");
                 }
                 GameObject transitionHost = null;
                 try
@@ -133,11 +130,9 @@ namespace Mutiny.Verification
                         transition = transitionHost.AddComponent<MutinyTransitionManager>();
                     }
                     oldRoot = controller.CurrentLevel;
-                    string history = string.Join("|", gm.RecentSuccessfulCommands);
                     MutinyTransitionManager.RequestTransition(() => { }, showLoading: false);
                     result.Assert(MutinyTransitionManager.IsTransitionActive && !gm.ExecuteCommand("enterlevel 16") &&
-                        controller.CurrentLevel == oldRoot && controller.SinglePlayerScore == scoreBefore &&
-                        string.Join("|", gm.RecentSuccessfulCommands) == history,
+                        controller.CurrentLevel == oldRoot && controller.SinglePlayerScore == scoreBefore,
                         "GM-15 rejects entry during a production transition without disturbing the active board");
                     for (int tick = 0; tick < 10 && MutinyTransitionManager.IsTransitionActive; tick++)
                         transition.StepForVerification(0.32f);

@@ -1216,8 +1216,8 @@ namespace Mutiny.Presentation
 
             Texture2D opponentPortrait = ResolveOpponentPortrait();
             if (opponentPortrait != null)
-                GUI.DrawTexture(ResolveOriginalTeam2PortraitRect(),
-                    opponentPortrait, ScaleMode.ScaleToFit, true);
+                GUI.DrawTexture(ResolveOpponentPortraitRect(opponentPortrait),
+                    opponentPortrait, ScaleMode.StretchToFill, true);
         }
 
         private void EnsureOpponentPortraits()
@@ -1279,6 +1279,20 @@ namespace Mutiny.Presentation
             // spans x=-22..18 and y=-44..14 around its registration point.
             return new Rect(OriginalTeam2OriginX + 50f - 22f,
                 OriginalTeamOriginY + 1f - 44f, 40f, 58f);
+        }
+
+        public static Rect ResolveOpponentPortraitRect(Texture2D portrait)
+        {
+            if (portrait == null || (portrait.width == 40 && portrait.height == 58))
+                return ResolveOriginalTeam2PortraitRect();
+
+            // For custom opponent portraits (such as Robot 32x36 preview texture in single-player 16),
+            // align the portrait's optical center with the socket center (+50, +1).
+            // Robot texture is 32x36 with visible head center at (16, 20).
+            float centerX = portrait.width * 0.5f;
+            float centerY = portrait.height > 32 ? 20f : portrait.height * 0.5f;
+            return new Rect(OriginalTeam2OriginX + 50f - centerX,
+                OriginalTeamOriginY + 1f - centerY, portrait.width, portrait.height);
         }
 
         private void DrawOriginalMap()
