@@ -110,11 +110,11 @@ try {
         # Keep Unity/Gradle source paths short; evidence files include deeply nested original AS2 paths.
         $source = Join-Path (Split-Path $project -Parent) ('_release-' + $Tag + '-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
         [IO.File]::WriteAllText((Join-Path $run 'source-path.txt'), $source)
-        Write-Host "[Release] $Tag / $commit / $version+$buildNumber / $($Platforms -join ', ')"
+        Write-Host "[Release] $Tag / $commit / version $version / Android build code $buildNumber / $($Platforms -join ', ')"
         $null = Invoke-ReleaseTool $git @('-c', 'core.longpaths=true', 'worktree', 'add', '--detach', $source, $commit)
         $builtAssets = @()
         foreach ($platform in $Platforms) {
-            $output = if ($platform -eq 'Windows') { Join-Path $run 'raw\Windows\Mutiny X.exe' } else { Join-Path $run "raw\MutinyX-Android-$version+$buildNumber.apk" }
+            $output = if ($platform -eq 'Windows') { Join-Path $run 'raw\Windows\Mutiny X.exe' } else { Join-Path $run "raw\MutinyX-Android-$version.apk" }
             $report = Join-Path $run "$platform-report.json"
             $log = Join-Path $run "$platform.log"
             Write-Host "[Release] Build $platform with Unity $editorVersion"
@@ -132,7 +132,7 @@ try {
         $sums = Join-Path $assetsPath 'SHA256SUMS.txt'
         [IO.File]::WriteAllText($sums, (($assets | ForEach-Object { "$($_.sha256)  $($_.name)" }) -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
         $assets += Get-ReleaseAsset $sums
-        $manifest = [pscustomobject]@{ schema = 1; tag = $Tag; tagObject = $tagObject; commit = $commit; repo = $repo;
+        $manifest = [pscustomobject]@{ schema = 2; tag = $Tag; tagObject = $tagObject; commit = $commit; repo = $repo;
             version = $version; buildNumber = $buildNumber; platforms = $Platforms; unityVersion = $editorVersion;
             createdAt = [DateTime]::UtcNow.ToString('o'); notes = $notes; assets = $assets }
         Assert-ReleaseManifest $manifest $Tag $commit $tagObject $repo $Platforms $version $buildNumber

@@ -112,3 +112,10 @@
 - **实际构建通过**：生产发布入口在独立源码目录运行 Unity 6000.6.0f1。Android、Windows 的 BuildPipeline 均成功，用时分别为 `273.456`、`75.851` 秒。Inno Setup 编译成功，用时 `24.766` 秒；安装包 ProductVersion 为 `1.0.6`。APK 内实测 `com.RichardXue.MutinyX`、versionName `1.0.6`、versionCode `10`、ARM64、minSdk 26、targetSdk 36。Windows ZIP 223 条，PDB / Unity 备份 / Burst 调试条目为 0。
 - **实际发布通过**：GitHub Release ID `399409482` 于 `2026-09-29T18:18:23Z` 发布，`draft=false`、`prerelease=false`；四个资产均为 uploaded，大小和 SHA256 digest 与本地 manifest 及文件哈希相同。说明与固定源码提交一致，临时 worktree 已清理。[正式 Release](https://github.com/RichardXue123/Mutiny-X/releases/tag/v1.0.6)。摘要证据：[LOCAL-RELEASE-V1.0.6-20260930.json](Artifacts/LOCAL-RELEASE-V1.0.6-20260930.json)。
 - **待运行验证 / 已知差异**：仅发布 Windows ZIP、Setup EXE、Android APK 和 SHA256，不发布 iOS。Windows 安装/卸载、Android 真机运行、整局增强 AI 性能与地雷场景目视验收未在本轮执行。增强 AI 是有界近似模型，既有规格中的局限仍适用。
+
+### 发布文件名仅显示可见版本（2026-10-02）
+
+- **静态确认**：已发布 v1.0.6 的 APK 内 `versionName=1.0.6`、`versionCode=10`；`+10` 来自本地菜单和发布流水线的文件命名，不是应用显示版本。Android 内部构建号仍按版本递增。
+- **已实现**：新发布 manifest 使用 schema 2；APK、Windows ZIP 与 Setup 文件名只保留 `1.x.x`，Inno 和 Unity 菜单输出同步。旧 schema 1 manifest 仍按原 `1.x.x+y` 文件名校验，已发布附件与 tag 不变。
+- **实际测试通过**：Windows PowerShell 5.1 和 PowerShell 7 发布生产入口回归各 **43/43**，新增断言检验 schema 2 四个附件的精确文件名；分别记录在 `Builds/ReleaseTests/5b869126e05b48979148cdc6181ed5b7/` 与 `Builds/ReleaseTests/d331984c7fc6478a91a44389bddf1cb7/`。真实 v1.0.6 schema 1 manifest 执行 `Publish-Release.ps1 -Tag v1.0.6 -Resume -BuildOnly` 成功校验本地旧附件及哈希。
+- **待运行验证 / 已知差异**：简洁文件名尚未用于新的正式 Unity 构建或 GitHub 发布；下一次版本发布时按实际产物再验收。Android `versionCode` 仍保存在安装包和 manifest，不能因文件名简化而复用旧号。

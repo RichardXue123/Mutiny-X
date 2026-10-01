@@ -81,7 +81,7 @@ if (Get-ChildItem -LiteralPath $env:MUTINY_SOURCE_DIR -File -Recurse | Where-Obj
     Write-Error 'Installer staging includes debug files' -ErrorAction Continue
     return
 }
-[IO.File]::WriteAllText((Join-Path $env:MUTINY_OUTPUT_DIR "MutinyX-Setup-$env:MUTINY_APP_VERSION+$env:MUTINY_BUILD_NUMBER.exe"), 'fixture installer')
+[IO.File]::WriteAllText((Join-Path $env:MUTINY_OUTPUT_DIR "MutinyX-Setup-$env:MUTINY_APP_VERSION.exe"), 'fixture installer')
 Write-Output 'Fixture Inno used filtered staging'
 $global:LASTEXITCODE = 0
 '@
@@ -125,6 +125,7 @@ $global:LASTEXITCODE = 0
     $manifestPath = Join-Path $fixture 'Builds\Release\v1.2.3\manifest.json'
     $manifest = [IO.File]::ReadAllText($manifestPath) | ConvertFrom-Json
     Assert-Case ($manifest.version -ceq '1.2.3' -and $manifest.buildNumber -eq 42 -and @($manifest.assets).Count -eq 4) 'Tag source isolation and four default assets'
+    Assert-Case ($manifest.schema -eq 2 -and (($manifest.assets.name | Sort-Object) -join ',') -ceq 'MutinyX-Android-1.2.3.apk,MutinyX-Setup-1.2.3.exe,MutinyX-Windows-1.2.3.zip,SHA256SUMS.txt') 'Asset filenames use public version without internal build number'
     Assert-Case ((Get-Content -LiteralPath (Join-Path $fixture 'ProjectSettings\ProjectSettings.asset') -Raw) -match '99.0.0') 'Current working tree is preserved'
     Assert-Case $true 'Long original evidence paths are checked out successfully'
     Assert-Case ($manifest.notes -ceq $fixtureNotes) 'Chinese release notes survive a non-UTF8 console'

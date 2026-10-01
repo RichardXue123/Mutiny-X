@@ -27,7 +27,7 @@ and select `ISCC.exe`.
 
 Installer output:
 
-`Builds/Installer/MutinyX-Setup-<version>+<build>.exe`
+`Builds/Installer/MutinyX-Setup-<version>.exe`
 
 The installer includes Start Menu integration, an optional desktop shortcut, uninstall support, and a post-install launch option.
 

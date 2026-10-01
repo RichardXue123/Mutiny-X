@@ -225,7 +225,7 @@ function New-ReleaseWindowsPackage {
     }
     if (!(Test-Path -LiteralPath (Join-Path $Stage 'Mutiny X.exe'))) { throw 'Windows staging is missing the player executable.' }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $zip = Join-Path $Assets "MutinyX-Windows-$Version+$BuildNumber.zip"
+    $zip = Join-Path $Assets "MutinyX-Windows-$Version.zip"
     [IO.Compression.ZipFile]::CreateFromDirectory($Stage, $zip, [IO.Compression.CompressionLevel]::Optimal, $false)
     $archive = [IO.Compression.ZipFile]::OpenRead($zip)
     try {
@@ -248,7 +248,7 @@ function New-ReleaseWindowsPackage {
     finally {
         foreach ($key in $keys) { [Environment]::SetEnvironmentVariable($key, $previous[$key], 'Process') }
     }
-    $installer = Join-Path $Assets "MutinyX-Setup-$Version+$BuildNumber.exe"
+    $installer = Join-Path $Assets "MutinyX-Setup-$Version.exe"
     if (!(Test-Path -LiteralPath $installer) -or (Get-Item -LiteralPath $installer).Length -eq 0) { throw 'Installer output is missing or empty.' }
     return @($zip, $installer)
 }
@@ -264,15 +264,17 @@ function Get-ReleaseAsset {
 function Assert-ReleaseManifest {
     param($Manifest, [string]$Tag, [string]$Commit, [string]$TagObject, [string]$Repo,
           [string[]]$Platforms, [string]$Version, [int]$BuildNumber)
-    if ($Manifest.schema -ne 1 -or $Manifest.tag -cne $Tag -or $Manifest.commit -cne $Commit -or
+    if ($Manifest.schema -notin @(1, 2) -or $Manifest.tag -cne $Tag -or $Manifest.commit -cne $Commit -or
         $Manifest.tagObject -cne $TagObject -or $Manifest.repo -ine $Repo -or
         $Manifest.version -cne $Version -or $Manifest.buildNumber -ne $BuildNumber -or
         (($Manifest.platforms | Sort-Object) -join ',') -cne (($Platforms | Sort-Object) -join ',')) {
         throw 'Manifest identity does not match this tag, repository or platform selection.'
     }
     $expected = @('SHA256SUMS.txt')
-    if ($Platforms -contains 'Windows') { $expected += "MutinyX-Windows-$Version+$BuildNumber.zip", "MutinyX-Setup-$Version+$BuildNumber.exe" }
-    if ($Platforms -contains 'Android') { $expected += "MutinyX-Android-$Version+$BuildNumber.apk" }
+    # Schema 1 belongs to already-published releases; keep their original names valid for -Resume.
+    $fileVersion = if ($Manifest.schema -eq 1) { "$Version+$BuildNumber" } else { $Version }
+    if ($Platforms -contains 'Windows') { $expected += "MutinyX-Windows-$fileVersion.zip", "MutinyX-Setup-$fileVersion.exe" }
+    if ($Platforms -contains 'Android') { $expected += "MutinyX-Android-$fileVersion.apk" }
     if ((@($Manifest.assets).Count -ne $expected.Count) -or
         (($Manifest.assets.name | Sort-Object) -join ',') -cne (($expected | Sort-Object) -join ',')) {
         throw 'Manifest asset names do not match the requested platforms.'
