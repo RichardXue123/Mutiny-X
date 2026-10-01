@@ -21,14 +21,23 @@
 | GM-05 | `Help` | `?` | 在 GM 面板显示当前可用命令的简表。 | 无状态修改。 |
 | GM-07 | `aiforceusewaepon {weaponid}` | 无；命令拼写按测试约定保留 `waepon` | `1..15`：所有 AI 队伍的角色在 AI 决策中仅将对应编号武器视为无限可用；跳跃仍参与竞争，跳跃后仍可放弃开火。`0`：关闭覆盖，恢复实际库存候选。 | 当前运行会话；不改角色真实库存与存档。 |
 | GM-08 | `aitakeover {luck}` | `aitakeoverwithluck {luck}`；范围 `0..99999`，允许英文小数点 | AI 以指定 Luck 接管当前人类队伍这一回合的剩余行动，允许跳跃前、跳跃飞行中及落地后使用；完整回合结束自动恢复人类控制。 | 仅本回合 AI 决策；不改变角色原始 Luck、未来回合、真实库存或存档。 |
-| GM-09 | `setlanguage zh-cn` / `setlanguage en` | 大小写不敏感；允许多个参数分隔空白 | `zh-cn` 选择简体中文（内部 Locale `zh-Hans`），`en` 选择英语；复用本地化服务刷新当前页面。缺参、旧 `cn`、未知代码及额外参数拒绝，保留原语言。 | 单独语言偏好，跨场景及重启保留；不影响进度和成绩。 |
+| GM-09 | `lang en` / `lang zh-cn` / `lang zh-hk` | 大小写不敏感；空白分隔参数；`setlanguage` 为兼容别名 | 英文 / 简体中文 / 香港繁体中文；内部代码为 `en` / `zh-Hans` / `zh-HK`，即时刷新文本与地区字体。缺参、旧 `cn`、未知代码及额外参数拒绝，保留原语言。 | 单独语言偏好，跨场景及重启保留；不影响进度和成绩。 |
 | GM-10 | `ailog 1` / `ailog 0` | 大小写不敏感 | 开启／关闭每次 AI 实际行动的一条 `[Mutiny:AI-Action]` 详细日志；含行动参数、胜出分数、各行动类别最佳分和选择原因。 | 当前运行会话；切关保留，新 Play／重启默认关闭；不写存档。 |
 | GM-11 | `excamera 1` / `excamera` | `excamera 0` 也关闭；大小写不敏感 | 可选爆炸击退运镜：同帧最近被炸飞者优先，一批只选一人，不接力；关闭立即释放。 | 当前运行会话；切关保留，新 Play／重启默认关闭；不写存档。 |
 | GM-12 | `aisetluck {luck}` | 大小写不敏感；范围 `0..99999`，允许英文小数点 | 统一覆盖当前单人关卡敌方 AI 的决策 Luck，`0` 是有效覆盖。 | 当前关卡；重开/下一关不继承，不改角色原始 Luck/XML/存档。 |
 | GM-13 | `airesetluck` | 大小写不敏感；不带参数 | 清除当前单人关卡覆盖，恢复每名敌方角色各自的默认 Luck。 | 只影响当前关卡敌方，不影响玩家单回合接管。 |
 | GM-14 | `aienhance 1` / `aienhance 0` | 大小写不敏感；恰好一个 `0/1` 参数 | 开启 effects-v1 完整效果模拟初版／恢复原兼容策略；增强评分以模拟后双方 HP 为主。 | 会话设置；跨关卡保留，新 Play／重启默认关闭，不写存档，不自动接管人类。 |
+| GM-15 | `enterlevel 16` | `enterlevel 1_16`、`enterlevel level_1_16`；`enterlevel 2_01` / `level_2_01` 指定双人 | 绕过菜单上限和解锁直接进入指定关卡；裸数字始终为单人。仅接受一个正整数或明确模式编号，资源必须存在。 | 替换当前对局；新单人会话分数重置，不修改存档解锁和成绩。 |
 
 `GM-06` 尚未分配给命令。旧回归中的 `GM-02` 至 `GM-06` 字样是断言标题，分别检查 GM-01 的武器效果和按钮几何，并非同名命令 ID；新增命令不得据此复用现有 ID。
+
+## GM-15 · 直接进入关卡
+
+`enterlevel 1`–`enterlevel 15` 进入现有单人关；`enterlevel 16` 进入新的临时单人关，2026-10-01 已更新为 [115×36 格三舰布局初稿](../02-LevelAndWorld/04-ObjectsAndSpawns/LEVEL_1_16_SPACE_DRAFT.md)，玩家10人对机器人11人。完整身份格式为 `level_1_XX`（单人）和 `level_2_XX`（双人），允许省略 `level_`。双人局部编号 01–18 对应原版全局编号 16–33；例如 `enterlevel 2_01` 进入原版双人第 16 关，`enterlevel 2_16` 进入原版第 31 关，不会与单人 16 冲突。
+
+命令在标题、选关、结局及战斗页均可使用；大小写不敏感，允许参数间多个空白。成功经前端正式入口加载角色、AI、镜头和战斗音乐，并加入最近五次成功历史。切关时立即停用旧根，重开保留模式与编号。缺参、多参、非正整数、未知模式、溢出或资源不存在均失败，不替换对局、不切换页面/模式、不清空分数或成功历史；过场进行中拒绝并提示等待。直接进入不解锁关卡或写入已完成成绩，后续真实胜负结算仍使用现有规则。
+
+本轮不增加单人选关按钮、不迁移第 15 关结局、不改变存档规格。太空主题、低重力、机器人和新音频尚未实现。规格与实际验收状态见 [EXT-LVL-ID-01..03 / GM-15](../02-LevelAndWorld/01-LevelDataParsing/LEVEL_IDENTITY_AND_GM_ENTRY.md)。
 
 ## GM-14 · AI 策略开关
 
@@ -62,9 +71,9 @@
 
 手动语言切换入口仅保留 GM 命令；主标题页不再显示语言选择按钮。
 
-原版来源：不适用，用户授权的 Unity 本地化和 GM 扩展。菜单及战斗均可输入 `setlanguage zh-cn` 或 `setlanguage en`，经唯一生产入口 `MutinyGMManager.ExecuteCommand` 调用 `MutinyLocalization.Initialize/Select`，刷新所接入的文本和字体路径。内部语言代码仍为 `zh-Hans` / `en`；运行时 IMGUI 从随包双语文本读取，Unity String Table 保留作编辑器资源和内容核验。Windows 等平台沿用 `mutiny_language_v1`，Android 将语言偏好写入不备份的安装局部文件，避免卸载重装时恢复旧选择；游戏进度存档仍使用原路径。合法命令计入最近成功命令，可重放；再次选择当前语言同样成功并保存。非法输入显示 `Usage: setlanguage zh-cn | en`，不改语言、偏好和成功历史。GM 面板自身保持开发英语。
+原版来源：不适用，用户授权的 Unity 本地化和 GM 扩展。菜单及战斗均可输入 `lang en`、`lang zh-cn` 或 `lang zh-hk`，经唯一生产入口 `MutinyGMManager.ExecuteCommand` 调用 `MutinyLocalization.Initialize/Select`，刷新所接入的文本和字体路径；旧 `setlanguage` 兼容同样的三个参数。内部代码为 `en` / `zh-Hans` / `zh-HK`，现有保存的简中代码仍可读；运行时 IMGUI 从随包三语文本读取，Unity String Table 保留作编辑器资源和内容核验。英语使用原位图字库，简中和香港繁中分别使用 SC/HK 地区动态字体。无保存值时默认英语。Windows 等平台沿用 `mutiny_language_v1`，Android 将语言偏好写入不备份的安装局部文件，避免卸载重装时恢复旧选择；游戏进度存档仍使用原路径。合法命令计入最近成功命令，可重放；再次选择当前语言同样成功并保存。非法输入显示 `Usage: lang en | zh-cn | zh-hk`，不改语言、偏好和成功历史。GM 面板自身保持开发英语。
 
-验收用例：从菜单实际 GM 解析入口依次执行 `zh-cn → en → zh-cn → en → zh-cn`，检查每步本地化文本、内部语言代码、字体路径和保存值；执行大小写/空白变化及重复命令；分别拒绝缺参、旧 `cn`、`jp`、额外参数；通过最近成功命令再次切换。2026-09-26 对旧 `cn` 命令的隔离 Play Mode **7/7** 仅为历史结果；新命令和 Android 回切待用户运行验收，见 [Android 修复规格](../09-PresentationAndFeedback/LOCALIZATION_ANDROID_FIX.md)。
+验收用例：从实际 GM 入口依次执行 `lang en → lang zh-cn → lang zh-hk → lang en → lang zh-hk → lang zh-cn`，检查每步菜单/对白/悬停、内部代码、地区字体和保存值；执行大小写/空白变化、重复命令和兼容别名；分别拒绝缺参、旧 `cn`、未知地区及额外参数；通过最近成功命令再次切换并重启核对保存。旧 `cn`/双语言验收为历史结果，不证明当前三语言通过；本轮运行验收由用户执行，见 [香港繁体中文规格](../09-PresentationAndFeedback/LOCALIZATION_HONG_KONG.md)。
 
 ## GM-08 · 当前玩家单回合 AI 接管
 

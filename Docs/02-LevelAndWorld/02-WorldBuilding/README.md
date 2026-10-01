@@ -10,6 +10,10 @@
 
 只组装对象，不承担对象内部玩法。
 
+## 编辑器场景预览
+
+[任意模式关卡加载到活动场景](SCENE_LEVEL_PREVIEW.md)：`Mutiny → Levels → Load Level to Active Scene...` 选择模式与编号；独立预览Scene按Play直接进关，Main始终先显示主菜单；清理支持Undo，范围为活动场景。
+
 ## 关卡级动态状态重置
 
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |

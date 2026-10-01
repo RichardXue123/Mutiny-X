@@ -742,6 +742,22 @@ MonoBehaviour:
     m_Localized: sound fx
     m_Metadata:
       m_Items: []
+  - m_Id: 1893825906728960
+    m_Localized: "Shiver me timbers! Look at all that shiny metal! We\u2019ll pry those glowing glass eyes off yer heads and sell 'em for rum!"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1893825948672000
+    m_Localized: Work it, make it, do it, makes us.
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1893825948672001
+    m_Localized: "Ha! Big shiny suit, but yer still hollow inside! Grab the crowbars, lads\u2014let's smash these tin cans for scrap!"
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1893825948672002
+    m_Localized: Harder, better, faster, stronger.
+    m_Metadata:
+      m_Items: []
   references:
     version: 2
     RefIds: []

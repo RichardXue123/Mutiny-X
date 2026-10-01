@@ -158,6 +158,7 @@ namespace Mutiny.Presentation
         private Texture2D m_Team2Panel;
         private Texture2D m_SpeechBubbleTexture;
         private Texture2D m_Team1Portrait;
+        private Texture2D m_RobotPortrait;
         private Texture2D[] m_OpponentPortraits = Array.Empty<Texture2D>();
         private readonly Dictionary<string, Texture2D> m_WeaponIcons = new Dictionary<string, Texture2D>();
         private bool m_StylesInitialized = false;
@@ -710,8 +711,7 @@ namespace Mutiny.Presentation
             m_SfxCornerOnOverTexture = LoadPointTexture("UI/CornerControls/sfx_on_over");
             m_SfxCornerOffUpTexture = LoadPointTexture("UI/CornerControls/sfx_off_up");
             m_SfxCornerOffOverTexture = LoadPointTexture("UI/CornerControls/sfx_off_over");
-            m_OpponentPortraits = Resources.LoadAll<Texture2D>("UI/BattleHUD/Opponents");
-            Array.Sort(m_OpponentPortraits, (a, b) => ParseNumericTextureName(a).CompareTo(ParseNumericTextureName(b)));
+            EnsureOpponentPortraits();
             for (int i = 0; i < OriginalWeaponOrder.Length; i++)
             {
                 string weaponType = OriginalWeaponOrder[i];
@@ -855,7 +855,7 @@ namespace Mutiny.Presentation
             // DefineSprite 465: textHolder at (-75,-21), DangleFont at (-25,-10)
             // relative to the clip registration point. Keep the same visible field
             // for typing and click-to-complete (the Flash mouseDown used a wrong path).
-            MutinyLocalizedText.Speech(ResolveSpeechTextRect(bubbleRect), null, Speech.VisibleText);
+            MutinyLocalizedText.Speech(ResolveSpeechTextRect(bubbleRect), null, Speech.VisibleText, Speech.FullText);
             GUI.color = previousColor;
 
             Event evt = Event.current;
@@ -1214,16 +1214,35 @@ namespace Mutiny.Presentation
             if (m_Team2Panel != null)
                 GUI.DrawTexture(ResolveOriginalTeam2PanelRect(), m_Team2Panel, ScaleMode.StretchToFill, true);
 
-            int level = LevelController != null ? LevelController.CurrentLevelIndex : 1;
-            if (m_OpponentPortraits.Length > 0)
+            Texture2D opponentPortrait = ResolveOpponentPortrait();
+            if (opponentPortrait != null)
+                GUI.DrawTexture(ResolveOriginalTeam2PortraitRect(),
+                    opponentPortrait, ScaleMode.ScaleToFit, true);
+        }
+
+        private void EnsureOpponentPortraits()
+        {
+            if (m_OpponentPortraits.Length > 0) return;
+            m_OpponentPortraits = Resources.LoadAll<Texture2D>("UI/BattleHUD/Opponents");
+            Array.Sort(m_OpponentPortraits, (a, b) => ParseNumericTextureName(a).CompareTo(ParseNumericTextureName(b)));
+        }
+
+        public Texture2D ResolveOpponentPortrait()
+        {
+            // The extension's single-player 16 overlaps original two-player 1
+            // in the legacy visual table; resolve its mode-local identity first.
+            if (LevelController != null && LevelController.CurrentLevelId.Equals(
+                new MutinyLevelId(MutinyGameMode.SinglePlayer, 16)))
             {
-                int portraitIndex = Mathf.Clamp(level - 1, 0, m_OpponentPortraits.Length - 1);
-                if (m_OpponentPortraits[portraitIndex] != null)
-                {
-                    GUI.DrawTexture(ResolveOriginalTeam2PortraitRect(),
-                        m_OpponentPortraits[portraitIndex], ScaleMode.StretchToFill, true);
-                }
+                if (m_RobotPortrait == null)
+                    m_RobotPortrait = LoadPointTexture("Art/Characters/Preview/Robot");
+                if (m_RobotPortrait != null) return m_RobotPortrait;
             }
+
+            EnsureOpponentPortraits();
+            if (m_OpponentPortraits.Length == 0) return null;
+            int level = LevelController != null ? LevelController.OriginalLevelIndex : 1;
+            return m_OpponentPortraits[Mathf.Clamp(level - 1, 0, m_OpponentPortraits.Length - 1)];
         }
 
         public static Rect ResolveOriginalTeam1PanelRect()

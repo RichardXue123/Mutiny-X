@@ -12,13 +12,18 @@ namespace Mutiny.Simulation
         public int FanDirection { get; }
         public int SimulationSeed { get; }
         public int CoinCount => m_Coins.Length;
+        // Predicted velocities are diagnostics; enhanced continuations latch a
+        // policy and replan against the live board instead of replaying them.
+        public int GreedyCoinSamples { get; }
         public int BoxCount => m_Boxes.Length;
         public Vector2 CoinVelocity(int index) => m_Coins[index];
         public Vector2[] CopyBoxPositions() => (Vector2[])m_Boxes.Clone();
-        internal MutinyAIActionPlan(int fan, Vector2[] coins = null, Vector2[] boxes = null, int simulationSeed = 0)
+        internal MutinyAIActionPlan(int fan, Vector2[] coins = null, Vector2[] boxes = null, int simulationSeed = 0,
+            int greedyCoinSamples = 0)
         {
             FanDirection = Mathf.Clamp(fan, -1, 1);
             SimulationSeed = simulationSeed;
+            GreedyCoinSamples = greedyCoinSamples;
             m_Coins = coins != null ? (Vector2[])coins.Clone() : Array.Empty<Vector2>();
             m_Boxes = boxes != null ? (Vector2[])boxes.Clone() : Array.Empty<Vector2>();
         }
@@ -63,6 +68,21 @@ namespace Mutiny.Simulation
         public float FlightY;
         public float[] ShotXs;
         public Vector2[] BoxPossibilities;
+        public int GreedyCoinSamples;
+        // Single-coin refinement must never recursively start another eight-shot search.
+        public int CoinLimit = MutinyPiecesOfEight.TotalCoins;
+        public bool CoinReaim;
+    }
+
+    [Serializable]
+    public sealed class MutinyAICoinEvaluation
+    {
+        public int Index, Samples, Simulations, WorkSteps;
+        public bool Fallback;
+        public Vector2 Velocity, ActorPosition;
+        public Vector2[] EnemyPositions;
+        public float Score, AllyHpBefore, AllyHpAfter, EnemyHpBefore, EnemyHpAfter;
+        public string Status;
     }
 
     [Serializable]
@@ -77,6 +97,7 @@ namespace Mutiny.Simulation
         public float FlightY;
         public float[] ShotXs;
         public Vector2[] CoinVelocities, BoxPositions;
+        public List<MutinyAICoinEvaluation> CoinSearches;
         public bool Settled;
     }
 
@@ -87,6 +108,7 @@ namespace Mutiny.Simulation
         public string AlgorithmId = Algorithm;
         public string Limitations = "fixed-tick-order; rum-kick-deterministic-sample; voodoo-camera-wait-approx; no-next-enemy-turn";
         public int Seed, CoarseCandidates, JumpSamples, JumpFollowUps, Simulations, Truncated, BudgetSkipped;
+        public int CoinSamples, CoinSimulations, CoinWorkSteps, CoinFallbacks;
         public float WinnerScore;
         public List<MutinyAIEffectEvaluation> Evaluations = new List<MutinyAIEffectEvaluation>();
     }

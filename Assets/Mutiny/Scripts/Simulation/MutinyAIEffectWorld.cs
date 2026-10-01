@@ -4,8 +4,8 @@ using UnityEngine;
 
 namespace Mutiny.Simulation
 {
-    // One private, value-only battle per candidate. Advance is ONE 25 Hz tick;
-    // the controller's existing budget pump decides how many ticks fit a frame.
+    // One private, value-only battle per candidate. Advance is ONE 25 Hz tick
+    // or coin-search quantum; the existing budget pump controls frame work.
     internal sealed class MutinyAIEffectWorld
     {
         internal const int DefaultMaxTicks = 2048;
@@ -21,6 +21,8 @@ namespace Mutiny.Simulation
         private readonly MutinyAIEffectRandom m_Random;
         private readonly int m_MaxTicks, m_Seed;
         private readonly Vector2[] m_CoinVelocities = new Vector2[MutinyPiecesOfEight.TotalCoins];
+        private readonly MutinyAICoinBudget m_CoinBudget;
+        private MutinyAICoinPlanner m_CoinSearch;
         private readonly List<Vector2> m_BoxPositions = new List<Vector2>();
         private bool m_ActionDone, m_Finished;
         private int m_Tick, m_QuietTicks, m_CoinIndex, m_CoinWait, m_AnchorWait, m_AnchorHold;
@@ -34,11 +36,16 @@ namespace Mutiny.Simulation
         internal MutinyAIEffectEvaluation Outcome { get; } = new MutinyAIEffectEvaluation();
         internal MutinyAIActionPlan Plan => new MutinyAIActionPlan(m_Command.FanDirection,
             m_Command.Weapon == "piecesofeight" ? m_CoinVelocities : null,
-            m_BoxPositions.Count > 0 ? m_BoxPositions.ToArray() : null, m_Seed);
+            m_BoxPositions.Count > 0 ? m_BoxPositions.ToArray() : null, m_Seed, m_Command.GreedyCoinSamples);
         internal MutinyAIEffectCharacter CharacterAt(int index) => m_Characters[index];
         internal MutinyAIEffectInput CaptureSettledInput()
         {
             if (!Outcome.Settled) throw new InvalidOperationException("Cannot continue an unsettled effect world.");
+            return CaptureInput();
+        }
+
+        private MutinyAIEffectInput CaptureInput()
+        {
             var boxes = new List<MutinyAIEffectBox>();
             foreach (var box in m_Boxes) if (!box.Removed) boxes.Add(box);
             var mines = new List<MutinyAIEffectMine>();
@@ -52,9 +59,10 @@ namespace Mutiny.Simulation
         private struct Flame { public Vector2 Position; public bool Right; public int Due; }
 
         internal MutinyAIEffectWorld(MutinyAIEffectInput input, MutinyAIEffectCommand command, int seed,
-            int maxTicks = DefaultMaxTicks)
+            int maxTicks = DefaultMaxTicks, MutinyAICoinBudget coinBudget = null)
         {
             m_Input = input; m_Command = command; m_MaxTicks = Mathf.Max(1, maxTicks); m_Seed = seed;
+            m_CoinBudget = coinBudget ?? new MutinyAICoinBudget();
             m_Characters = (MutinyAIEffectCharacter[])input.Characters.Clone();
             m_Boxes = new List<MutinyAIEffectBox>(input.Boxes);
             m_Mines = new List<MutinyAIEffectMine>(input.Mines);
@@ -104,7 +112,10 @@ namespace Mutiny.Simulation
                     m_Mines.Add(new MutinyAIEffectMine { Body = LaunchedBody(weapon, actor.Body, m_Command.Velocity),
                         Ignore = MutinyMine.IgnoreTicks, Countdown = MutinyMine.CountdownTicks });
                     m_ActionDone = true; break;
-                case "piecesofeight": FireCoin(m_Command.Velocity); break;
+                case "piecesofeight":
+                    if (m_Command.GreedyCoinSamples > 0) StartCoinSearch();
+                    else FireCoin(m_Command.Velocity);
+                    break;
                 case "cherrybomb": case "dynamite": case "banana": case "boulder": case "rumbottle": case "parachutebomb": case "cannonball":
                     m_Projectiles.Add(new Projectile { Body = LaunchedBody(weapon, actor.Body, m_Command.Velocity), Kind = weapon, Visibility = 2f }); break;
                 default: Finish(false, "unsupported-weapon"); break;
@@ -114,6 +125,17 @@ namespace Mutiny.Simulation
         internal bool Advance()
         {
             if (m_Finished) return false;
+            // Pausing the virtual board while exploring alternatives is not a
+            // pause of live gameplay. Search ticks do not consume its horizon.
+            if (m_CoinSearch != null)
+            {
+                if (m_CoinSearch.Advance()) return true;
+                var coin = m_CoinSearch.Result;
+                Outcome.CoinSearches.Add(coin);
+                m_CoinSearch = null;
+                FireCoin(coin.Velocity);
+                return true;
+            }
             m_Tick++;
             BuildObstacles();
             for (int i = 0; i < m_Characters.Length; i++)
@@ -232,11 +254,14 @@ namespace Mutiny.Simulation
             }
             else if (m_AnchorHold > 0 && --m_AnchorHold == 0) m_ActionDone = true;
             if (m_BoxSequence) AdvancePlacement();
-            if (m_Command.Weapon == "piecesofeight" && m_Projectiles.Count == 0 && m_CoinIndex < MutinyPiecesOfEight.TotalCoins)
+            if (m_Command.Weapon == "piecesofeight" && m_Projectiles.Count == 0 && m_CoinIndex < m_Command.CoinLimit)
             {
                 if (!m_Characters[m_Command.Actor].Alive) m_ActionDone = true;
                 else if (m_CoinWait > 0 && --m_CoinWait == 0)
-                    FireCoin(AimedCoinVelocity());
+                {
+                    if (m_Command.GreedyCoinSamples > 0) StartCoinSearch();
+                    else FireCoin(AimedCoinVelocity());
+                }
             }
         }
 
@@ -301,9 +326,10 @@ namespace Mutiny.Simulation
                 m_Projectiles.RemoveAt(index);
                 if (kind == "piecesofeight")
                 {
+                    if (m_CoinIndex == 0) Outcome.Target = new Vector2(body.X, body.Y);
                     m_CoinIndex++; Outcome.CoinsFired = m_CoinIndex;
                     m_CoinWait = MutinyPiecesOfEight.AiReaimDelayTicks;
-                    if (m_CoinIndex >= MutinyPiecesOfEight.TotalCoins || !m_Characters[m_Command.Actor].Alive) m_ActionDone = true;
+                    if (m_CoinIndex >= m_Command.CoinLimit || !m_Characters[m_Command.Actor].Alive) m_ActionDone = true;
                 }
                 else if (kind != "seagullfire") m_ActionDone = true;
             }
@@ -416,9 +442,17 @@ namespace Mutiny.Simulation
         {
             var owner = m_Characters[m_Command.Actor].Body;
             var body = LaunchedBody("piecesofeight", owner, velocity);
-            if (m_CoinIndex > 0) body.Y = owner.Y + 5f;
+            if (m_CoinIndex > 0 || m_Command.CoinReaim) body.Y = owner.Y + 5f;
+            if (m_CoinIndex == 0) Outcome.Velocity = velocity;
             m_CoinVelocities[m_CoinIndex] = velocity;
             m_Projectiles.Add(new Projectile { Body = body, Kind = "piecesofeight" });
+        }
+
+        private void StartCoinSearch()
+        {
+            if (Outcome.CoinSearches == null) Outcome.CoinSearches = new List<MutinyAICoinEvaluation>();
+            m_CoinSearch = new MutinyAICoinPlanner(CaptureInput(), m_Command.Actor, m_Command.GreedyCoinSamples,
+                m_Seed, m_CoinIndex, m_CoinIndex > 0, m_CoinBudget);
         }
 
         private Vector2 AimedCoinVelocity()
@@ -433,7 +467,8 @@ namespace Mutiny.Simulation
             }
             if (nearest < 0) return m_Command.Velocity;
             var target = m_Characters[nearest].Body;
-            return AimedVelocity(new Vector2(owner.X, owner.Y + 5f), new Vector2(target.X, target.Y), 20f);
+            return AimedVelocity(new Vector2(owner.X, owner.Y + 5f), new Vector2(target.X, target.Y), 20f,
+                weight: owner.EffectiveGravityScale);
         }
 
         internal static Vector2 AimedVelocity(Vector2 start, Vector2 target, float maxForce, float timeScale = 1f, float weight = 1f)
@@ -528,6 +563,7 @@ namespace Mutiny.Simulation
         internal static PhysicsBodyState ProjectileBody(string kind, PhysicsBodyState owner)
         {
             var body = PhysicsBodyState.CreateDefault(owner.X, owner.Y + (kind == "boulder" ? -30f : -10f));
+            body.GravityScale = owner.EffectiveGravityScale;
             body.HitsBoxes = true; float extent = 10f;
             switch (kind)
             {

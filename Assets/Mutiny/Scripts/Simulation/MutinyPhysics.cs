@@ -13,6 +13,11 @@ namespace Mutiny.Simulation
         public float VelocityY;
 
         public float Weight; // default 1.0f
+        // A missing field in legacy serialized states is zero and resolves to 1.
+        // Store the world multiplier separately so weapon-specific Weight remains intact.
+        public float GravityScale;
+        public float EffectiveGravityScale => GravityScale > 0f ? GravityScale : 1f;
+        public float GravityPerTick => Weight * EffectiveGravityScale;
         public float Bounce; // default 0.2f
         public float Friction; // default 0.3f (2.0f for Character)
 
@@ -35,6 +40,7 @@ namespace Mutiny.Simulation
                 VelocityX = 0f,
                 VelocityY = 0f,
                 Weight = 1.0f,
+                GravityScale = 1f,
                 Bounce = 0.2f,
                 Friction = 0.3f,
                 LeftExtent = 6f,
@@ -236,7 +242,7 @@ namespace Mutiny.Simulation
         {
             var result = new StepResult();
 
-            body.VelocityY += body.Weight;
+            body.VelocityY += body.GravityPerTick;
 
             if (body.VelocityX == 0f && body.VelocityY == 0f)
             {

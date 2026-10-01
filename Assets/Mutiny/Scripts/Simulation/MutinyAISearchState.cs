@@ -190,6 +190,7 @@ namespace Mutiny.Simulation
             AddPhysicsDifference(text, "vx", before.VelocityX, after.VelocityX);
             AddPhysicsDifference(text, "vy", before.VelocityY, after.VelocityY);
             AddPhysicsDifference(text, "weight", before.Weight, after.Weight);
+            AddPhysicsDifference(text, "gravityScale", before.EffectiveGravityScale, after.EffectiveGravityScale);
             AddPhysicsDifference(text, "bounce", before.Bounce, after.Bounce);
             AddPhysicsDifference(text, "friction", before.Friction, after.Friction);
             AddPhysicsDifference(text, "left", before.LeftExtent, after.LeftExtent);
@@ -208,7 +209,8 @@ namespace Mutiny.Simulation
 
         private static bool SamePhysics(PhysicsBodyState a, PhysicsBodyState b) =>
             a.X == b.X && a.Y == b.Y && a.VelocityX == b.VelocityX && a.VelocityY == b.VelocityY &&
-            a.Weight == b.Weight && a.Bounce == b.Bounce && a.Friction == b.Friction &&
+            a.Weight == b.Weight && a.EffectiveGravityScale == b.EffectiveGravityScale &&
+            a.Bounce == b.Bounce && a.Friction == b.Friction &&
             a.LeftExtent == b.LeftExtent && a.RightExtent == b.RightExtent &&
             a.TopExtent == b.TopExtent && a.BottomExtent == b.BottomExtent &&
             a.HitsTiles == b.HitsTiles && a.HitsBoxes == b.HitsBoxes;

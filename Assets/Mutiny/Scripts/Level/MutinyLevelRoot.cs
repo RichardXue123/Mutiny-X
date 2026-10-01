@@ -12,6 +12,9 @@ namespace Mutiny.Levels
         public int Width;
         public int Height;
         public int Players;
+        public float GravityScale = 1f;
+        public string VisualTheme = string.Empty;
+        public List<MutinySpeechAudio> SpeechAudio = new();
         public int SkyColour = 1;
         public float WaterLevelY;
 
@@ -24,6 +27,11 @@ namespace Mutiny.Levels
         public MutinyTeam Team2;
         public List<MutinyCharacter> AllCharacters = new List<MutinyCharacter>();
         public List<MutinyCharacter> Characters => AllCharacters;
+
+        // Runtime-only, owned by this particular level instance. A rebuilt or
+        // scene-preview level always begins at 01, independent of the audio singleton.
+        public int NextRobotVoiceNumber { get; private set; } = 1;
+        internal void AdvanceRobotVoiceSequence() => NextRobotVoiceNumber = NextRobotVoiceNumber % 8 + 1;
 
         private void Start()
         {
@@ -38,7 +46,7 @@ namespace Mutiny.Levels
             if (controller == null)
                 controller = GetComponentInParent<MutinyLevelController>();
             if (controller != null && controller.LevelXml != null)
-                SkyColour = MutinyOriginalBackground.SkyColourForLevel(controller.CurrentLevelIndex);
+                SkyColour = MutinyOriginalBackground.SkyColourForLevel(controller.OriginalLevelIndex);
 
             float waterPixelY = -WaterLevelY * MutinyPhysics.PixelsPerUnit;
             for (int i = 0; i < AllCharacters.Count; i++)
@@ -56,6 +64,10 @@ namespace Mutiny.Levels
             }
 
             if (WaterHolder == null)
+                return;
+
+            // Space retains the authoritative fall boundary but has no ocean surface.
+            if (MutinySpaceVisuals.IsSpace(VisualTheme))
                 return;
 
             MutinyWaterSurface surface = WaterHolder.GetComponent<MutinyWaterSurface>();

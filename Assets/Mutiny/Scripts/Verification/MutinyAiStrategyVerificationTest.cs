@@ -318,8 +318,14 @@ namespace Mutiny.Verification
                     result.Assert(finished && total == 8 && finishedIdentity.ConfigurationVersion == identity.ConfigurationVersion &&
                         finishedIdentity.Mode == MutinyAIStrategyMode.Enhanced && fixture.Actor.WeaponInventory["piecesOfEight"] == 4,
                         "EXT-AI-STRAT-04 all eight coins finish under latched identity after GM disable");
-                    result.Assert(logs.Count == 1 && logs[0].Contains("mode=enhanced") && logs[0].Contains("strategy=enhanced-effects-v1") &&
-                        logs[0].Contains("algorithm=effects-v1") && logs[0].Contains("fallback=False"),
+                    int continuations = 0; bool identityLogged = logs.Count > 0;
+                    foreach (string log in logs)
+                    {
+                        if (log.Contains("action=CoinContinuation")) continuations++;
+                        identityLogged &= log.Contains("mode=enhanced") && log.Contains("strategy=enhanced-effects-v1") &&
+                            log.Contains("algorithm=effects-v1") && log.Contains("fallback=False");
+                    }
+                    result.Assert(continuations == 7 && identityLogged,
                         "EXT-AI-STRAT-05 committed action log distinguishes effects-v1 from legacy algorithm");
                 }
                 finally { Application.logMessageReceived -= capture; }

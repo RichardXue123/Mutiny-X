@@ -183,7 +183,8 @@ namespace Mutiny.Simulation
                 for (int offset = 0; offset < 2; offset++)
                 {
                     Vector2 destination = target + new Vector2(side * (offset == 0 ? 140f : 210f), -20f);
-                    Vector2 velocity = MutinyAIEffectWorld.AimedVelocity(start, destination, 20f);
+                    Vector2 velocity = MutinyAIEffectWorld.AimedVelocity(start, destination, 20f,
+                        weight: StateOf(actor, work).Body.GravityPerTick);
                     if (velocity.sqrMagnitude < 25f && velocity.sqrMagnitude > 0f) velocity = velocity.normalized * 5f;
                     velocities.Add(velocity);
                 }
@@ -192,7 +193,8 @@ namespace Mutiny.Simulation
             foreach (var chest in work.Snapshot.Chests)
             {
                 if (chest.Finished || chests++ >= 2) continue;
-                Vector2 velocity = MutinyAIEffectWorld.AimedVelocity(start, new Vector2(chest.X, chest.FloorY), 20f);
+                Vector2 velocity = MutinyAIEffectWorld.AimedVelocity(start, new Vector2(chest.X, chest.FloorY), 20f,
+                    weight: StateOf(actor, work).Body.GravityPerTick);
                 if (velocity.sqrMagnitude < 25f && velocity.sqrMagnitude > 0f) velocity = velocity.normalized * 5f;
                 velocities.Add(velocity);
             }
@@ -240,11 +242,15 @@ namespace Mutiny.Simulation
                             Target = candidate.TargetPosition, FlightY = candidate.SeagullFlightY,
                             ShotXs = candidate.SeagullShotXs, BoxPossibilities = candidate.BoxPossibilities, FanDirection = fan
                         };
+                        if (command.Weapon == "piecesofeight")
+                            command.GreedyCoinSamples = MutinyAICoinPlanner.SampleCount(work.EffectiveLucks[candidate.Character],
+                                work.Snapshot.TeamCharacterCount, work.Snapshot.AliveCount);
                         // Existing trace stores draws as float. Keep integer seeds
                         // exactly representable so replay cannot change rum kicks.
                         var world = new MutinyAIEffectWorld(state.Input, command, NextRandomInt(1, 1 << 24));
                         while (world.Advance()) yield return null;
                         var outcome = world.Outcome;
+                        AddCoinDiagnostics(state.Summary, outcome);
                         outcome.Character = candidate.Character.name; outcome.Weapon = candidate.WeaponType; outcome.Action = candidate.MoveType.ToString();
                         outcome.TargetCharacter = candidate.TargetCharacter?.name;
                         float position = candidate.MoveType == AIMoveType.SelfThrow && world.CharacterAt(command.Actor).Alive
@@ -260,6 +266,8 @@ namespace Mutiny.Simulation
                             outcome.AllyHpBefore > 0f && outcome.AllyHpAfter <= 0f, position);
                         state.Summary.Simulations++; state.Summary.Evaluations.Add(outcome);
                         if (!outcome.Settled) { state.Summary.Truncated++; continue; }
+                        if (command.GreedyCoinSamples > 0)
+                        { candidate.LaunchVelocity = outcome.Velocity; candidate.TargetPosition = outcome.Target; }
                         candidate.Score = outcome.Score; candidate.ActionPlan = world.Plan;
                         evaluated.Add(new EvaluatedEnhancedCandidate { Move = candidate, Outcome = outcome,
                             World = candidate.MoveType == AIMoveType.SelfThrow ? world : null });
@@ -282,9 +290,13 @@ namespace Mutiny.Simulation
                     if (!HasEffectiveWeapon(item.Move.Character, weapon, work)) continue;
                     MutinyAIEffectCommand shot = CreateEnhancedJumpFollowUp(afterJump, actorId, weapon);
                     if (shot == null) continue;
+                    if (shot.Weapon == "piecesofeight")
+                        shot.GreedyCoinSamples = MutinyAICoinPlanner.SampleCount(work.EffectiveLucks[item.Move.Character],
+                            work.Snapshot.TeamCharacterCount, work.Snapshot.AliveCount);
                     var world = new MutinyAIEffectWorld(afterJump, shot, NextRandomInt(1, 1 << 24));
                     while (world.Advance()) yield return null;
                     state.Summary.Simulations++; state.Summary.JumpFollowUps++;
+                    AddCoinDiagnostics(state.Summary, world.Outcome);
                     if (!world.Outcome.Settled) { state.Summary.Truncated++; continue; }
                     var supply = state.InfiniteSupply[item.Move.Character];
                     bool infinite = supply.Contains(weapon) ||
@@ -331,7 +343,7 @@ namespace Mutiny.Simulation
             if (MutinyWeaponFactoryCanFire(weapon))
                 command.Velocity = MutinyAIEffectWorld.AimedVelocity(actor + MutinyWeapon.GetOriginalEquipOffsetPixels(weapon),
                     target, MutinyWeaponFactory.GetTwangMaxForce(weapon), 1f,
-                    MutinyAIEffectWorld.ProjectileBody(kind, input.Characters[actorId].Body).Weight);
+                    MutinyAIEffectWorld.ProjectileBody(kind, input.Characters[actorId].Body).GravityPerTick);
             else if (kind == "anchor") { }
             else if (kind == "tidalwave") { }
             else if (kind == "voodoodoll")
@@ -354,6 +366,16 @@ namespace Mutiny.Simulation
             return command;
         }
 
+        private static void AddCoinDiagnostics(MutinyAIEnhancedDecision summary, MutinyAIEffectEvaluation outcome)
+        {
+            if (outcome.CoinSearches == null) return;
+            foreach (var coin in outcome.CoinSearches)
+            {
+                summary.CoinSamples += coin.Samples; summary.CoinSimulations += coin.Simulations;
+                summary.CoinWorkSteps += coin.WorkSteps; if (coin.Fallback) summary.CoinFallbacks++;
+            }
+        }
+
         private IEnumerable<object> AddEnhancedAimedCandidates(DecisionWork work)
         {
             foreach (var actor in work.Allies)
@@ -364,6 +386,7 @@ namespace Mutiny.Simulation
                 {
                     if (!HasEffectiveWeapon(actor, weapon, work)) continue;
                     string kind = weapon.ToLowerInvariant();
+                    if (kind == "piecesofeight") continue; // Greedy rollout already includes aimed arcs per coin.
                     var targets = new List<MutinyCharacter>();
                     foreach (var enemy in work.Enemies) if (StateOf(enemy, work).Alive) targets.Add(enemy);
                     targets.Sort((a, b) => Vector2.Distance(PositionOf(actor, work), PositionOf(a, work)).CompareTo(
@@ -400,7 +423,7 @@ namespace Mutiny.Simulation
                         if (MutinyWeaponFactoryCanFire(weapon))
                             move.LaunchVelocity = MutinyAIEffectWorld.AimedVelocity(PositionOf(actor, work) + MutinyWeapon.GetOriginalEquipOffsetPixels(weapon),
                                 target, MutinyWeaponFactory.GetTwangMaxForce(weapon), i == 0 ? 1f : 1.35f,
-                                MutinyAIEffectWorld.ProjectileBody(kind, saved.Body).Weight);
+                                MutinyAIEffectWorld.ProjectileBody(kind, saved.Body).GravityPerTick);
                         else if (kind == "anchor") { }
                         else if (kind == "voodoodoll") { move.TargetCharacter = targets[i]; move.LaunchVelocity = new Vector2(i == 0 ? 18f : -18f, -5f); }
                         else if (kind == "cannon")
@@ -473,6 +496,8 @@ namespace Mutiny.Simulation
             var summary = work.Enhanced.Summary;
             line.Append(" coarseCandidates=").Append(summary.CoarseCandidates).Append(" fullSimulations=").Append(summary.Simulations)
                 .Append(" jumpSamples=").Append(summary.JumpSamples).Append(" jumpFollowUps=").Append(summary.JumpFollowUps)
+                .Append(" allCoinSamples=").Append(summary.CoinSamples).Append(" allCoinTrials=").Append(summary.CoinSimulations)
+                .Append(" allCoinWorkSteps=").Append(summary.CoinWorkSteps).Append(" allCoinFallbacks=").Append(summary.CoinFallbacks)
                 .Append(" truncated=").Append(summary.Truncated).Append(" budgetSkipped=").Append(summary.BudgetSkipped)
                 .Append(" modelLimits=").Append(summary.Limitations);
             MutinyAIEffectEvaluation winner = null;
@@ -491,6 +516,14 @@ namespace Mutiny.Simulation
                 .Append(" modelStatus=").Append(winner.Status).Append(" modelTicks=").Append(winner.Ticks)
                 .Append(" simulationSeed=").Append(winner.SimulationSeed)
                 .Append(" fanDirection=").Append(winner.FanDirection).Append(" coinPlan=").Append(Points(winner.CoinVelocities));
+            if (winner.CoinSearches != null)
+            {
+                int samples = 0, trials = 0, steps = 0, fallback = 0;
+                foreach (var coin in winner.CoinSearches)
+                { samples += coin.Samples; trials += coin.Simulations; steps += coin.WorkSteps; if (coin.Fallback) fallback++; }
+                line.Append(" coinScoreScope=whole-sequence coinPolicy=live-greedy coinSamples=").Append(samples)
+                    .Append(" coinTrials=").Append(trials).Append(" coinWorkSteps=").Append(steps).Append(" coinFallbacks=").Append(fallback);
+            }
         }
     }
 }

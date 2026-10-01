@@ -12,6 +12,15 @@ namespace Mutiny.Simulation
             int samples = Mathf.FloorToInt(work.EffectiveLucks[shooter] * work.Snapshot.TeamCharacterCount /
                 Mathf.Max(1, work.Snapshot.AliveCount));
             if (work.Enhanced != null) samples = Mathf.Clamp(samples, 4, EnhancedMaxWeaponSamples);
+            if (work.Enhanced != null && weapon == "piecesofeight")
+            {
+                // A first-shot distance score cannot gate an eight-shot weapon.
+                // Its one primary rollout owns the per-coin searches itself.
+                ConsiderCandidate(ref work.Best, new AIMove { MoveType = AIMoveType.ShootWeapon,
+                    Character = shooter, WeaponType = weaponType }, ref work.CandidateCount, work);
+                yield return null;
+                yield break;
+            }
             IEnumerable<object> special = null;
             switch (weapon)
             {
@@ -251,6 +260,7 @@ namespace Mutiny.Simulation
                     candidates[i] + MutinySeagull.OriginalShotXOffset, flightY);
                 body.LeftExtent = body.RightExtent = body.TopExtent = body.BottomExtent = MutinySeagullFire.OriginalExtent;
                 body.Weight = MutinySeagullFire.OriginalWeight;
+                body.GravityScale = StateOf(shooter, work).Body.EffectiveGravityScale;
                 body.VelocityX = MutinySeagull.OriginalFlightSpeed;
                 body.HitsBoxes = true;
                 var prediction = new MutinyAIPrediction(MutinyAIPrediction.Kind.Seagull, body, null,

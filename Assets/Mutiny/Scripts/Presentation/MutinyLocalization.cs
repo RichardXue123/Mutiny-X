@@ -10,6 +10,10 @@ namespace Mutiny.Presentation
     {
         public const string English = "en";
         public const string SimplifiedChinese = "zh-Hans";
+        public const string TraditionalChineseHongKong = "zh-HK";
+        // The order matches the language columns in Mutiny.tsv.
+        public static IReadOnlyList<string> SupportedCodes { get; } =
+            Array.AsReadOnly(new[] { English, SimplifiedChinese, TraditionalChineseHongKong });
         private const string RuntimeTextResource = "Localization/MutinyRuntime";
 
         private static readonly Dictionary<string, Dictionary<string, string>> RuntimeText =
@@ -21,7 +25,15 @@ namespace Mutiny.Presentation
 
         public static event Action Changed;
         public static string Code => s_Code;
-        public static bool IsReady => HasRuntimeText(English) && HasRuntimeText(SimplifiedChinese);
+        public static bool IsReady
+        {
+            get
+            {
+                foreach (string code in SupportedCodes)
+                    if (!HasRuntimeText(code)) return false;
+                return true;
+            }
+        }
         public static bool UseOriginalFont => s_Code == English ||
             !HasRuntimeText(s_Code);
 
@@ -60,7 +72,12 @@ namespace Mutiny.Presentation
             Changed?.Invoke();
         }
 
-        private static bool IsSupported(string code) => code == English || code == SimplifiedChinese;
+        private static bool IsSupported(string code)
+        {
+            foreach (string supported in SupportedCodes)
+                if (code == supported) return true;
+            return false;
+        }
 
         private static bool HasRuntimeText(string code)
         {
@@ -91,26 +108,47 @@ namespace Mutiny.Presentation
                 return;
             }
 
-            var english = new Dictionary<string, string>(StringComparer.Ordinal);
-            var chinese = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (string rawLine in asset.text.Split('\n'))
+            try
+            {
+                foreach (var locale in ParseTranslations(asset.text))
+                    RuntimeText.Add(locale.Key, locale.Value);
+            }
+            catch (FormatException exception)
+            {
+                Debug.LogError("[Localization] Invalid bundled text; using English fallback. " + exception.Message);
+            }
+        }
+
+        /// <summary>Shared by runtime loading and editor table generation.</summary>
+        public static Dictionary<string, Dictionary<string, string>> ParseTranslations(string text)
+        {
+            var translations = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
+            foreach (string code in SupportedCodes)
+                translations.Add(code, new Dictionary<string, string>(StringComparer.Ordinal));
+            foreach (string rawLine in text.Split('\n'))
             {
                 string line = rawLine.TrimEnd('\r').TrimStart('\uFEFF');
-                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#", StringComparison.Ordinal))
-                    continue;
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#", StringComparison.Ordinal)) continue;
                 string[] fields = line.Split('\t');
-                if (fields.Length != 3 || string.IsNullOrEmpty(fields[0]) || english.ContainsKey(fields[0]))
+                if (fields.Length != SupportedCodes.Count + 1 || string.IsNullOrWhiteSpace(fields[0]) ||
+                    translations[English].ContainsKey(fields[0]))
+                    throw new FormatException("Invalid or duplicate translation row: " + line);
+                for (int index = 0; index < SupportedCodes.Count; index++)
                 {
-                    Debug.LogError("[Localization] Invalid or duplicate runtime text row: " + line);
-                    english.Clear();
-                    chinese.Clear();
-                    break;
+                    if (string.IsNullOrWhiteSpace(fields[index + 1]))
+                        throw new FormatException("Empty translation: " + fields[0] + "/" + SupportedCodes[index]);
+                    translations[SupportedCodes[index]].Add(fields[0], fields[index + 1].Replace("\\n", "\n"));
                 }
-                english.Add(fields[0], fields[1].Replace("\\n", "\n"));
-                chinese.Add(fields[0], fields[2].Replace("\\n", "\n"));
             }
-            RuntimeText[English] = english;
-            RuntimeText[SimplifiedChinese] = chinese;
+            return translations;
+        }
+
+        public static bool TryGetEnglishText(string key, out string value)
+        {
+            EnsureRuntimeText();
+            value = null;
+            return key != null && RuntimeText.TryGetValue(English, out var entries) &&
+                entries.TryGetValue(key, out value);
         }
 
         public static string Text(string key, string englishFallback, params object[] arguments)

@@ -140,9 +140,9 @@ namespace Mutiny.Verification.Editor
         public static void ValidateRuntimeResources()
         {
             var failures = new List<string>();
-            for (int level = 1; level <= 18; level++)
+            for (int level = 1; level <= 33; level++)
             {
-                string path = $"Data/Levels/level_{level:D2}";
+                string path = Mutiny.Levels.MutinyLevelId.FromOriginalNumber(level).ResourcePath;
                 if (Resources.Load<TextAsset>(path) == null)
                     failures.Add(path);
             }

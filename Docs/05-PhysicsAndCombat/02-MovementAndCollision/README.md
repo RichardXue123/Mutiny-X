@@ -10,6 +10,12 @@
 
 不决定角色的行动资格。
 
+## 用户授权的关卡重力倍率
+
+`<level gravityScale="0.5">` 将世界重力加速度乘0.5；省略属性默认为1。只接受有限正数；原始XML保持不变。倍率保存于LevelData/LevelRoot与PhysicsBodyState，积分使用 `Weight × GravityScale`，保留各物体的原始重量（包括0重力特殊武器）、弹力、摩擦与发射力。AI状态快照、实际预测器、增强效果模拟及定向弹道使用同一倍率，不修改全局重力常量。旧场景PhysicsBodyState缺少倍率时以1兼容。
+
+本轮行为ID、测试及边界见 [EXT-SPACE16-GRAVITY-01](../../02-LevelAndWorld/04-ObjectsAndSpawns/LEVEL_1_16_SPACE_DRAFT.md)。
+
 ## BoxWeapon 地形式碰撞
 
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |

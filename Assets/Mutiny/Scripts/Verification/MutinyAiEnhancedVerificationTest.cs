@@ -21,6 +21,11 @@ namespace Mutiny.Verification
                 gm.ExecuteCommand("aiforceusewaepon 0"); gm.ExecuteCommand("aienhance 1");
                 VerifyScoreRules(result);
                 VerifyJumpRules(result);
+                VerifyGreedyCoins(result, gm);
+                IEnumerator liveCoins = VerifyLiveGreedyCoins(result, gm);
+                while (liveCoins.MoveNext()) yield return liveCoins.Current;
+                IEnumerator deadCoins = VerifyGreedyCoinDeath(result, gm);
+                while (deadCoins.MoveNext()) yield return deadCoins.Current;
                 var effectWeapons = new List<string>(MutinyAiStrategyVerificationTest.Weapons) { "cannonball" };
                 foreach (string weapon in effectWeapons)
                 {
@@ -107,6 +112,173 @@ namespace Mutiny.Verification
                 result.Assert(summary != null && summary.JumpFollowUps > 0 &&
                     summary.Simulations <= MutinyAIController.EnhancedMaxFullSimulations,
                     "EXT-AI-JUMP-04 jump candidates simulate a real following shot within the shared effect budget");
+            }
+        }
+
+        private static void VerifyGreedyCoins(MutinyLevel1VerificationResult result, MutinyGMManager gm)
+        {
+            gm.ExecuteCommand("aienhance 1");
+            foreach (int luck in new[] { 0, 100, 9999 })
+                using (var fixture = new MutinyAiResponsiveSearchVerificationTest.Fixture(luck))
+                {
+                    fixture.Actor.CanThrow = false;
+                    fixture.Actor.Health = fixture.Enemy.Health = 1000f;
+                    fixture.Actor.WeaponInventory.Clear(); fixture.Actor.AddWeapon("piecesOfEight", 5);
+                    fixture.Actor.AddWeapon("cherryBomb", 5);
+                    string rng = JsonUtility.ToJson(UnityEngine.Random.state);
+                    int objects = Object.FindObjectsByType<GameObject>().Length;
+                    AIMove move = fixture.Ai.EvaluateBestMove();
+                    MutinyAIEffectEvaluation coins = null; int primaryCoins = 0;
+                    foreach (var e in fixture.Ai.LastEnhancedDecision.Evaluations)
+                        if (e.Weapon == "piecesOfEight") { coins = e; primaryCoins++; }
+                    result.Assert(primaryCoins == 1 && coins != null && coins.Settled && coins.CoinsFired == 8,
+                        "EXT-AI-COIN-01 production planner refines one complete eight-coin candidate luck=" + luck);
+                    if (coins == null || coins.CoinSearches == null) continue;
+                    int samples = 0, trials = 0, steps = 0;
+                    foreach (var c in coins.CoinSearches) { samples += c.Samples; trials += c.Simulations; steps += c.WorkSteps; }
+                    result.Assert(coins.CoinSearches.Count == 8 && samples <= 8 * MutinyAICoinPlanner.SampleCount(luck) &&
+                        trials <= 8 * MutinyAICoinPlanner.MaxRefinements && steps <= MutinyAICoinBudget.MaxWorkSteps,
+                        "EXT-AI-COIN-04 all sequential searches share finite bounds luck=" + luck);
+                    result.Assert(coins.EnemyHpAfter < coins.CoinSearches[0].EnemyHpAfter &&
+                        !Mathf.Approximately(coins.Score, coins.CoinSearches[0].Score) &&
+                        move.WeaponType == "piecesOfEight" && move.ActionPlan.GreedyCoinSamples == MutinyAICoinPlanner.SampleCount(luck) &&
+                        move.LaunchVelocity == coins.CoinVelocities[0],
+                        "EXT-AI-COIN-01 full sequence HP gain wins over single-throw weapon, not first-coin score luck=" + luck);
+                    bool dynamic = false;
+                    var firstEnemy = coins.CoinSearches[0].EnemyPositions[0];
+                    foreach (var c in coins.CoinSearches)
+                        if (c.EnemyPositions.Length > 0 && Vector2.Distance(c.EnemyPositions[0], firstEnemy) > 1f) dynamic = true;
+                    result.Assert(dynamic, "EXT-AI-COIN-02 later coin searches observe prior explosion knockback luck=" + luck);
+                    result.Assert(fixture.Actor.Health == 1000f && fixture.Enemy.Health == 1000f &&
+                        fixture.Actor.WeaponInventory["piecesOfEight"] == 5 && objects == Object.FindObjectsByType<GameObject>().Length &&
+                        rng == JsonUtility.ToJson(UnityEngine.Random.state), "EXT-AI-COIN-02 greedy trial has no live side effects luck=" + luck);
+                    var first = JsonUtility.ToJson(fixture.Ai.LastEnhancedDecision);
+                    fixture.Ai.SetReplayTraceForVerification(fixture.Ai.LastDecisionTrace); fixture.Ai.EvaluateBestMove();
+                    result.Assert(first == JsonUtility.ToJson(fixture.Ai.LastEnhancedDecision),
+                        "EXT-AI-COIN-02 complete greedy rollout replays deterministically luck=" + luck);
+                    result.Logs.Add("[COIN-BUDGET] luck=" + luck + " samples=" + samples + " trials=" + trials +
+                        " steps=" + steps + " firstScore=" + coins.CoinSearches[0].Score + " sequenceScore=" + coins.Score);
+                    var limited = new MutinyAICoinPlanner(Input(fixture), 0, MutinyAICoinPlanner.SampleCount(luck), 17, 1, true,
+                        new MutinyAICoinBudget(0));
+                    while (limited.Advance()) { }
+                    result.Assert(limited.Result.Fallback && limited.Result.WorkSteps == 0 &&
+                        limited.Result.Velocity.sqrMagnitude > 0f, "EXT-AI-COIN-04 exhausted budget produces usable deterministic aim");
+                    var exhausted = new MutinyAIEffectWorld(Input(fixture), new MutinyAIEffectCommand {
+                        Actor = 0, Type = AIMoveType.ShootWeapon, Weapon = "piecesofeight", GreedyCoinSamples = 4 }, 17,
+                        coinBudget: new MutinyAICoinBudget(0));
+                    while (exhausted.Advance()) { }
+                    bool fallbackOnly = exhausted.Outcome.CoinSearches.Count == 8;
+                    foreach (var c in exhausted.Outcome.CoinSearches) fallbackOnly &= c.Fallback && c.WorkSteps == 0;
+                    result.Assert(exhausted.Outcome.Settled && exhausted.Outcome.CoinsFired == 8 && fallbackOnly,
+                        "EXT-AI-COIN-04 zero search budget still settles all eight coins, never partial sequence HP");
+                }
+        }
+
+        private static IEnumerator VerifyLiveGreedyCoins(MutinyLevel1VerificationResult result, MutinyGMManager gm)
+        {
+            var before = new HashSet<GameObject>(Object.FindObjectsByType<GameObject>());
+            bool logging = MutinyAIController.ActionLogEnabled;
+            try
+            {
+                using (var fixture = new MutinyAiResponsiveSearchVerificationTest.Fixture(100, runtime: true))
+                {
+                    fixture.Actor.Health = fixture.Actor.MaxHealth = fixture.Actor.ShownHealth = 1000f;
+                    fixture.Enemy.Health = fixture.Enemy.MaxHealth = fixture.Enemy.ShownHealth = 1000f;
+                    fixture.Enemy.PhysicsBody.State.X = 320f;
+                    fixture.Actor.WeaponInventory.Clear(); fixture.Actor.AddWeapon("piecesOfEight", 5);
+                    var manager = fixture.Host.AddComponent<MutinyTurnManager>(); manager.Initialize(fixture.Team, fixture.EnemyTeam);
+                    gm.ExecuteCommand("aienhance 1"); gm.ExecuteCommand("ailog 1");
+                    result.Assert(gm.ExecuteCommand("aitakeover 100"), "EXT-AI-COIN-03 live fixture takes over through real GM");
+                    fixture.Ai.enabled = false; manager.enabled = false;
+                    fixture.Actor.CanThrow = false;
+                    var move = fixture.Ai.EvaluateBestMove();
+                    result.Assert(move.WeaponType == "piecesOfEight" && move.ActionPlan?.GreedyCoinSamples == 100,
+                        "EXT-AI-COIN-03 production winner carries immutable greedy policy");
+                    if (move.ActionPlan == null || move.WeaponType != "piecesOfEight") yield break;
+                    fixture.Ai.ExecuteMoveForVerification(move, manager);
+                    var weapon = Object.FindAnyObjectByType<MutinyPiecesOfEight>();
+                    // Use the normal configurable frame budget, tightened only
+                    // for this fixture so yielding is observable on fast CPUs.
+                    if (weapon != null) weapon.AiDecisionBudgetMilliseconds = 0.1f;
+                    var explosions = new Dictionary<MutinyExplosion, int>(); var flames = new HashSet<MutinySweepingFlame>();
+                    int tick = 0;
+                    while (weapon != null && weapon.TimesFired == 0 && tick < 200)
+                        AdvanceProductionTick(fixture, explosions, ++tick, flames);
+                    result.Assert(weapon != null && weapon.IsAwaitingNextCoin, "EXT-AI-COIN-03 real first flight resolves through contact/water");
+                    if (weapon == null) yield break;
+                    // A real character joins the opponent, then the old target is
+                    // killed through its production damage entry. Never rewrite
+                    // weapon fired/finished/wait flags to manufacture a replan.
+                    var replacement = fixture.AddCharacter("CoinNewEnemy", fixture.EnemyTeam, 16f, 312f, true);
+                    replacement.PhysicsBody.SetTerrain(fixture.Terrain, 20, 20); replacement.PhysicsBody.enabled = false;
+                    replacement.Health = replacement.MaxHealth = replacement.ShownHealth = 1000f;
+                    fixture.Enemy.TakeDamage(1000f);
+                    gm.ExecuteCommand("aienhance 0");
+                    while (weapon != null && !weapon.IsFinished && tick < 1800)
+                    {
+                        replacement.PhysicsBody.AdvanceSimulationTick();
+                        AdvanceProductionTick(fixture, explosions, ++tick, flames);
+                        // Each pump is the real continuation Update seam. Yield
+                        // frames too, so latched mode is exercised in Play Mode.
+                        if (tick % 20 == 0) yield return null;
+                    }
+                    result.Assert(weapon != null && weapon.IsFinished && weapon.TimesFired == 8 &&
+                        fixture.Actor.WeaponInventory["piecesOfEight"] == 4,
+                        "EXT-AI-COIN-03 real greedy sequence finishes eight coins with one inventory debit");
+                    if (weapon == null) yield break;
+                    var searches = weapon.EnhancedCoinSearchesForVerification;
+                    result.Assert(searches.Count == 7 && searches[0].Index == 2 && searches[0].Velocity.x < 0f &&
+                        move.ActionPlan.CoinVelocity(1).x > 0f && searches[0].EnemyPositions.Length == 1,
+                        "EXT-AI-COIN-03 live second coin targets new left enemy instead of replaying frozen rightward velocity " +
+                        "live=" + (searches.Count > 0 ? searches[0].Velocity.ToString() : "missing") + " frozen=" + move.ActionPlan.CoinVelocity(1));
+                    int steps = 0; foreach (var c in searches) steps += c.WorkSteps;
+                    result.Assert(weapon.AiActionPlan == move.ActionPlan && weapon.AiActionPlan.GreedyCoinSamples == 100 &&
+                        steps <= MutinyAICoinBudget.MaxWorkSteps && weapon.EnhancedSearchSlicesForVerification > 7,
+                        "EXT-AI-COIN-05 committed continuation policy remains budgeted after GM disable");
+                    result.Logs.Add("[COIN-LIVE] continuations=" + searches.Count + " slices=" + weapon.EnhancedSearchSlicesForVerification + " steps=" + steps);
+                }
+            }
+            finally
+            {
+                foreach (var go in Object.FindObjectsByType<GameObject>()) if (go != null && !before.Contains(go)) Object.DestroyImmediate(go);
+                MutinyBoxRegistry.ResetForLevel(); gm.ExecuteCommand("aienhance 1"); MutinyAIController.SetActionLogEnabled(logging);
+            }
+        }
+
+        private static IEnumerator VerifyGreedyCoinDeath(MutinyLevel1VerificationResult result, MutinyGMManager gm)
+        {
+            var before = new HashSet<GameObject>(Object.FindObjectsByType<GameObject>());
+            try
+            {
+                using (var fixture = new MutinyAiResponsiveSearchVerificationTest.Fixture(100, runtime: true))
+                {
+                    fixture.Actor.Health = fixture.Actor.MaxHealth = fixture.Actor.ShownHealth = 1000f;
+                    fixture.Enemy.Health = fixture.Enemy.MaxHealth = fixture.Enemy.ShownHealth = 1000f;
+                    fixture.Actor.WeaponInventory.Clear(); fixture.Actor.AddWeapon("piecesOfEight", 5);
+                    var manager = fixture.Host.AddComponent<MutinyTurnManager>(); manager.Initialize(fixture.Team, fixture.EnemyTeam);
+                    gm.ExecuteCommand("aienhance 1"); gm.ExecuteCommand("aitakeover 100");
+                    fixture.Ai.enabled = false; manager.enabled = false; fixture.Actor.CanThrow = false;
+                    var move = fixture.Ai.EvaluateBestMove(); fixture.Ai.ExecuteMoveForVerification(move, manager);
+                    var coin = Object.FindAnyObjectByType<MutinyPiecesOfEight>();
+                    result.Assert(coin != null, "EXT-AI-COIN-05 death case commits real greedy weapon");
+                    if (coin == null) yield break;
+                    coin.AiDecisionBudgetMilliseconds = 0.1f;
+                    int tick = 0; var explosions = new Dictionary<MutinyExplosion, int>(); var flames = new HashSet<MutinySweepingFlame>();
+                    while (coin.TimesFired == 0 && tick < 200) AdvanceProductionTick(fixture, explosions, ++tick, flames);
+                    for (int wait = 0; wait < 20; wait++) AdvanceProductionTick(fixture, explosions, ++tick, flames);
+                    bool thinking = coin.IsAwaitingNextCoin && coin.EnhancedSearchSlicesForVerification > 0;
+                    bool finished = false; int finalCount = -1;
+                    coin.OnFinished += () => { finished = true; finalCount = coin.TimesFired; };
+                    fixture.Actor.TakeDamage(1000f); coin.enabled = true;
+                    yield return null; yield return null;
+                    result.Assert(thinking && finished && finalCount == 1 && fixture.Actor.WeaponInventory["piecesOfEight"] == 4,
+                        "EXT-AI-COIN-05 production death during sliced re-aim cancels without firing or debiting another coin");
+                }
+            }
+            finally
+            {
+                foreach (var go in Object.FindObjectsByType<GameObject>()) if (go != null && !before.Contains(go)) Object.DestroyImmediate(go);
+                MutinyBoxRegistry.ResetForLevel();
             }
         }
 
@@ -352,9 +524,20 @@ namespace Mutiny.Verification
                 var manager = fixture.Host.AddComponent<MutinyTurnManager>(); manager.Initialize(fixture.Team, fixture.EnemyTeam);
                 manager.enabled = false;
                 result.Assert(fixture.Actor.HasWeapon("cannonball"), "EXT-AI-FX-08 real StartTurn grants cannonball to unarmed actor");
+                // Safe approach jumps can now outrank an immediate shot. Check
+                // fallback shooting at a genuine post-jump boundary instead of
+                // incorrectly asserting that a full-turn AI must never jump.
+                fixture.Team.SelectCharacter(fixture.Actor);
+                fixture.Ai.ExecuteMoveForVerification(new AIMove { Character = fixture.Actor,
+                    MoveType = AIMoveType.SelfThrow, LaunchVelocity = new Vector2(0f, -5f) }, manager);
+                for (int tick = 0; tick < 35; tick++)
+                { fixture.Actor.PhysicsBody.AdvanceSimulationTick(); fixture.Enemy.PhysicsBody.AdvanceSimulationTick(); }
+                result.Assert(!fixture.Actor.CanThrow && fixture.Actor.CanShoot,
+                    "EXT-AI-FX-08 production jump preserves only fallback shooting eligibility");
                 AIMove fallback = fixture.Ai.EvaluateBestMove();
                 result.Assert(fallback.MoveType == AIMoveType.ShootWeapon && fallback.WeaponType == "cannonball" && fallback.Score > 0,
-                    "EXT-AI-FX-08 actual planner can select and fully simulate automatic fallback cannonball");
+                    "EXT-AI-FX-08 actual planner can select and fully simulate automatic fallback cannonball actual=" +
+                    fallback.MoveType + "/" + fallback.WeaponType + "/" + fallback.Score);
             }
             using (var fixture = new MutinyAiResponsiveSearchVerificationTest.Fixture(0))
             {

@@ -17,6 +17,8 @@
 - 每枚飞行时镜头跟随钱币；前 7 枚结算后关闭钱币跟随并自动平移回使用者，到达后即使回合仍处于连续武器执行状态，也允许边缘/按键手动滚屏。
 - AI 每枚间隔 20 tick，再在 10 个随机投掷中评分。
 
+上条描述 Flash 与 Legacy。增强模式的授权扩展见 [EXT-AI-COIN-01..06](../../08-ActionAgents/05-AIWeaponSelection/AI_GREEDY_COINS.md)：按完整八发结算评分选择武器，逐发对当前局面有限采样/精算；真实续射保留 20 tick 最短间隔，再按默认 3 ms/frame 思考，可能增加少量间隔。仅绑定提交时的增强策略参数，不绑定后七发速度。
+
 来源：`PiecesOfEight.as`。规则：`POE-*`，见 [完整审计](../IMPLEMENTATION_DETAILS.md#69-pieces-of-eight)。
 
 ## 行为规格与实现映射

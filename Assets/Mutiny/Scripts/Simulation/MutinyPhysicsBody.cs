@@ -38,6 +38,7 @@ namespace Mutiny.Simulation
         private static readonly HashSet<MutinyPhysicsBody> s_Bodies = new HashSet<MutinyPhysicsBody>();
         private static int s_LastRestoreFrame = -1;
         private string[,] m_CachedTerrain;
+        private MutinyLevelRoot m_GravityRoot;
         private int m_GridWidth;
         private int m_GridHeight;
 
@@ -142,9 +143,11 @@ namespace Mutiny.Simulation
 
         public void CacheLevelTerrain()
         {
-            var levelRoot = FindAnyObjectByType<MutinyLevelRoot>();
+            var levelRoot = GetComponentInParent<MutinyLevelRoot>() ?? FindAnyObjectByType<MutinyLevelRoot>();
             if (levelRoot != null)
             {
+                m_GravityRoot = levelRoot;
+                State.GravityScale = levelRoot.GravityScale;
                 WaterPixelY = -levelRoot.WaterLevelY * MutinyPhysics.PixelsPerUnit;
 
                 // Find level controller if present to get terrain array
@@ -265,6 +268,7 @@ namespace Mutiny.Simulation
 
         public StepResult AdvanceSimulationTick()
         {
+            RefreshLevelGravity();
             SimulationTickCount++;
             // Flash weapon advanceMotion overrides rotate before Solid.advanceMotion.
             OnBeforeSimulationStep?.Invoke();
@@ -301,6 +305,13 @@ namespace Mutiny.Simulation
             m_CurrentTickPositionPixels = new Vector2(State.X, State.Y);
             m_HasPresentationTick = true;
             return result;
+        }
+
+        private void RefreshLevelGravity()
+        {
+            if (m_GravityRoot == null || !m_GravityRoot.gameObject.activeInHierarchy)
+                m_GravityRoot = GetComponentInParent<MutinyLevelRoot>() ?? FindAnyObjectByType<MutinyLevelRoot>();
+            if (m_GravityRoot != null) State.GravityScale = m_GravityRoot.GravityScale;
         }
 
         public void EvaluateWaterState()

@@ -7137,6 +7137,15 @@ namespace Mutiny.Verification
             try
             {
                 MutinyGMManager gm = gmObject.AddComponent<MutinyGMManager>();
+                string[] invalidLevelCommands = { "enterlevel", "enterlevel 0", "enterlevel -1",
+                    "enterlevel nope", "enterlevel 1 extra", "enterlevel 3_01", "enterlevel 2147483648",
+                    "enterlevelx 1", "enterlevel level_01" };
+                foreach (string command in invalidLevelCommands)
+                {
+                    int historyCount = gm.RecentSuccessfulCommands.Count;
+                    result.Assert(!gm.ExecuteCommand(command) && gm.RecentSuccessfulCommands.Count == historyCount,
+                        $"GM-15 invalid syntax '{command}' preserves successful history");
+                }
                 VerifyGMUnlockAllLevels(gm, result);
                 VerifyExplosionCameraCommands(gm, result);
                 bool logEnabled = gm.ExecuteCommand("  AiLoG 1  ") && MutinyAIController.ActionLogEnabled;
@@ -7352,7 +7361,7 @@ namespace Mutiny.Verification
                               gm.RecentSuccessfulCommands.Count == history,
                     "GM-12/13 reject missing current level without recording success");
                 controller.ConfigureSession(MutinyGameMode.SinglePlayer);
-                controller.LevelXml = Resources.Load<TextAsset>("Data/Levels/level_05");
+                controller.LevelXml = Resources.Load<TextAsset>("Data/Levels/level_1_05");
                 controller.BuildLevel();
                 MutinyLevelRoot root = controller.CurrentLevel;
                 MutinyAIController ai = root.Team2.GetComponent<MutinyAIController>();
@@ -7448,7 +7457,7 @@ namespace Mutiny.Verification
             string previousCode = MutinyLocalization.Code;
             try
             {
-                result.Assert(gm.ExecuteCommand("setlanguage zh-cn") &&
+                result.Assert(gm.ExecuteCommand("lang zh-cn") &&
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.SimplifiedChinese &&
                               !MutinyLocalization.UseOriginalFont &&
@@ -7471,7 +7480,7 @@ namespace Mutiny.Verification
                 result.Assert(Mathf.Approximately(revisedTextPosition.y - 184f, 1f) &&
                               Mathf.Approximately(doubledCanvas.MultiplyPoint3x4(revisedTextPosition).y - 368f, 2f),
                     "LOC-BTN-01 one original pixel adjustment scales to one screen pixel at 1x and two screen pixels at 2x");
-                result.Assert(gm.ExecuteCommand("setlanguage en") &&
+                result.Assert(gm.ExecuteCommand("lang en") &&
                               MutinyLocalization.Code == MutinyLocalization.English &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.English &&
                               MutinyLocalization.UseOriginalFont &&
@@ -7485,20 +7494,20 @@ namespace Mutiny.Verification
                     RectApproximately(MutinyGameHUD.ResolveActionPanelDescriptionRect(),
                         new Rect(20f, 166f, 238f, 66f)),
                     "LOC-BTN-01 production English PirateFont button and action panel text positions remain unchanged");
-                result.Assert(gm.ExecuteCommand("  SeTLaNgUaGe\tZH-CN  ") &&
+                result.Assert(gm.ExecuteCommand("  LaNg\tZH-CN  ") &&
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
                               MutinyLocalization.Text("frontend.play", "play") == "开始游戏" &&
                               !MutinyLocalization.UseOriginalFont,
                     "GM-09 parsing accepts case changes and whitespace separators");
-                result.Assert(gm.ExecuteCommand("setlanguage zh-cn") &&
-                              gm.RecentSuccessfulCommands[0] == "setlanguage zh-cn" &&
+                result.Assert(gm.ExecuteCommand("lang zh-cn") &&
+                              gm.RecentSuccessfulCommands[0] == "lang zh-cn" &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.SimplifiedChinese,
                     "GM-09 reselecting the current language succeeds and joins recent history");
 
                 var history = new List<string>(gm.RecentSuccessfulCommands);
-                bool rejected = !gm.ExecuteCommand("setlanguage") && !gm.ExecuteCommand("setlanguage jp") &&
-                                !gm.ExecuteCommand("setlanguage en extra") && !gm.ExecuteCommand("setlanguagecn") &&
-                                !gm.ExecuteCommand("setlanguage cn");
+                bool rejected = !gm.ExecuteCommand("lang") && !gm.ExecuteCommand("lang jp") &&
+                                !gm.ExecuteCommand("lang en extra") && !gm.ExecuteCommand("langcn") &&
+                                !gm.ExecuteCommand("lang cn");
                 bool unchangedHistory = history.Count == gm.RecentSuccessfulCommands.Count;
                 for (int i = 0; unchangedHistory && i < history.Count; i++)
                     unchangedHistory = history[i] == gm.RecentSuccessfulCommands[i];
@@ -7506,23 +7515,53 @@ namespace Mutiny.Verification
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
                               MutinySaveSystem.LanguageCode == MutinyLocalization.SimplifiedChinese,
                     "GM-09 invalid parameters preserve runtime language, saved preference and successful history");
-                result.Assert(gm.ExecuteCommand("setlanguage en") && gm.RunRecentCommand(1) &&
+                result.Assert(gm.ExecuteCommand("lang en") && gm.RunRecentCommand(1) &&
                               MutinyLocalization.Code == MutinyLocalization.SimplifiedChinese &&
-                              gm.RecentSuccessfulCommands[0] == "setlanguage zh-cn" &&
+                              gm.RecentSuccessfulCommands[0] == "lang zh-cn" &&
                               MutinyLocalization.Text("frontend.play", "play") == "开始游戏",
                     "GM-09 a recent command replays through the production parser and changes language again");
 
+                result.Assert(gm.ExecuteCommand("  LaNg\tZH-HK  ") &&
+                              MutinyLocalization.Code == MutinyLocalization.TraditionalChineseHongKong &&
+                              MutinySaveSystem.LanguageCode == MutinyLocalization.TraditionalChineseHongKong &&
+                              !MutinyLocalization.UseOriginalFont &&
+                              MutinyLocalizedText.CjkFontResource(MutinyLocalization.Code) == "Localization/Fonts/NotoSansCJKhk-Regular" &&
+                              MutinyLocalization.Text("frontend.play", "play") == "開始遊戲" &&
+                              MutinyLocalization.Text("frontend.scores", "scores") == "排行榜" &&
+                              MutinyLocalization.Text("frontend.points", "{0} pts", 123) == "123 分" &&
+                              MutinyGameHUD.ResolveLocalizedCornerTooltip(MutinyCornerControl.Quit) == "離開",
+                    "LOC-HK-02 production lang zh-hk selects HK text, formatted values, regional font and persistent code");
+                var hkHistory = new List<string>(gm.RecentSuccessfulCommands);
+                bool hkRejected = !gm.ExecuteCommand("lang") && !gm.ExecuteCommand("lang zh-tw") &&
+                                  !gm.ExecuteCommand("lang zh-hk extra") && !gm.ExecuteCommand("language zh-hk");
+                bool hkHistoryUnchanged = hkHistory.Count == gm.RecentSuccessfulCommands.Count;
+                for (int i = 0; hkHistoryUnchanged && i < hkHistory.Count; i++)
+                    hkHistoryUnchanged = hkHistory[i] == gm.RecentSuccessfulCommands[i];
+                result.Assert(hkRejected && hkHistoryUnchanged &&
+                              MutinyLocalization.Code == MutinyLocalization.TraditionalChineseHongKong &&
+                              MutinySaveSystem.LanguageCode == MutinyLocalization.TraditionalChineseHongKong,
+                    "GM-09-REV2 malformed lang commands preserve HK language, preference and successful history");
+                result.Assert(gm.ExecuteCommand("lang zh-hk") && gm.ExecuteCommand("lang en") &&
+                              gm.RunRecentCommand(1) && MutinyLocalization.Code == MutinyLocalization.TraditionalChineseHongKong &&
+                              gm.RecentSuccessfulCommands[0] == "lang zh-hk",
+                    "LOC-HK-02 repeating and replaying the HK command uses the same production entry");
+                result.Assert(gm.ExecuteCommand("setlanguage zh-hk") &&
+                              MutinyLocalization.Code == MutinyLocalization.TraditionalChineseHongKong,
+                    "GM-09-REV2 setlanguage remains a compatibility alias");
+
                 bool repeatedSwitchesWork = true;
                 foreach (string command in new[]
-                         { "setlanguage en", "setlanguage zh-cn", "setlanguage en", "setlanguage zh-cn", "setlanguage en" })
+                         { "lang en", "lang zh-cn", "lang zh-hk", "lang en", "lang zh-hk", "lang zh-cn", "lang en" })
                 {
-                    bool english = command == "setlanguage en";
+                    bool english = command == "lang en";
+                    bool hongKong = command == "lang zh-hk";
                     repeatedSwitchesWork &= gm.ExecuteCommand(command) &&
-                        MutinyLocalization.Code == (english ? MutinyLocalization.English : MutinyLocalization.SimplifiedChinese) &&
+                        MutinyLocalization.Code == (english ? MutinyLocalization.English : hongKong ?
+                            MutinyLocalization.TraditionalChineseHongKong : MutinyLocalization.SimplifiedChinese) &&
                         MutinySaveSystem.LanguageCode == MutinyLocalization.Code &&
                         MutinyLocalization.UseOriginalFont == english &&
-                        MutinyLocalization.Text("frontend.play", "play") == (english ? "play" : "开始游戏") &&
-                        MutinyLocalization.Text("frontend.scores", "scores") == (english ? "scores" : "成绩");
+                        MutinyLocalization.Text("frontend.play", "play") == (english ? "play" : hongKong ? "開始遊戲" : "开始游戏") &&
+                        MutinyLocalization.Text("frontend.scores", "scores") == (english ? "scores" : hongKong ? "排行榜" : "成绩");
                 }
                 result.Assert(repeatedSwitchesWork,
                     "LOC-ANDROID-01 repeated production GM switches keep title translations, font route and saved choice usable");
@@ -7928,7 +7967,7 @@ namespace Mutiny.Verification
                         camera.PanToTarget(oldLevel.Characters[0].transform);
                     }
                     cameraObject.transform.position = new Vector3(25f, -20f, -10f);
-                    bool loaded = loader.TryLoadLevel(indices[i]);
+                    bool loaded = loader.TryLoadLevel(MutinyLevelId.FromOriginalNumber(indices[i]));
                     MutinyLevelRoot level = loader.CurrentLevel;
                     Vector2 centre = MutinyPhysics.UnityToPixel(cameraObject.transform.position);
                     result.Assert(loaded && Mathf.Abs(centre.x - 275f) < 0.001f &&
@@ -7960,7 +7999,8 @@ namespace Mutiny.Verification
                 previous = loader.CurrentLevel;
                 cameraObject.transform.position = new Vector3(20f, -15f, -10f);
                 loader.LoadNextLevel();
-                result.Assert(loader.CurrentLevel != previous && loader.CurrentLevelIndex == 31 &&
+                result.Assert(loader.CurrentLevel != previous && loader.CurrentLevelIndex == 16 &&
+                              loader.CurrentLevelId.Mode == MutinyGameMode.LocalTwoPlayer &&
                               Vector2.Distance(MutinyPhysics.UnityToPixel(cameraObject.transform.position),
                                   new Vector2(275f, 200f)) < 0.001f,
                     "CAM-INIT-01 LoadNextLevel does not carry the previous camera into level 31");
@@ -7970,7 +8010,7 @@ namespace Mutiny.Verification
                 loader.ClearLevel();
                 DestroyNow(previous.gameObject);
                 cameraObject.transform.position = new Vector3(20f, -15f, -10f);
-                bool reentered = loader.TryLoadLevel(1);
+                bool reentered = loader.TryLoadLevel(new MutinyLevelId(MutinyGameMode.SinglePlayer, 1));
                 result.Assert(reentered && Vector2.Distance(
                                   MutinyPhysics.UnityToPixel(cameraObject.transform.position),
                                   new Vector2(275f, 200f)) < 0.001f,
@@ -7994,7 +8034,7 @@ namespace Mutiny.Verification
                 previous = loader.CurrentLevel;
                 loader.ClearLevel();
                 DestroyNow(previous.gameObject);
-                TextAsset bakedXml = Resources.Load<TextAsset>("Data/Levels/level_07");
+                TextAsset bakedXml = Resources.Load<TextAsset>("Data/Levels/level_1_07");
                 GameObject baked = MutinyLevelBuilder.BuildLevel(
                     MutinyLevelXmlParser.Parse(bakedXml.text), host.transform, 7, MutinyGameMode.SinglePlayer);
                 // Adding the controller drives its real Awake adoption branch;

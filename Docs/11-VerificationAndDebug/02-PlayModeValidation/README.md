@@ -16,6 +16,16 @@
 
 ## 本轮记录
 
+- 2026-10-01：单人16 XML固定Speech音频，敌方开场01–04、敌方胜利05–08，段间空隙0.5秒。Unity 6000.6.0f1隔离Play Mode **65/65**；自然开场、实际死亡/结算的三种结果、XML/Scene保存Play、顺序/时间、独立轮播计数、优先/排队、语言切换及跳过/静音/重开/切关通过。主工程可见PIE听音与完整对局待验收。见[规格](../../09-PresentationAndFeedback/07-Audio/ROBOT_VOICE_SEQUENCE.md)及[记录](Artifacts/ROBOT-SPEECH-AUDIO-20261001.txt)。
+
+- 2026-10-01：单人16机器人语音改为每次两段，第一段结束后间隔0.5秒，连续请求串行排队。Unity 6000.6.0f1 隔离 Play Mode **43/43**，正式选择/PlaySFX、实际协程时序、暂停、静音/恢复、切关/重开、缺资源/Source和其他声音回归通过；可见PIE实际听音待验收。见[行为规格](../../09-PresentationAndFeedback/07-Audio/ROBOT_VOICE_SEQUENCE.md)及[记录](Artifacts/ROBOT-VOICE-PAIR-20261001.txt)。
+
+- 2026-10-01：单人 16 开放前舱修订，Unity 6000.6.0f1 隔离 Play Mode **161/161**；双叉内部挖空并放入 2 名 Robot，两人实际经竖井上船顶、前方进出及既有三条登舰路线通过。逐格比较确认只改舱室/竖井和两处出生点；生产 GPU 全图已检查。主工程可见 PIE 完整对局和 AI 自主路线选择待验收。见[修订规格](../../02-LevelAndWorld/04-ObjectsAndSpawns/LEVEL_1_16_FLAT_FREIGHTER.md)及[记录](Artifacts/SPACE16-FREIGHTER-BAY-20261001.txt)。
+
+- 2026-10-01：单人 16 第四版扁平悬浮敌舰，Unity 6000.6.0f1 隔离 Play Mode **144/144**；新船站位、三条登舰路线、低叉出口及场景/重开/库存回归通过，已检查生产 GPU 全图。与第三版逐格比较确认我方和小行星带未改动；完整对局与可见 PIE 观感待验收。见[第四版规格](../../02-LevelAndWorld/04-ObjectsAndSpawns/LEVEL_1_16_FLAT_FREIGHTER.md)及[记录](Artifacts/SPACE16-FLAT-FREIGHTER-20261001.txt)。
+
+- 2026-10-01：单人 16 第三版双船与小行星带，Unity 6000.6.0f1 隔离 Play Mode 132/132；13 名角色出生稳定和实际跳跃、低/中/高 3 条穿越路线、底层上行、无限大炮、Scene/GM/重开及旧关回归通过，并检查生产 GPU 全图。完整人机对局和主工程 PIE 观感待验收。见[第三版规格](../../02-LevelAndWorld/04-ObjectsAndSpawns/LEVEL_1_16_ASTEROID_BELT.md)及[记录](Artifacts/SPACE16-ASTEROID-BELT-20261001.txt)。
+
 - 2026-09-29：`feature/aienhance` 的 `GM-14 / EXT-AI-STRAT-01..05` 在隔离 Unity 6000.6.0f1 专项 Play Mode 403/403 通过；修改前 60 份完整决策 trace 采集后，关闭/增强回退/回切的 180 份 SHA-256 全部一致。正式 GM 驱动搜索/镜头等待取消、真实跳跃续行动、八枚金币策略身份保持和实际第 7 关重开；既有高 Luck/尸体快照 54/54、预测 18/18、GM 66/66、箱体/镜头 125/125 复跑通过。增强入口当前明确回退 Legacy，不代表完整模拟已实现；主工程界面、Android 和全关卡长对局待验证。见 [策略规格与结果](../../08-ActionAgents/05-AIWeaponSelection/AI_STRATEGY_BOUNDARY_20260929.md) 与 [验收摘要](Artifacts/AI-STRATEGY-BOUNDARY-20260929.txt)。
 
 - 2026-09-29：蓄力边缘滚屏 `CAM-AIM-EDGE-01` 在隔离 Unity 6000.6.0f1 `Validate Scroll Arrows Play Mode` 113/113 通过，既有 `Validate Camera Movement` 11/11 通过。实际鼠标设备事件驱动跳跃/Cherry Bomb 四方向 × 25/60/120 FPS 等效帧时长的蓄力、滚屏、返回中央、正式松手及跟随恢复；大炮拉栓允许滚屏、炮身拖动保持锁镜。隔离工程临时恢复旧锁镜门后检出 25 个失败，未修改主工程或断言。见 [验收摘要与日志来源](Artifacts/CAM-AIM-EDGE-20260929.txt)；原版静态依据及既有授权差异见 [镜头模块](../../09-PresentationAndFeedback/04-Camera/README.md)。主工程 PIE 与 Android/实物手柄目视验收未运行。

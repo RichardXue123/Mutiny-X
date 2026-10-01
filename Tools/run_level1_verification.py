@@ -32,7 +32,7 @@ class Program
     static int Main(string[] args)
     {
         Console.WriteLine("=== RUNNING LEVEL 1 VERIFICATION ===");
-        var result = MutinyLevel1VerificationTest.RunAllTests("Assets/Mutiny/Data/Levels/level_01.xml");
+        var result = MutinyLevel1VerificationTest.RunAllTests("Assets/Mutiny/Data/Levels/level_1_01.xml");
         
         foreach (var log in result.Logs)
         {
@@ -89,4 +89,3 @@ class Program
 
 if __name__ == '__main__':
     run_verification()
-

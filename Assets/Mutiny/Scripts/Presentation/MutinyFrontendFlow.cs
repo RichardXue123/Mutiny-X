@@ -22,7 +22,7 @@ namespace Mutiny.Presentation
     public sealed class MutinyFrontendFlow
     {
         public MutinyFrontendPage CurrentPage { get; private set; } = MutinyFrontendPage.Title;
-        public int SelectedTwoPlayerLevel { get; private set; } = 16;
+        public int SelectedTwoPlayerLevel { get; private set; } = 1;
 
         public void PressPlay()
         {
@@ -96,7 +96,7 @@ namespace Mutiny.Presentation
                 (delta != -1 && delta != 1))
                 return false;
             int next = SelectedTwoPlayerLevel + delta;
-            if (next < 16 || next > 33)
+            if (next < 1 || next > Mutiny.Levels.MutinyLevelId.OriginalTwoPlayerCount)
                 return false;
             SelectedTwoPlayerLevel = next;
             return true;
@@ -117,6 +117,11 @@ namespace Mutiny.Presentation
                 return false;
             CurrentPage = MutinyFrontendPage.TwoPlayerLevelSelect;
             return true;
+        }
+
+        public void EnterGameplayFromGM()
+        {
+            CurrentPage = MutinyFrontendPage.Gameplay;
         }
 
         public void PressLevelSelectBack()

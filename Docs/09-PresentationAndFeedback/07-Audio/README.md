@@ -8,6 +8,8 @@
 
 ## 文档入口
 
+- [单人16机器人语音轮播与固定Speech](ROBOT_VOICE_SEQUENCE.md)：角色选择每次两段，共用01→08循环；XML指定敌方开场01–04、敌方胜利05–08，段间空隙0.5秒；固定Speech优先且不推进轮播游标，用户授权扩展。
+
 - [原版行为规格](ORIGINAL_BEHAVIOR_SPEC.md)：原版播放器、音乐状态机、SFX 调用时机、时间轴直放声音与音量包络。
 - [Unity 实现审计](UNITY_IMPLEMENTATION_AUDIT.md)：当前架构、资源映射、生产调用入口、已知差异和建议实现顺序。
 - [规则与验收矩阵](VERIFICATION_MATRIX.md)：稳定规则 ID、原版来源、Unity 入口、验收步骤和截至 2026-09-19 的实际结果。

@@ -107,15 +107,30 @@ namespace Mutiny.Presentation
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void BootstrapAfterSceneLoad()
         {
-            if (SceneManager.GetActiveScene().name != "Main" ||
-                FindAnyObjectByType<MutinyFrontendController>() != null)
+            if (FindAnyObjectByType<MutinyFrontendController>() != null)
             {
                 return;
             }
 
             MutinyLevelController levelController = FindAnyObjectByType<MutinyLevelController>();
-            if (levelController == null)
-                return;
+            Scene activeScene = SceneManager.GetActiveScene();
+            foreach (MutinyLevelController candidate in FindObjectsByType<MutinyLevelController>())
+            {
+                if (candidate.gameObject.scene == activeScene && candidate.LevelXml != null &&
+                    (activeScene.name == "Main" || candidate.StartInGameplay))
+                {
+                    levelController = candidate;
+                    break;
+                }
+            }
+            if (activeScene.name == "Main" && (levelController == null || levelController.gameObject.scene != activeScene))
+            {
+                // Clear Loaded Level also removes the editor-generated controller.
+                // A cleared Main must still have a normal menu/session entry.
+                levelController = new GameObject("MutinyGame").AddComponent<MutinyLevelController>();
+                levelController.LevelXml = Resources.Load<TextAsset>("Data/Levels/level_1_01");
+            }
+            if (levelController == null || (activeScene.name != "Main" && !levelController.StartInGameplay)) return;
 
             GameObject host = new GameObject("MutinyFrontend");
             MutinyFrontendController frontend = host.AddComponent<MutinyFrontendController>();
@@ -128,14 +143,35 @@ namespace Mutiny.Presentation
             MutinyLocalization.Initialize(this);
             LoadResources();
 
-            if (m_LevelController != null && m_LevelController.CurrentLevel != null)
-                m_LevelController.CurrentLevel.gameObject.SetActive(false);
-
             Camera mainCam = Camera.main;
             if (mainCam != null && mainCam.GetComponent<MutinyCameraController>() == null)
             {
                 mainCam.gameObject.AddComponent<MutinyCameraController>();
             }
+
+            bool isMainScene = SceneManager.GetActiveScene().name == "Main";
+            if (!isMainScene && m_LevelController != null && m_LevelController.StartInGameplay && m_LevelController.LevelXml != null)
+            {
+                // Rebuild baked editor content through the production builder. Inventories,
+                // animation caches and other runtime state are not all scene-serialized.
+                // Use the assigned authoring XML, including edits not yet copied to Resources.
+                m_LevelController.BuildLevel();
+                if (m_LevelController.CurrentLevel != null)
+                {
+                    m_Flow.EnterGameplayFromGM();
+                    MutinyAudioManager.Instance?.PlayMusic("game_music");
+                    Debug.Log($"[MutinyFrontend] Scene preview enters {m_LevelController.CurrentLevelId}", this);
+                    return;
+                }
+            }
+
+            // Build before hiding to prevent Controller.Start constructing a live
+            // battle later behind the title page. This also supports a cleared Main.
+            if (isMainScene && m_LevelController != null &&
+                m_LevelController.CurrentLevel == null && m_LevelController.LevelXml != null)
+                m_LevelController.BuildLevel();
+            if (m_LevelController != null && m_LevelController.CurrentLevel != null)
+                m_LevelController.CurrentLevel.gameObject.SetActive(false);
 
             MutinyAudioManager.Instance?.PlayMusic("menu_music");
             Debug.Log($"[MutinyFrontend] FRONT-01 title shown; highestUnlocked={MutinySaveSystem.HighestUnlockedLevel}", this);
@@ -726,15 +762,15 @@ namespace Mutiny.Presentation
             // Draw only the map into the frame interior so neither placeholder
             // nor white map pixels cover the red border and name strip.
             DrawTexture(new Rect(174f, 125f, 202f, 152f), m_TwoPlayerPreviewFrame);
-            DrawTwoPlayerMapPreview(m_TwoPlayerPreviews[level - 16]);
+            DrawTwoPlayerMapPreview(m_TwoPlayerPreviews[level - 1]);
             MutinyBitmapFont.DrawDangleText(new Rect(175f, 260f, 200f, 16f),
-                TwoPlayerLevelNames[level - 16], Color.white, TextAnchor.MiddleCenter, 0, 13);
-            if (level > 16 && DrawTwoPlayerArrow(new Rect(117.5f, 182f, 35f, 38f), m_TwoPlayerPrevUp, m_TwoPlayerPrevOver))
+                TwoPlayerLevelNames[level - 1], Color.white, TextAnchor.MiddleCenter, 0, 13);
+            if (level > 1 && DrawTwoPlayerArrow(new Rect(117.5f, 182f, 35f, 38f), m_TwoPlayerPrevUp, m_TwoPlayerPrevOver))
             {
                 m_Flow.StepTwoPlayerLevel(-1);
                 m_TwoPlayerLoadError = null;
             }
-            if (level < 33 && DrawTwoPlayerArrow(new Rect(394.5f, 182f, 35f, 38f), m_TwoPlayerNextUp, m_TwoPlayerNextOver))
+            if (level < MutinyLevelId.OriginalTwoPlayerCount && DrawTwoPlayerArrow(new Rect(394.5f, 182f, 35f, 38f), m_TwoPlayerNextUp, m_TwoPlayerNextOver))
             {
                 m_Flow.StepTwoPlayerLevel(1);
                 m_TwoPlayerLoadError = null;
@@ -751,14 +787,15 @@ namespace Mutiny.Presentation
                 p2.ToString(), Color.white, TextAnchor.MiddleCenter, 0, 13);
             if (DrawOriginalButton(new Rect(205f, 296f, 140f, 24f), "frontend.play", "play", m_ButtonBack, m_ButtonBackOver))
             {
-                if (!MutinyLevelController.HasNumberedLevelData(level))
+                if (!MutinyLevelController.HasLevelData(new MutinyLevelId(MutinyGameMode.LocalTwoPlayer, level)))
                     m_TwoPlayerLoadError = "frontend.level_unavailable";
                 else
                 {
                     MutinyTransitionManager.RequestTransition(() =>
                     {
                         if (StartLevel(level, MutinyGameMode.LocalTwoPlayer))
-                            m_Flow.TrySelectTwoPlayerLevel(MutinyLevelController.HasNumberedLevelData);
+                            m_Flow.TrySelectTwoPlayerLevel(number => MutinyLevelController.HasLevelData(
+                                new MutinyLevelId(MutinyGameMode.LocalTwoPlayer, number)));
                         else
                             m_TwoPlayerLoadError = "frontend.level_load_failed";
                     }, showLoading: true);
@@ -861,7 +898,7 @@ namespace Mutiny.Presentation
                     float reveal = MutinyEndingSequence.DialogueRevealAtFrame(m_EndingFrame, dialogueIndex);
                     int visibleCharacters = Mathf.Min(text.Length, Mathf.CeilToInt(text.Length * reveal));
                     MutinyLocalizedText.Speech(MutinyGameHUD.ResolveSpeechTextRect(dialogue.Bubble),
-                        null, text.Substring(0, visibleCharacters));
+                        null, text.Substring(0, visibleCharacters), text);
                 }
                 else
                 {
@@ -1020,14 +1057,36 @@ namespace Mutiny.Presentation
 
             // LevelSelectButton.doPress clears `_root.score` before entering a
             // new one-player game.  Advancing inside an active game does not.
-            m_LevelController.ConfigureSession(mode);
+            if (!m_LevelController.TryLoadLevel(new MutinyLevelId(mode, level)))
+                return false;
             if (mode == MutinyGameMode.SinglePlayer)
                 m_LevelController.ResetSinglePlayerScore();
-            if (!m_LevelController.TryLoadLevel(level))
-                return false;
             if (m_LevelController.CurrentLevel != null)
                 m_LevelController.CurrentLevel.gameObject.SetActive(true);
             MutinyAudioManager.Instance?.PlayMusic("game_music");
+            return true;
+        }
+
+        // GM bypasses menu limits and unlocks, but uses the same world, camera and audio entry.
+        public bool TryEnterLevelFromGM(MutinyLevelId id, out string error)
+        {
+            error = null;
+            if (MutinyTransitionManager.IsTransitionActive)
+            {
+                error = "Wait for the current transition to finish.";
+                return false;
+            }
+            if (!MutinyLevelController.HasLevelData(id))
+            {
+                error = $"Level resource not found: {id.AssetName}.xml";
+                return false;
+            }
+            if (!StartLevel(id.Number, id.Mode))
+            {
+                error = $"Could not enter {id.AssetName}.";
+                return false;
+            }
+            m_Flow.EnterGameplayFromGM();
             return true;
         }
 

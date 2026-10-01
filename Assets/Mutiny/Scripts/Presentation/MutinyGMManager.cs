@@ -343,7 +343,7 @@ namespace Mutiny.Presentation
                 fontSize = Mathf.Max(8, Mathf.RoundToInt(8f * scale)),
                 normal = { textColor = new Color(0.65f, 0.70f, 0.80f, 0.9f) }
             };
-            GUI.Label(hintRect, "Tip: 'setlanguage zh-cn' / 'setlanguage en'. Type 'help' for more.", hintStyle);
+            GUI.Label(hintRect, "Tip: 'lang en' / 'lang zh-cn' / 'lang zh-hk'. Type 'help' for more.", hintStyle);
         }
 
         private void DrawRecentCommands(Rect area, float scale)
@@ -404,17 +404,36 @@ namespace Mutiny.Presentation
 
             Debug.Log($"[MutinyGM] Executing command: '{cmd}'", this);
 
-            if (lower.StartsWith("setlanguage", StringComparison.Ordinal))
+            if (lower.StartsWith("enterlevel", StringComparison.Ordinal))
             {
                 string[] parts = cmd.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
-                string code = parts.Length == 2 && string.Equals(parts[0], "setlanguage", StringComparison.OrdinalIgnoreCase)
+                string error = "Usage: enterlevel <number | 1_XX | 2_XX> (bare number = single player).";
+                if (parts.Length == 2 && string.Equals(parts[0], "enterlevel", StringComparison.OrdinalIgnoreCase) &&
+                    MutinyLevelId.TryParse(parts[1], out MutinyLevelId id))
+                {
+                    MutinyFrontendController frontend = FindAnyObjectByType<MutinyFrontendController>();
+                    if (frontend != null)
+                        succeeded = frontend.TryEnterLevelFromGM(id, out error);
+                    else
+                        error = "The gameplay front-end is not available.";
+                }
+                m_StatusColor = succeeded ? new Color(0.35f, 1.0f, 0.45f) : new Color(1.0f, 0.45f, 0.45f);
+                m_StatusMessage = succeeded ? $"[SUCCESS] Entered {parts[1]}." : $"[ERROR] {error}";
+            }
+            else if (lower.StartsWith("lang", StringComparison.Ordinal) || lower.StartsWith("setlanguage", StringComparison.Ordinal))
+            {
+                string[] parts = cmd.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+                string code = parts.Length == 2 &&
+                    (string.Equals(parts[0], "lang", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(parts[0], "setlanguage", StringComparison.OrdinalIgnoreCase))
                     ? string.Equals(parts[1], "zh-cn", StringComparison.OrdinalIgnoreCase) ? MutinyLocalization.SimplifiedChinese
+                    : string.Equals(parts[1], "zh-hk", StringComparison.OrdinalIgnoreCase) ? MutinyLocalization.TraditionalChineseHongKong
                     : string.Equals(parts[1], "en", StringComparison.OrdinalIgnoreCase) ? MutinyLocalization.English : null
                     : null;
                 if (code == null)
                 {
                     m_StatusColor = new Color(1.0f, 0.45f, 0.45f);
-                    m_StatusMessage = "[ERROR] Usage: setlanguage zh-cn | en";
+                    m_StatusMessage = "[ERROR] Usage: lang en | zh-cn | zh-hk";
                 }
                 else
                 {
@@ -422,7 +441,8 @@ namespace Mutiny.Presentation
                     MutinyLocalization.Select(code);
                     m_StatusColor = new Color(0.35f, 1.0f, 0.45f);
                     m_StatusMessage = "[SUCCESS] Language set to " +
-                        (code == MutinyLocalization.SimplifiedChinese ? "Simplified Chinese (zh-cn)." : "English (en).") +
+                        (code == MutinyLocalization.SimplifiedChinese ? "Simplified Chinese (zh-cn)." :
+                         code == MutinyLocalization.TraditionalChineseHongKong ? "Traditional Chinese - Hong Kong (zh-hk)." : "English (en).") +
                         (MutinyLocalization.IsReady ? string.Empty : "\nBundled translations unavailable; using English fallback.");
                     succeeded = true;
                 }
@@ -614,6 +634,7 @@ namespace Mutiny.Presentation
             {
                 m_StatusColor = new Color(0.5f, 0.85f, 1.0f);
                 m_StatusMessage = "Available GM Commands:\n" +
+                                  "• enterlevel N / 1_XX / 2_XX - Enter a map (N = single player)\n" +
                                   "• UnlockWeapons   - Unlocks all 15 weapons (infinite ammo) for current character\n" +
                                   $"• unlockalllevels - Unlocks all 1..{MutinySaveSystem.MaxLevel} levels\n" +
                                   "• ResetLevels     - Resets progress to level 1\n" +
@@ -623,7 +644,7 @@ namespace Mutiny.Presentation
                                   "• ailog 1 / 0     - Enable / disable AI action decision logs\n" +
                                   "• aienhance 1 / 0 - Full-effect AI v1 / legacy AI\n" +
                                   "• excamera 1 / excamera - Enable / disable blast camera\n" +
-                                  "• setlanguage zh-cn / en - Selects Simplified Chinese / English\n" +
+                                  "• lang en / zh-cn / zh-hk - Selects English / Simplified Chinese / Traditional Chinese (HK)\n" +
                                   "• Help            - Shows this help message";
                 succeeded = true;
             }

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using Mutiny.Diagnostics;
 using Mutiny.Levels;
 using Mutiny.Presentation;
@@ -18,10 +20,15 @@ namespace Mutiny.Simulation
         public const float ExplosionSize = 50f;
         public const float ExplosionDamage = 25f;
         public const int AiReaimDelayTicks = 20;
+        [Min(0.1f)] public float AiDecisionBudgetMilliseconds = MutinyAIController.DefaultDecisionBudgetMilliseconds;
 
         private bool m_OverWater = true;
         private int m_AiWaitTicks;
         private float m_AiTickAccumulator;
+        private MutinyAICoinPlanner m_EnhancedSearch;
+        private MutinyAICoinBudget m_EnhancedBudget;
+        internal readonly List<MutinyAICoinEvaluation> EnhancedCoinSearchesForVerification = new List<MutinyAICoinEvaluation>();
+        internal int EnhancedSearchSlicesForVerification { get; private set; }
 
         public int TimesFired { get; private set; }
         public int ShotsRemaining => Mathf.Max(0, TotalCoins - TimesFired);
@@ -83,6 +90,10 @@ namespace Mutiny.Simulation
             m_OverWater = true;
             m_AiWaitTicks = 0;
             m_AiTickAccumulator = 0f;
+            m_EnhancedSearch = null;
+            m_EnhancedBudget = new MutinyAICoinBudget();
+            EnhancedCoinSearchesForVerification.Clear();
+            EnhancedSearchSlicesForVerification = 0;
             PhysicsBody.OnBeforeSimulationStep -= PrepareUnfiredOwnerHold;
             PhysicsBody.OnBeforeSimulationStep += PrepareUnfiredOwnerHold;
             PhysicsBody.PresentationPositionOverride = SampleReadyPresentationPosition;
@@ -108,6 +119,7 @@ namespace Mutiny.Simulation
 
             m_OverWater = true;
             m_AiWaitTicks = 0;
+            m_EnhancedSearch = null;
             PhysicsBody.IsActive = true;
             // Weapon.fire sets track=true in the original. Register the exact
             // reusable coin instance rather than asking the camera to infer it
@@ -134,6 +146,7 @@ namespace Mutiny.Simulation
             {
                 if (Owner == null || !Owner.IsAlive)
                 {
+                    m_EnhancedSearch = null;
                     Finish();
                     PhysicsBody.IsActive = false;
                     if (SpriteRenderer != null)
@@ -267,8 +280,15 @@ namespace Mutiny.Simulation
 
         private void AdvanceAiWait(float deltaTime)
         {
-            if (m_AiWaitTicks <= 0 || !IsAwaitingNextCoin || Owner == null || !Owner.IsAlive)
+            if (!IsAwaitingNextCoin || Owner == null || !Owner.IsAlive)
                 return;
+
+            if (m_EnhancedSearch != null)
+            {
+                PumpEnhancedSearch();
+                return;
+            }
+            if (m_AiWaitTicks <= 0) return;
 
             m_AiTickAccumulator += deltaTime;
             while (m_AiTickAccumulator >= MutinyPhysics.TimeStep && m_AiWaitTicks > 0)
@@ -286,10 +306,19 @@ namespace Mutiny.Simulation
             if (!TryGetOwnerTeam(out MutinyTeam ownTeam) || !ownTeam.IsAiControlled || Owner == null || !Owner.IsAlive)
                 return;
 
+            if (AiActionPlan != null && AiActionPlan.GreedyCoinSamples > 0)
+            {
+                var input = MutinyAICoinPlanner.CaptureLive(Owner, ownTeam, out int actor);
+                m_EnhancedSearch = new MutinyAICoinPlanner(input, actor, AiActionPlan.GreedyCoinSamples,
+                    AiActionPlan.SimulationSeed, TimesFired, true, m_EnhancedBudget);
+                PumpEnhancedSearch();
+                return;
+            }
+
             if (AiActionPlan != null && TimesFired < AiActionPlan.CoinCount)
             {
-                // Submitted effects-v1 plan, latched for all eight coins even if
-                // GM is switched off. No global flag or fresh random search here.
+                // Compatibility for explicit fixed plans. Production enhanced
+                // decisions use the greedy policy above, not this array replay.
                 HoldAtOwner();
                 Vector2 velocity = AiActionPlan.CoinVelocity(TimesFired);
                 MutinyDebugLog.Info("PiecesOfEight", $"AI planned continuation index={TimesFired + 1} velocity={velocity}", this);
@@ -325,6 +354,40 @@ namespace Mutiny.Simulation
             }
         }
 
+        private void PumpEnhancedSearch()
+        {
+            if (m_EnhancedSearch == null) return;
+            EnhancedSearchSlicesForVerification++;
+            long started = Stopwatch.GetTimestamp();
+            float budget = float.IsNaN(AiDecisionBudgetMilliseconds) || float.IsInfinity(AiDecisionBudgetMilliseconds)
+                ? MutinyAIController.DefaultDecisionBudgetMilliseconds : Mathf.Max(0.1f, AiDecisionBudgetMilliseconds);
+            do
+            {
+                if (!m_EnhancedSearch.Advance())
+                {
+                    var result = m_EnhancedSearch.Result;
+                    EnhancedCoinSearchesForVerification.Add(result);
+                    m_EnhancedSearch = null;
+                    if (!IsAwaitingNextCoin || Owner == null || !Owner.IsAlive) return;
+                    HoldAtOwner();
+                    if (MutinyAIController.ActionLogEnabled)
+                        UnityEngine.Debug.Log($"[Mutiny:AI-Action] action=CoinContinuation mode={AiStrategyContext.ModeId} " +
+                            $"strategy={AiStrategyContext.StrategyId} algorithm={AiStrategyContext.AlgorithmId} " +
+                            $"fallback={AiStrategyContext.UsesFallback} strategyVersion={AiStrategyContext.ConfigurationVersion} weapon=piecesOfEight " +
+                            $"coin={result.Index}/{TotalCoins} velocity=({result.Velocity.x:F3},{result.Velocity.y:F3}) " +
+                            $"score={(result.Fallback ? "NA" : result.Score.ToString("F3", System.Globalization.CultureInfo.InvariantCulture))} " +
+                            $"scoreScope=single-coin allyHp={result.AllyHpBefore:F0}->{result.AllyHpAfter:F0} " +
+                            $"enemyHp={result.EnemyHpBefore:F0}->{result.EnemyHpAfter:F0} samples={result.Samples} " +
+                            $"trials={result.Simulations} workSteps={result.WorkSteps} status={result.Status} " +
+                            $"policySamples={AiActionPlan.GreedyCoinSamples} seed={AiActionPlan.SimulationSeed}", this);
+                    Fire(result.Velocity);
+                    return;
+                }
+            }
+            while ((Stopwatch.GetTimestamp() - started) * 1000d / Stopwatch.Frequency <
+                budget);
+        }
+
         private Vector2 SimulateLanding(Vector2 velocity)
         {
             PhysicsBodyState state = PhysicsBodyState.CreateDefault(
@@ -335,6 +398,7 @@ namespace Mutiny.Simulation
             state.VelocityX = velocity.x;
             state.VelocityY = velocity.y;
             PhysicsBody.TryGetTerrain(out string[,] terrain, out int width, out int height);
+            state.GravityScale = PhysicsBody.State.EffectiveGravityScale;
             float waterY = PhysicsBody.WaterPixelY;
             for (int tick = 0; tick < 101; tick++)
             {

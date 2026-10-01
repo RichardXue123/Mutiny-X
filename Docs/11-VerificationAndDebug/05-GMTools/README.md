@@ -25,7 +25,7 @@ GM 是当前 Unity 工程的调试扩展，不是 Flash 原版玩法规则。以
 
 ### GM-09 · 切换语言
 
-原版来源：不适用，用户授权扩展。`setlanguage zh-cn` / `setlanguage en` 经 `ExecuteCommand` 调用本地化服务，菜单和战斗共用，成功后保存语言并加入最近命令。拒绝缺参、旧 `cn`、非法语言及额外参数，原选择及历史保持不变。详细规格和验收见 [GM-09](../GM_COMMANDS.md#gm-09--切换语言)；2026-09-26 对旧 `cn` 命令的隔离 Play Mode **7/7** 是历史结果。新命令和回切待用户运行验收。
+原版来源：不适用，用户授权扩展。`lang en` / `lang zh-cn` / `lang zh-hk` 经 `ExecuteCommand` 选择英文/简中/香港繁中，菜单和战斗共用，成功后保存语言并加入最近命令；旧 `setlanguage` 是兼容别名。拒绝缺参、旧 `cn`、非法语言及额外参数，原选择及历史保持不变。详细规格和验收见 [GM-09](../GM_COMMANDS.md#gm-09--切换语言) 和 [香港繁体中文](../../09-PresentationAndFeedback/LOCALIZATION_HONG_KONG.md)；旧双语 Play Mode 结果属历史，新命令和三语回切待用户运行验收。
 
 ### GM-UI-02 · 最近成功命令（2026-09-26 新规格）
 
@@ -105,6 +105,8 @@ GM-07 在决策开始时把武器类型复制到工作对象；已选射击动�
 - **已知差异与边界**：GM 系列整体为 Unity 扩展，不能计入 Flash 原版一致性。按钮视觉为圆形，`GUI.Button` 的命中区为矩形；GM-02 在零目标时仍显示成功；武器前缀匹配会接受任意后缀；公开 `ExecuteCommand(null)` 没有空值保护，正常 UI 提交路径不会传入 null。以上是当前行为，后续如决定调整，须先固定规格并补能检出缺陷的生产入口用例。
 
 ## 维护入口
+
+GM-15 `enterlevel` 与模式编号的规格及本轮验证见 [关卡身份与直达](../../02-LevelAndWorld/01-LevelDataParsing/LEVEL_IDENTITY_AND_GM_ENTRY.md)。新增非法参数解析检查接入 `RunGM`，完整生产加载回归入口为 `Mutiny → Parity → Validate Level Identity and GM Entry Play Mode`（空场景）。
 
 当前运行结果：[GM-08 指定 Luck 验证（2026-09-27）](Artifacts/GM-08-LUCK-20260927.txt)。旧 [GM 专项 12 条断言结果（2026-09-26）](Artifacts/GM-12Assertions-20260926.txt) 保留为历史；测试恢复原进度，不替用户实际解锁主工程存档。
 

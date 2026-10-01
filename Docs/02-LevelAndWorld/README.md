@@ -29,4 +29,8 @@
 
 ## 后续文档
 
+- [关卡模式编号与 GM 直达](01-LevelDataParsing/LEVEL_IDENTITY_AND_GM_ENTRY.md)：`level_1_XX` / `level_2_XX`、旧资源迁移及临时单人 16。
+- [单人 16 悬浮扁平货船（当前第四版）](04-ObjectsAndSpawns/LEVEL_1_16_FLAT_FREIGHTER.md)：80×27 格，保留木船与 13 组小行星，右侧扁平敌舰悬浮 3 格，5 对 8。
+- [三舰初稿历史记录](04-ObjectsAndSpawns/LEVEL_1_16_SPACE_DRAFT.md)：旧 115×36 / 10 对 11 基线。
+
 坐标规范、对象映射、碰撞分类和 18 关构建验收表。

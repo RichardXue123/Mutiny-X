@@ -210,7 +210,7 @@ namespace Mutiny.Simulation
         private int ResolveOriginalSkyColour()
         {
             MutinyLevelController controller = FindAnyObjectByType<MutinyLevelController>();
-            int level = controller != null ? controller.CurrentLevelIndex : 1;
+            int level = controller != null ? controller.OriginalLevelIndex : 1;
             return ResolveOriginalSkyColourForLevel(level);
         }
 

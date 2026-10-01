@@ -21,6 +21,9 @@ namespace Mutiny.Levels
         [SerializeField]
         private bool m_BuildOnStart = true;
 
+        [SerializeField, Tooltip("Enter a dedicated preview scene's assigned level in Play Mode. Main always starts at the title menu.")]
+        private bool m_StartInGameplay;
+
         [SerializeField]
         private MutinyLevelRoot m_CurrentLevel;
 
@@ -33,13 +36,24 @@ namespace Mutiny.Levels
         private bool m_ResultRecordedForCurrentLevel;
         private int m_Player1Wins;
         private int m_Player2Wins;
+        [SerializeField] private MutinyGameMode m_LevelMode;
+        [SerializeField] private bool m_HasLevelIdentity;
+        [SerializeField] private int m_CurrentLevelIndex = 1;
 
-        public int CurrentLevelIndex { get; set; } = 1;
+        public int CurrentLevelIndex
+        {
+            get => m_CurrentLevelIndex;
+            set => m_CurrentLevelIndex = value;
+        }
+        public MutinyLevelId CurrentLevelId => new MutinyLevelId(
+            m_HasLevelIdentity ? m_LevelMode : ActiveGameMode, CurrentLevelIndex);
+        public int OriginalLevelIndex => CurrentLevelId.OriginalNumber;
         public int SinglePlayerScore => m_SinglePlayerScore;
         public int LastCompletedLevelScore => m_LastCompletedLevelScore;
         public MutinyGameMode SessionMode { get; private set; } = MutinyGameMode.SinglePlayer;
         public MutinyGameMode ActiveGameMode => m_HasMenuSessionMode
             ? SessionMode
+            : m_HasLevelIdentity ? m_LevelMode
             : m_CurrentLevel != null && m_CurrentLevel.Players != 1
                 ? MutinyGameMode.LocalTwoPlayer
                 : MutinyGameMode.SinglePlayer;
@@ -75,6 +89,11 @@ namespace Mutiny.Levels
         }
 
         public MutinyLevelRoot CurrentLevel => m_CurrentLevel;
+        public bool StartInGameplay
+        {
+            get => m_StartInGameplay;
+            set => m_StartInGameplay = value;
+        }
 
         // GM-12/13: the override belongs to this root's native AI, not the session.
         public bool TrySetCurrentAiLuck(float? luck, out string error)
@@ -119,7 +138,7 @@ namespace Mutiny.Levels
 
             if (m_LevelXml != null)
             {
-                ParseLevelIndexFromName(m_LevelXml.name);
+                ParseLevelIdentityFromName(m_LevelXml.name);
             }
         }
 
@@ -143,21 +162,41 @@ namespace Mutiny.Levels
 
         public static bool HasNumberedLevelData(int levelNumber)
         {
-            return levelNumber >= 1 && levelNumber <= 33 &&
-                   Resources.Load<TextAsset>($"Data/Levels/level_{levelNumber:D2}") != null;
+            return HasLevelData(new MutinyLevelId(MutinyGameMode.SinglePlayer, levelNumber));
         }
+
+        public static bool HasLevelData(MutinyLevelId id) =>
+            id.IsValid && Resources.Load<TextAsset>(id.ResourcePath) != null;
 
         public bool TryLoadLevel(int levelNumber)
         {
-            if (levelNumber < 1 || levelNumber > 33)
+            return TryLoadLevel(new MutinyLevelId(SessionMode, levelNumber));
+        }
+
+        public bool TryLoadLevel(MutinyLevelId id)
+        {
+            if (!id.IsValid)
                 return false;
-            TextAsset xml = Resources.Load<TextAsset>($"Data/Levels/level_{levelNumber:D2}");
+            TextAsset xml = Resources.Load<TextAsset>(id.ResourcePath);
             if (xml == null)
             {
-                Debug.LogError($"[MutinyLevelController] Runtime level resource not found: level_{levelNumber:D2}.xml", this);
+                MutinyDebugLog.Warning("Level", $"Runtime level resource not found: {id.AssetName}.xml", this);
                 return false;
             }
-            CurrentLevelIndex = levelNumber;
+            // Reject malformed data before replacing the live world or its session.
+            try
+            {
+                MutinyLevelXmlParser.Parse(xml.text, xml.name);
+            }
+            catch (FormatException exception)
+            {
+                MutinyDebugLog.Warning("Level", $"Cannot load {id}: {exception.Message}", this);
+                return false;
+            }
+            ConfigureSession(id.Mode);
+            m_LevelMode = id.Mode;
+            m_HasLevelIdentity = true;
+            CurrentLevelIndex = id.Number;
             m_AwardedLevelIndex = -1;
             m_LastCompletedLevelScore = 0;
             m_ResultRecordedForCurrentLevel = false;
@@ -168,7 +207,7 @@ namespace Mutiny.Levels
 
         public void LoadNextLevel()
         {
-            LoadLevel(CurrentLevelIndex + 1);
+            TryLoadLevel(new MutinyLevelId(CurrentLevelId.Mode, CurrentLevelIndex + 1));
         }
 
         public void RestartCurrentLevel()
@@ -178,7 +217,7 @@ namespace Mutiny.Levels
                 this);
             if (ActiveGameMode == MutinyGameMode.SinglePlayer)
                 ResetSinglePlayerScore();
-            LoadLevel(CurrentLevelIndex);
+            TryLoadLevel(CurrentLevelId);
         }
 
         /// <summary>
@@ -235,17 +274,25 @@ namespace Mutiny.Levels
             MutinyDebugLog.Info("Level", "END-POP-06 single-player session score reset", this);
         }
 
-        private void ParseLevelIndexFromName(string name)
+        private void ParseLevelIdentityFromName(string name)
         {
             if (string.IsNullOrEmpty(name)) return;
-            string digits = "";
-            for (int i = 0; i < name.Length; i++)
+            if (MutinyLevelId.TryParse(name, out MutinyLevelId id))
             {
-                if (char.IsDigit(name[i])) digits += name[i];
+                CurrentLevelIndex = id.Number;
+                m_LevelMode = id.Mode;
+                m_HasLevelIdentity = true;
+                if (!m_HasMenuSessionMode) ConfigureSession(id.Mode);
             }
-            if (int.TryParse(digits, out int idx))
+            else if (name.StartsWith("level_", StringComparison.OrdinalIgnoreCase) &&
+                     int.TryParse(name.Substring(6), out int original) && original >= 1 && original <= 33)
             {
-                CurrentLevelIndex = idx;
+                // Compatibility for old serialized/baked assets, never a runtime resource fallback.
+                id = MutinyLevelId.FromOriginalNumber(original);
+                CurrentLevelIndex = id.Number;
+                m_LevelMode = id.Mode;
+                m_HasLevelIdentity = true;
+                if (!m_HasMenuSessionMode) ConfigureSession(id.Mode);
             }
         }
 
@@ -269,10 +316,12 @@ namespace Mutiny.Levels
                 return;
             }
 
+            ParseLevelIdentityFromName(m_LevelXml.name);
+
             try
             {
                 MutinyLevelData levelData = MutinyLevelXmlParser.Parse(m_LevelXml.text, m_LevelXml.name);
-                GameObject levelObj = MutinyLevelBuilder.BuildLevel(levelData, transform, CurrentLevelIndex,
+                GameObject levelObj = MutinyLevelBuilder.BuildLevel(levelData, transform, OriginalLevelIndex,
                     m_HasMenuSessionMode ? (MutinyGameMode?)SessionMode : null);
                 m_CurrentLevel = levelObj.GetComponent<MutinyLevelRoot>();
                 BindLevelController(m_CurrentLevel, this);
@@ -296,6 +345,9 @@ namespace Mutiny.Levels
 
             if (m_CurrentLevel != null)
             {
+                // A GM switch can rebuild during the current frame. Retire the old
+                // input/AI immediately, before Unity's deferred destruction.
+                m_CurrentLevel.gameObject.SetActive(false);
 #if UNITY_EDITOR
                 if (!Application.isPlaying)
                     DestroyImmediate(m_CurrentLevel.gameObject);
@@ -311,6 +363,7 @@ namespace Mutiny.Levels
             for (int i = transform.childCount - 1; i >= 0; i--)
             {
                 Transform child = transform.GetChild(i);
+                child.gameObject.SetActive(false);
 #if UNITY_EDITOR
                 if (!Application.isPlaying)
                     DestroyImmediate(child.gameObject);
@@ -335,6 +388,8 @@ namespace Mutiny.Levels
             replacement.m_LevelXml = xml;
             replacement.m_BuildOnStart = false;
             replacement.CurrentLevelIndex = levelIndex;
+            replacement.m_LevelMode = m_LevelMode;
+            replacement.m_HasLevelIdentity = m_HasLevelIdentity;
             replacement.SessionMode = SessionMode;
             replacement.m_HasMenuSessionMode = m_HasMenuSessionMode;
             replacement.m_Player1Wins = m_Player1Wins;

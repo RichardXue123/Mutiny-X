@@ -19,3 +19,5 @@
 高 Luck 分帧搜索见 [实现与验收](AI_RESPONSIVE_SEARCH_20260928.md)；第 12 关尸体导致反复重算的修复、具体失效日志及 54/54 实测见 [EXT-AI-SNAPSHOT-02/03](AI_SNAPSHOT_CORPSE_FIX_20260928.md)。
 
 2026-09-29：`aienhance` 开关与输出边界的历史规格见 [EXT-AI-STRAT-01..05](AI_STRATEGY_BOUNDARY_20260929.md)。其后用户授权实现 [完整效果模拟初版 effects-v1](AI_ENHANCED_SIMULATION_V1.md)：增强入口不再 fallback；有限粗筛后模拟武器、击退、落水及持续效果，以双方 HP 变化评分。关闭增强时仍使用原候选/评分/随机顺序，不把该扩展登记为原版 AI 复刻。
+
+2026-09-30：增强金币改为 [逐发贪心与整轮评分](AI_GREEDY_COINS.md)：一份完整八发候选不经首发粗分淘汰；每发在最新模拟状态上有限采样/精算，实际第 2–8 发重新捕获真实局面。Luck、总工作步及每帧软预算隔离，Legacy 不变。

@@ -18,6 +18,8 @@ Unity 主要用 PNG 序列 + `SpriteRenderer` 复现这些时间轴，以 `Mutin
 
 ## 通用效果规格
 
+用户授权太空扩展：[第十六关落入星河动画](../Space16Art/GALAXY_SPLASH.md)。只在`visualTheme="space"`替换水花资源，原版规则与资源保持独立。
+
 | ID | 可观察行为 | 原版来源 | Unity 入口 | 验收用例 | 当前结果 |
 | --- | --- | --- | --- | --- | --- |
 | VIS-EXP-01 | explosion 按 `size/100` 等比缩放；frame 3 命中，frame 8 停止并销毁 | `Explosion.as`；symbol 1785 frame 3/8 | `MutinyExplosion.Spawn`、`Update`、`ApplyHit` | 从真实武器碰撞生成，断言缩放、帧号、一次命中与销毁 tick | 已实现；局部回归已写，本轮未运行 |

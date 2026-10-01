@@ -615,6 +615,22 @@ MonoBehaviour:
     m_Key: corner.sfx
     m_Metadata:
       m_Items: []
+  - m_Id: 1893825906728960
+    m_Key: speech.robot.0
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1893825948672000
+    m_Key: speech.robot.1
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1893825948672001
+    m_Key: speech.robot.2
+    m_Metadata:
+      m_Items: []
+  - m_Id: 1893825948672002
+    m_Key: speech.robot.3
+    m_Metadata:
+      m_Items: []
   m_Metadata:
     m_Items: []
   m_KeyGenerator:
