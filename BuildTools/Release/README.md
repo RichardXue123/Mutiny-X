@@ -6,7 +6,7 @@
 
 默认发布 Windows 便携 ZIP、Windows Setup EXE、Android APK、`SHA256SUMS.txt`。不构建 iOS，不自动递增版本或构建号，不创建或推送 tag。Unity 编辑器可以继续打开当前开发工程；脚本构建的是 tag 对应的独立目录。
 
-从下一个版本开始，附件文件名只使用可见版本号，例如 `MutinyX-Android-1.0.7.apk`、`MutinyX-Windows-1.0.7.zip`、`MutinyX-Setup-1.0.7.exe`。Android 内部 `versionCode` 仍需逐版递增，并保存在 manifest 和构建报告中；已发布版本的附件及其恢复校验保持原样。
+从 v1.1.0 起，附件文件名只使用可见版本号，例如 `MutinyX-Android-1.1.0.apk`、`MutinyX-Windows-1.1.0.zip`、`MutinyX-Setup-1.1.0.exe`。Android 内部 `versionCode` 仍需逐版递增，并保存在 manifest 和构建报告中；此前已发布版本的附件及其恢复校验保持原样。
 
 ## 首次配置
 

@@ -37,7 +37,7 @@
 
 命令在标题、选关、结局及战斗页均可使用；大小写不敏感，允许参数间多个空白。成功经前端正式入口加载角色、AI、镜头和战斗音乐。切关时立即停用旧根，重开保留模式与编号。缺参、多参、非正整数、未知模式、溢出或资源不存在均失败，不替换对局、不切换页面/模式、不清空分数；过场进行中拒绝并提示等待。直接进入不解锁关卡或写入已完成成绩，后续真实胜负结算仍使用现有规则。
 
-本轮不增加单人选关按钮、不迁移第 15 关结局、不改变存档规格。太空主题、低重力、机器人和新音频尚未实现。规格与实际验收状态见 [EXT-LVL-ID-01..03 / GM-15](../02-LevelAndWorld/01-LevelDataParsing/LEVEL_IDENTITY_AND_GM_ENTRY.md)。
+目前不增加单人选关按钮、不迁移第 15 关结局、不改变存档规格。单人第 16 关现已加入太空主题、0.5 倍重力、机器人资源与语音；通过 `enterlevel 16` 进入。规格与实际验收状态见 [EXT-LVL-ID-01..03 / GM-15](../02-LevelAndWorld/01-LevelDataParsing/LEVEL_IDENTITY_AND_GM_ENTRY.md)及[第十六关规格](../02-LevelAndWorld/04-ObjectsAndSpawns/LEVEL_1_16_SPACE_DRAFT.md)。
 
 ## GM-14 · AI 策略开关
 

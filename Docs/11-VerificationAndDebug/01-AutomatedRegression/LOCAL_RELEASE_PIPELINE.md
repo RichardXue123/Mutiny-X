@@ -119,3 +119,11 @@
 - **已实现**：新发布 manifest 使用 schema 2；APK、Windows ZIP 与 Setup 文件名只保留 `1.x.x`，Inno 和 Unity 菜单输出同步。旧 schema 1 manifest 仍按原 `1.x.x+y` 文件名校验，已发布附件与 tag 不变。
 - **实际测试通过**：Windows PowerShell 5.1 和 PowerShell 7 发布生产入口回归各 **43/43**，新增断言检验 schema 2 四个附件的精确文件名；分别记录在 `Builds/ReleaseTests/5b869126e05b48979148cdc6181ed5b7/` 与 `Builds/ReleaseTests/d331984c7fc6478a91a44389bddf1cb7/`。真实 v1.0.6 schema 1 manifest 执行 `Publish-Release.ps1 -Tag v1.0.6 -Resume -BuildOnly` 成功校验本地旧附件及哈希。
 - **待运行验证 / 已知差异**：简洁文件名尚未用于新的正式 Unity 构建或 GitHub 发布；下一次版本发布时按实际产物再验收。Android `versionCode` 仍保存在安装包和 manifest，不能因文件名简化而复用旧号。
+
+### v1.1.0 三语、GM 控制台与单人第十六关发布（2026-10-02）
+
+- **静态确认**：用户要求发布当前 main 的 GM 优化、香港繁体中文、单人第十六关地图/角色资源及低重力。已提交的隔离 Unity 记录包括 GM/关卡入口、香港繁中与第十六关低重力/美术专项；本轮没有重复所有玩法与画面专项测试。单人 16 的当前入口是 GM `enterlevel 16`，选关菜单尚无该按钮。
+- **已实现**：在现有源码上将 Unity Version 设为 `1.1.0`、Android 构建号设为 `11`，三条说明提交于 `c43cbb25b2de972ebf5d4bae234a4b7b0ea047aa`。注解 tag `v1.1.0` 对象 `393dd00c6754196bc1d33274b6c117dab8643ffd` 指向该提交；main 与 tag 原子推送。发布记录提交不移动 tag。
+- **实际构建通过**：生产入口在独立源码目录中运行 Unity 6000.6.0f1，Android、Windows 的 BuildPipeline 分别用时 `271.512`、`81.991` 秒且报告成功。APK 实测 `com.RichardXue.MutinyX`、versionName `1.1.0`、versionCode `11`、ARM64、minSdk 26、targetSdk 36。Inno Setup 编译用时 `23.906` 秒，安装包 ProductVersion `1.1.0`；Windows ZIP 224 条，调试/备份条目为 0。新 schema 2 manifest 的资产文件名不含内部构建号。
+- **实际发布通过**：GitHub Release ID `401235720` 于 `2026-10-01T18:23:25Z` 正式发布，`draft=false`、`prerelease=false`。Android APK、Windows Setup、Windows ZIP 和 SHA256SUMS 四个资产大小与 SHA256 digest 均和本地 manifest、实际文件哈希一致；远端正文和目标提交一致。临时 worktree 已清理。[正式 Release](https://github.com/RichardXue123/Mutiny-X/releases/tag/v1.1.0)。摘要证据：[LOCAL-RELEASE-V1.1.0-20261002.json](Artifacts/LOCAL-RELEASE-V1.1.0-20261002.json)。
+- **待运行验证 / 已知差异**：本轮未执行 Windows 安装/卸载、Android 真机运行、完整第十六关对战与实际安装包中的三语画面验收。第十六关及语言属于用户授权扩展，与 Flash 原版一致性分开登记；仅发布 Windows 和 Android，不发布 iOS。
